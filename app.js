@@ -160,8 +160,10 @@ async function loadFromDrive(){
     driveData={studentList:d.studentList||[],makeupScheduled:d.makeupScheduled||[]};
   }catch(e){
     if(e.code===403){
-      toast('需要重新授權 Drive 權限，請稍候...','inf');
-      tokenClient.requestAccessToken({prompt:'consent'});
+      const el=document.getElementById('toast');
+      el.className='toast tinf';
+      el.innerHTML='ℹ 需要授權雲端硬碟權限 <span style="text-decoration:underline;cursor:pointer;margin-left:6px" onclick="tokenClient.requestAccessToken({prompt:\'consent\'})">點此授權</span>';
+      el.style.display='block';
       return;
     }
     console.error('loadFromDrive failed',e);
