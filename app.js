@@ -1,5 +1,5 @@
 const CLIENT_ID='729031557572-tjn0hoiph1b0dbkp57lut0l6ekshm629.apps.googleusercontent.com';
-const SCOPES='https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.appdata';
+const SCOPES='https://www.googleapis.com/auth/calendar';
 const DISCOVERY_DOC='https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
 const CAL_NAMES=['一般課程','補課','調課','試聽','練習課','加課'];
 const MAKEUP_CALS=['一般課程','調課','試聽','練習課','加課']; // exclude 補課
@@ -14,7 +14,7 @@ let weekEvents=[];
 let absState={};
 let makeupList=[];
 let driveData={studentList:[],makeupScheduled:[]};
-let driveFileId=null,driveSaveTimer=null,driveScopeNeeded=false;
+let driveSaveTimer=null;
 let makeupMatchMap=new Map(); // absenceEventId → {calEventId,scheduledDate,scheduledEnd,room,origTitle,absentStudents}
 let selectedWeekEvent=null;
 let weekOffset=0; // 0=this week, -1=last week, +1=next week
@@ -70,7 +70,6 @@ async function initAPIs(){
       }
       saveToken();
       scheduleTokenRefresh();
-      if(driveScopeNeeded){driveScopeNeeded=false;await loadFromDrive();renderStudents();}
       if(currentPanel==='login')await onSignedIn();
       else await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
     }
@@ -121,7 +120,8 @@ function signOut(){
   const t=gapi.client.getToken();
   if(t){google.accounts.oauth2.revoke(t.access_token);gapi.client.setToken(null);}
   calendarIds={};dayEvents=[];weekEvents=[];makeupList=[];
-  driveData={studentList:[],makeupScheduled:[]};driveFileId=null;
+  driveData={studentList:[],makeupScheduled:[]};
+  firebase.auth().signOut();
   sessionStorage.removeItem('gtoken');
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='none');
   setUSt('','未登入','請登入 Google 帳號');
@@ -133,60 +133,38 @@ async function onSignedIn(){
   scheduleTokenRefresh();
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='inline-block');
   try{const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+gapi.client.getToken().access_token}}).then(r=>r.json());setUSt('ok',info.email||'已登入','Google 帳號');}catch(e){setUSt('ok','已登入','Google 帳號');}
-  await loadFromDrive();
+  await loadFromFirestore();
   await fetchCalIds();
   showPanel('courses');
   await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
   updateWeekTitle();
 }
 
-// ── Google Drive Sync ──
-const DRIVE_FILE='hobe-system.json';
-function getToken(){return gapi.client.getToken()?.access_token;}
-async function findDriveFile(){
-  const r=await fetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D%22'+DRIVE_FILE+'%22&fields=files(id)',{headers:{Authorization:'Bearer '+getToken()}});
-  if(r.status===403)throw Object.assign(new Error('drive_scope_missing'),{code:403});
-  const d=await r.json();return d.files?.[0]?.id||null;
-}
-async function loadFromDrive(){
+// ── Firebase / Firestore Sync ──
+const firebaseConfig={apiKey:'AIzaSyAmrHOH2HadLeklzvOBfVoy-q9cjM94ywU',authDomain:'hobe-494909.firebaseapp.com',projectId:'hobe-494909',storageBucket:'hobe-494909.firebasestorage.app',messagingSenderId:'729031557572',appId:'1:729031557572:web:e48899ee69102898fca491'};
+firebase.initializeApp(firebaseConfig);
+const db=firebase.firestore();
+const SHARED_DOC=db.collection('sharedData').doc('main');
+async function loadFromFirestore(){
   try{
-    driveFileId=await findDriveFile();
-    if(!driveFileId){
+    await firebase.auth().signInAnonymously();
+    const snap=await SHARED_DOC.get();
+    if(snap.exists){
+      const d=snap.data();
+      driveData={studentList:d.studentList||[],makeupScheduled:d.makeupScheduled||[]};
+    }else{
       driveData={studentList:JSON.parse(localStorage.getItem('studentList')||'[]'),makeupScheduled:JSON.parse(localStorage.getItem('makeupScheduled')||'[]')};
-      if(driveData.studentList.length||driveData.makeupScheduled.length)await saveToDrive();
-      return;
+      if(driveData.studentList.length||driveData.makeupScheduled.length)await saveToFirestore();
     }
-    const r=await fetch('https://www.googleapis.com/drive/v3/files/'+driveFileId+'?alt=media',{headers:{Authorization:'Bearer '+getToken()}});
-    const d=await r.json();
-    driveData={studentList:d.studentList||[],makeupScheduled:d.makeupScheduled||[]};
   }catch(e){
-    if(e.code===403){driveScopeNeeded=true;return;}
-    console.error('loadFromDrive failed',e);
+    console.error('loadFromFirestore failed',e);
     driveData={studentList:JSON.parse(localStorage.getItem('studentList')||'[]'),makeupScheduled:JSON.parse(localStorage.getItem('makeupScheduled')||'[]')};
   }
 }
-function reauthorizeWithDrive(){
-  const t=gapi.client.getToken();
-  const doRequest=()=>tokenClient.requestAccessToken({prompt:'consent'});
-  if(t){google.accounts.oauth2.revoke(t.access_token,()=>{gapi.client.setToken(null);sessionStorage.removeItem('gtoken');doRequest();});}
-  else doRequest();
-}
-function scheduleDriveSave(){clearTimeout(driveSaveTimer);driveSaveTimer=setTimeout(saveToDrive,1500);}
-async function saveToDrive(){
-  try{
-    const token=getToken();if(!token)return;
-    const body=JSON.stringify(driveData);
-    if(driveFileId){
-      await fetch('https://www.googleapis.com/upload/drive/v3/files/'+driveFileId+'?uploadType=media',{method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body});
-    }else{
-      const meta={name:DRIVE_FILE,parents:['appDataFolder']};
-      const form=new FormData();
-      form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
-      form.append('file',new Blob([body],{type:'application/json'}));
-      const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{method:'POST',headers:{Authorization:'Bearer '+token},body:form});
-      const d=await r.json();driveFileId=d.id;
-    }
-  }catch(e){console.error('saveToDrive failed',e);}
+function scheduleDriveSave(){clearTimeout(driveSaveTimer);driveSaveTimer=setTimeout(saveToFirestore,1500);}
+async function saveToFirestore(){
+  try{await SHARED_DOC.set(driveData,{merge:true});}
+  catch(e){console.error('saveToFirestore failed',e);}
 }
 
 async function fetchCalIds(){
@@ -1896,10 +1874,6 @@ function addEditCourse(id){
 function renderStudents(){
   const container=document.getElementById('stu-list');
   if(!container)return;
-  if(driveScopeNeeded){
-    container.innerHTML=periodTabsHtml()+'<div class="empty" style="display:flex;flex-direction:column;align-items:center;gap:12px"><div>需要授權雲端硬碟才能載入學生資料</div><button class="btn btnp" onclick="reauthorizeWithDrive()">點此授權</button></div>';
-    return;
-  }
   const list=getStudentList();
   if(!list.length){container.innerHTML=periodTabsHtml()+'<div class="empty">尚未新增學生，點右上角「新增學生」開始</div>';return;}
   const byGrade={};
