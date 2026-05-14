@@ -165,6 +165,12 @@ async function loadFromDrive(){
     driveData={studentList:JSON.parse(localStorage.getItem('studentList')||'[]'),makeupScheduled:JSON.parse(localStorage.getItem('makeupScheduled')||'[]')};
   }
 }
+function reauthorizeWithDrive(){
+  const t=gapi.client.getToken();
+  const doRequest=()=>tokenClient.requestAccessToken({prompt:'consent'});
+  if(t){google.accounts.oauth2.revoke(t.access_token,()=>{gapi.client.setToken(null);sessionStorage.removeItem('gtoken');doRequest();});}
+  else doRequest();
+}
 function scheduleDriveSave(){clearTimeout(driveSaveTimer);driveSaveTimer=setTimeout(saveToDrive,1500);}
 async function saveToDrive(){
   try{
@@ -1891,7 +1897,7 @@ function renderStudents(){
   const container=document.getElementById('stu-list');
   if(!container)return;
   if(driveScopeNeeded){
-    container.innerHTML=periodTabsHtml()+'<div class="empty" style="display:flex;flex-direction:column;align-items:center;gap:12px"><div>需要授權雲端硬碟才能載入學生資料</div><button class="btn btnp" onclick="tokenClient.requestAccessToken({prompt:\'consent\'})">點此授權</button></div>';
+    container.innerHTML=periodTabsHtml()+'<div class="empty" style="display:flex;flex-direction:column;align-items:center;gap:12px"><div>需要授權雲端硬碟才能載入學生資料</div><button class="btn btnp" onclick="reauthorizeWithDrive()">點此授權</button></div>';
     return;
   }
   const list=getStudentList();
