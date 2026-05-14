@@ -204,6 +204,46 @@ input[type=date]:focus{border-color:var(--ac)}
 .badge{font-size:11px;font-weight:500;padding:3px 10px;border-radius:99px;white-space:nowrap}
 .badge-s{background:var(--wl);color:var(--wn)}.badge-t{background:var(--dl);color:var(--dg)}
 
+/* Makeup list redesign */
+.f-search{width:180px;flex-shrink:0;border:1px solid var(--br);border-radius:var(--rs);padding:6px 11px;font-size:13px;font-family:'Noto Sans TC',sans-serif;background:var(--sf);color:var(--tx);outline:none}
+.f-search:focus{border-color:var(--ac)}
+.mk-stats{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+.mk-stat{flex:1;min-width:120px;background:var(--sf);border:1.5px solid var(--br);border-radius:var(--r);padding:14px 16px;display:flex;align-items:center;gap:12px}
+.mk-stat-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
+.mk-stat-num{font-size:22px;font-weight:700;color:var(--tx);line-height:1}
+.mk-stat-lbl{font-size:11px;color:var(--tx2);margin-top:3px}
+.mk-two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
+.mk-col{display:flex;flex-direction:column;gap:8px}
+.mk-col-hd{display:flex;align-items:center;gap:6px;padding-bottom:8px;border-bottom:1.5px solid var(--br);margin-bottom:2px}
+.mk-col-ttl{font-size:13px;font-weight:700;color:var(--tx);flex:1}
+.mk-col-cnt{font-size:12px;color:var(--tx2)}
+.mk-list-card{background:var(--sf);border:1.5px solid var(--br);border-radius:var(--r);display:flex;align-items:stretch;overflow:hidden;cursor:pointer;transition:box-shadow .15s,border-color .15s}
+.mk-list-card:hover{box-shadow:0 2px 10px rgba(0,0,0,.08);border-color:var(--brs)}
+.mk-list-card.mk-open{border-color:var(--ac)}
+.mk-list-card.mk-completed{opacity:.7}
+.mk-list-bar{width:4px;flex-shrink:0}
+.mk-list-body{flex:1;padding:10px 12px;display:flex;flex-direction:column;gap:4px;min-width:0}
+.mk-list-title{font-size:13px;font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-list-badges{display:flex;gap:4px;flex-wrap:wrap}
+.mk-list-meta{display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--tx2)}
+.mk-list-makeup{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--ac);padding-top:6px;border-top:1px solid var(--br);margin-top:2px}
+.mk-list-makeup-lbl{font-weight:600}
+.mk-dot{color:var(--tx3)}
+.mk-list-actions{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px 10px;flex-shrink:0}
+.mk-list-chevron{display:flex;align-items:center;padding:0 12px;color:var(--tx3);font-size:11px;flex-shrink:0}
+.mk-btn-arrange{font-size:12px;padding:5px 10px;background:var(--ac);color:#fff;border:none;border-radius:var(--rs);cursor:pointer;white-space:nowrap;font-family:'Noto Sans TC',sans-serif}
+.mk-btn-arrange:hover{background:#245030}
+.mk-btn-cancel{font-size:11px;padding:3px 8px;background:transparent;color:#DC2626;border:1px solid #DC2626;border-radius:var(--rs);cursor:pointer;font-family:'Noto Sans TC',sans-serif;margin-left:4px}
+.mk-btn-cancel:hover{background:#FEE2E2}
+.mk-badge{font-size:11px;padding:2px 7px;border-radius:99px;font-weight:600;white-space:nowrap}
+.mk-badge-student{background:var(--wl);color:var(--wn)}
+.mk-badge-teacher{background:var(--il);color:var(--in)}
+.mk-badge-reschedule{background:var(--dl);color:var(--dg)}
+.mk-badge-un{background:var(--sf2);color:var(--tx2)}
+.mk-badge-arr{background:var(--al);color:var(--ac)}
+.mk-badge-done{background:var(--sf2);color:var(--ac)}
+@media(max-width:640px){.mk-two-col{grid-template-columns:1fr}.mk-stats{flex-direction:column}}
+
 /* Student modal */
 .stu-modal-wrap{display:none;position:fixed;inset:0;z-index:80;align-items:center;justify-content:center;padding:20px}
 .stu-modal-wrap.open{display:flex}

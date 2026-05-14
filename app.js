@@ -1024,105 +1024,124 @@ function renderMakeup(){
   const period=getCurrentPeriod();
   const fs=document.getElementById('f-subject').value;
   const ft=document.getElementById('f-type').value;
-  const so=document.getElementById('f-sort').value;
+  const fq=(document.getElementById('f-search')?.value||'').trim().toLowerCase();
   const now=new Date();
   const scheduledAll=getMakeupScheduled();
   const completedIds=new Set(scheduledAll.filter(s=>new Date(s.scheduledEnd)<now).map(s=>s.originalId));
   const scheduledFutureIds=new Set(scheduledAll.filter(s=>new Date(s.scheduledEnd)>=now).map(s=>s.originalId));
-  let list=makeupList.filter(e=>!completedIds.has(e.id)&&e.startDt>=period.start&&e.startDt<=period.end).filter(e=>!fs||e.subject===fs).filter(e=>!ft||e.absType===ft);
-  if(so==='desc')list=[...list].reverse();
-  document.getElementById('rc').textContent=`共 ${list.length} 筆`;
+
+  const allInPeriod=makeupList.filter(e=>e.startDt>=period.start&&e.startDt<=period.end);
+  const pendingStatCnt=allInPeriod.filter(e=>!completedIds.has(e.id)&&!scheduledFutureIds.has(e.id)).length;
+  const scheduledStatCnt=allInPeriod.filter(e=>scheduledFutureIds.has(e.id)).length;
+  const completedStatCnt=allInPeriod.filter(e=>completedIds.has(e.id)).length;
+
+  function matchesFilter(e){
+    if(fs&&e.subject!==fs)return false;
+    if(ft&&e.absType!==ft)return false;
+    if(fq){const hay=(e.origTitle+' '+e.absentWho+' '+e.teacher+' '+(e.absentStudents||[]).join(' ')).toLowerCase();if(!hay.includes(fq))return false;}
+    return true;
+  }
+
+  const filteredAll=allInPeriod.filter(matchesFilter);
+  const pending=filteredAll.filter(e=>!completedIds.has(e.id)&&!scheduledFutureIds.has(e.id));
+  const scheduledList=filteredAll.filter(e=>scheduledFutureIds.has(e.id));
+  const completedList=filteredAll.filter(e=>completedIds.has(e.id));
+
+  document.getElementById('rc').textContent=`共 ${filteredAll.length} 筆`;
+
+  const topArea=document.getElementById('mk-top-area');
+  if(topArea){
+    topArea.innerHTML=periodTabsHtml()+`<div class="mk-stats">
+      <div class="mk-stat"><div class="mk-stat-icon" style="background:#FFF7ED;color:#F97316">⏰</div><div><div class="mk-stat-num">${pendingStatCnt}</div><div class="mk-stat-lbl">待安排總數</div></div></div>
+      <div class="mk-stat"><div class="mk-stat-icon" style="background:#F0FDF4;color:#22C55E">🗓️</div><div><div class="mk-stat-num">${scheduledStatCnt}</div><div class="mk-stat-lbl">已安排</div></div></div>
+      <div class="mk-stat"><div class="mk-stat-icon" style="background:#F9FAFB;color:#6B7280">✅</div><div><div class="mk-stat-num">${completedStatCnt}</div><div class="mk-stat-lbl">已完成</div></div></div>
+    </div>`;
+  }
+
   const c=document.getElementById('clist-makeup');
-  c.innerHTML=periodTabsHtml();
-  if(!list.length){c.innerHTML+=`<div class="empty">${period.label}沒有待補課/調課 🎉</div>`;return;}
-  const pending=list.filter(e=>!scheduledFutureIds.has(e.id));
-  const scheduledRecs=scheduledAll.filter(s=>scheduledFutureIds.has(s.originalId)&&list.some(e=>e.id===s.originalId));
-  let html='';
+  if(!allInPeriod.length){c.innerHTML=`<div class="empty">${period.label}沒有待補課/調課 🎉</div>`;return;}
 
-  // 待安排
-  html+=`<div class="mk-sec-lbl">待安排（${pending.length}）</div>`;
-  if(!pending.length){
-    html+='<div class="empty" style="padding:10px 0">全部已安排補課 🎉</div>';
-  }else{
-    html+=`<div class="mk-grid">`;
-    pending.forEach(e=>{
-      const d=e.startDt;
-      const isTeacher=e.absType==='老師請假';
-      const isReschedule=e.absType==='調課';
-      const isOpen=mkOpenId===e.id;
-      const badgeCls=isTeacher?'teacher':isReschedule?'reschedule':'pending';
-      const badgeTxt=isTeacher?'老師請假':isReschedule?'調課':`${e.absentWho||'學生'}假`;
-      html+=`<div class="mk-card-mini${isOpen?' open':''}" onclick="toggleMkCard('${esc(e.id)}')">
-        <div class="mk-mini-name">${esc(e.origTitle)}</div>
-        <div class="mk-mini-date">${d.getMonth()+1}/${d.getDate()} ${WD[d.getDay()]}</div>
-        <span class="mk-mini-badge ${badgeCls}">${badgeTxt}</span>
-      </div>`;
-    });
-    html+=`</div>`;
-    const openEv=pending.find(e=>e.id===mkOpenId);
-    if(openEv){
-      const d=openEv.startDt;
-      const bCls=openEv.absType==='調課'?'badge-r':openEv.absType==='學生請假'?'badge-s':'badge-t';
-      const who=openEv.absType==='調課'?'調課':openEv.absentWho?`${openEv.absentWho}請假`:openEv.absType;
-      html+=`<div class="mk-detail-panel">
-        <div class="mk-detail-row">
-          <span class="badge ${bCls}">${esc(who)}</span>
-          <span style="font-size:13.5px;font-weight:600;color:var(--tx)">${esc(openEv.origTitle)}</span>
-        </div>
-        <div class="mk-meta">
-          <span>📅 ${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）${fmtT(d)}</span>
-          <span>⏱ ${fmtDur(openEv.durMins)}</span>
-          ${openEv.teacher?`<span>👤 ${esc(openEv.teacher)}</span>`:''}
-        </div>
-        ${openEv.absentStudents?.length?`<div class="mk-note">${esc(openEv.absentStudents.join('、'))}</div>`:''}
-        <div class="mk-detail-actions">
-          <button class="btn btns btnp" style="font-size:12px" onclick="openSlotPicker('${esc(openEv.id)}',${openEv.absType==='調課'?`'reschedule'`:`'makeup'`})">${openEv.absType==='調課'?'安排調課':'安排補課'}</button>
-        </div>
-      </div>`;
-    }
+  function mkCardTitle(e){
+    if(e.absType==='學生請假'&&e.absentWho)return`${esc(e.absentWho)} — ${esc(e.origTitle)}`;
+    return esc(e.origTitle);
+  }
+  function absBadge(e){
+    if(e.absType==='老師請假')return`<span class="mk-badge mk-badge-teacher">老師請假</span>`;
+    if(e.absType==='調課')return`<span class="mk-badge mk-badge-reschedule">調課</span>`;
+    return`<span class="mk-badge mk-badge-student">學生請假</span>`;
   }
 
-  // 已安排
-  if(scheduledRecs.length){
-    html+=`<div class="mk-sec-lbl mk-sec-gap">已安排（${scheduledRecs.length}）</div>`;
-    html+=`<div class="mk-grid">`;
-    scheduledRecs.forEach(s=>{
-      const sd=new Date(s.scheduledDate);
-      const orig=list.find(e=>e.id===s.originalId);
-      const od=orig?orig.startDt:null;
-      const absWho=orig?(orig.absType==='調課'?'調課':orig.absType==='老師請假'?'老師假':`${orig.absentWho||'學生'}假`):'';
-      const key=s.originalId+'_s';
-      const isOpen=mkOpenId===key;
-      html+=`<div class="mk-card-mini scheduled${isOpen?' open':''}" onclick="toggleMkCard('${esc(key)}')">
-        <div class="mk-mini-name">${esc(s.origTitle)}</div>
-        <div class="mk-mini-date">${od?`${od.getMonth()+1}/${od.getDate()} ${absWho} → `:''}補${sd.getMonth()+1}/${sd.getDate()} ${WD[sd.getDay()]}</div>
-        <span class="mk-mini-badge scheduled">已安排</span>
-      </div>`;
-    });
-    html+=`</div>`;
-    const openKey=mkOpenId&&mkOpenId.endsWith('_s')?mkOpenId:null;
-    const openRec=openKey?scheduledRecs.find(s=>s.originalId+'_s'===openKey):null;
-    if(openRec){
-      const orig=list.find(e=>e.id===openRec.originalId);
-      const sd=new Date(openRec.scheduledDate),se=new Date(openRec.scheduledEnd);
-      html+=`<div class="mk-detail-panel">
-        <div class="mk-detail-row">
-          <span class="badge" style="background:var(--al);color:var(--ac)">已安排</span>
-          <span style="font-size:13.5px;font-weight:600;color:var(--tx)">${esc(openRec.origTitle)}</span>
+  function pendingCard(e){
+    const d=e.startDt,de=e.endDt,color=calColor(e.calName);
+    const mode=e.absType==='調課'?'reschedule':'makeup';
+    return`<div class="mk-list-card" onclick="openSlotPicker('${esc(e.id)}','${mode}')">
+      <div class="mk-list-bar" style="background:${color}"></div>
+      <div class="mk-list-body">
+        <div class="mk-list-title">${mkCardTitle(e)}</div>
+        <div class="mk-list-badges">${absBadge(e)}<span class="mk-badge mk-badge-un">未安排</span></div>
+        <div class="mk-list-meta">
+          <span>📅 ${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）</span>
+          <span>🕐 ${fmtT(d)}–${fmtT(de)}</span>
+          ${e.classroom?`<span>📍 ${esc(e.classroom)}</span>`:''}
+          ${e.teacher?`<span>👤 ${esc(e.teacher)}</span>`:''}
         </div>
-        <div class="mk-meta">
-          <span>📅 ${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${fmtT(sd)}–${fmtT(se)}</span>
-          <span>🏫 ${esc(openRec.room)}</span>
-          ${orig?.teacher?`<span>👤 ${esc(orig.teacher)}</span>`:''}
-        </div>
-        ${openRec.absentStudents?.length?`<div class="mk-note">${esc(openRec.absentStudents.join('、'))}</div>`:''}
-        <div class="mk-detail-actions">
-          <button class="btn btns" style="font-size:12px" onclick="deleteMakeupScheduled('${esc(openRec.originalId)}')">取消安排</button>
-        </div>
-      </div>`;
-    }
+      </div>
+      <div class="mk-list-actions">
+        <button class="mk-btn-arrange" onclick="event.stopPropagation();openSlotPicker('${esc(e.id)}','${mode}')">安排</button>
+      </div>
+    </div>`;
   }
-  c.innerHTML+=html;
+
+  function scheduledCard(e,rec,isCompleted){
+    const d=e.startDt,de=e.endDt,color=calColor(e.calName);
+    const sd=new Date(rec.scheduledDate),se=new Date(rec.scheduledEnd);
+    const statusBadge=isCompleted
+      ?`<span class="mk-badge mk-badge-done">已完成</span>`
+      :`<span class="mk-badge mk-badge-arr">已安排</span>`;
+    return`<div class="mk-list-card${isCompleted?' mk-completed':''}">
+      <div class="mk-list-bar" style="background:${color}"></div>
+      <div class="mk-list-body">
+        <div class="mk-list-title">${mkCardTitle(e)}</div>
+        <div class="mk-list-badges">${absBadge(e)}${statusBadge}</div>
+        <div class="mk-list-meta">
+          <span>📅 ${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）</span>
+          <span>🕐 ${fmtT(d)}–${fmtT(de)}</span>
+          ${e.classroom?`<span>📍 ${esc(e.classroom)}</span>`:''}
+          ${e.teacher?`<span>👤 ${esc(e.teacher)}</span>`:''}
+        </div>
+        <div class="mk-list-makeup">
+          <span class="mk-list-makeup-lbl">${e.absType==='調課'?'調課':'補課'}：</span>
+          <span>${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）</span>
+          <span class="mk-dot">•</span>
+          <span>${fmtT(sd)}–${fmtT(se)}</span>
+          ${rec.room?`<span class="mk-dot">•</span><span>📍 ${esc(rec.room)}</span>`:''}
+          ${!isCompleted?`<button class="mk-btn-cancel" onclick="event.stopPropagation();deleteMakeupScheduled('${esc(e.id)}')">取消安排</button>`:''}
+        </div>
+      </div>
+    </div>`;
+  }
+
+  let html=`<div class="mk-two-col">`;
+
+  // 左欄：待安排
+  html+=`<div class="mk-col"><div class="mk-col-hd"><span style="color:#F97316">⏰</span><span class="mk-col-ttl">待安排</span><span class="mk-col-cnt">${pending.length} 筆</span></div>`;
+  if(!pending.length){html+=`<div class="empty" style="padding:16px 0">全部已安排 🎉</div>`;}
+  else{pending.forEach(e=>{html+=pendingCard(e);});}
+  html+=`</div>`;
+
+  // 右欄：已安排
+  html+=`<div class="mk-col"><div class="mk-col-hd"><span style="color:var(--ac)">📅</span><span class="mk-col-ttl">已安排</span><span class="mk-col-cnt">${scheduledList.length} 筆</span></div>`;
+  if(!scheduledList.length){html+=`<div class="empty" style="padding:16px 0">尚無已安排補課</div>`;}
+  else{scheduledList.forEach(e=>{const rec=scheduledAll.find(s=>s.originalId===e.id);if(rec)html+=scheduledCard(e,rec,false);});}
+  html+=`</div></div>`;
+
+  // 已完成安排
+  if(completedList.length){
+    html+=`<div class="mk-sec-lbl mk-sec-gap" style="margin-top:24px">已完成安排（${completedList.length}）</div>`;
+    completedList.forEach(e=>{const rec=scheduledAll.find(s=>s.originalId===e.id);if(rec)html+=scheduledCard(e,rec,true);});
+  }
+
+  c.innerHTML=html;
 }
 
 async function gotoMakeupEvent(id, ts){

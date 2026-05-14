@@ -127,18 +127,16 @@
     <!-- Makeup -->
     <div id="panel-makeup" class="panel" style="display:none">
       <div id="err-makeup" class="err" style="display:none"></div>
+      <div id="mk-top-area"></div>
       <div class="filter-bar">
-        <select id="f-subject" onchange="renderMakeup()"><option value="">全部科目</option></select>
+        <input type="text" id="f-search" class="f-search" placeholder="搜尋課程 / 學生..." oninput="renderMakeup()">
         <select id="f-type" onchange="renderMakeup()">
           <option value="">全部類型</option>
           <option value="學生請假">學生請假</option>
           <option value="老師請假">老師請假</option>
           <option value="調課">調課</option>
         </select>
-        <select id="f-sort" onchange="renderMakeup()">
-          <option value="asc">缺課日期（由近到遠）</option>
-          <option value="desc">缺課日期（由遠到近）</option>
-        </select>
+        <select id="f-subject" onchange="renderMakeup()"><option value="">全部科目</option></select>
         <div class="rc" id="rc"></div>
       </div>
       <div class="clist" id="clist-makeup"><div class="empty">按「更新」載入資料</div></div>
