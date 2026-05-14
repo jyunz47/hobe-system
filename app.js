@@ -475,6 +475,12 @@ function heroHtml(e,isNow){
   </div>`;
 }
 
+function getMkSt(e){
+  if(!e.isFullAbsent&&!e.isRescheduled)return'';
+  const rec=new Map(getMakeupScheduled().map(s=>[s.originalId,s])).get(e.id);
+  if(rec){const sd=new Date(rec.scheduledDate);return`<div class="tcard-mk mk-arr"><span class="l">${e.isRescheduled?'調課':'補課'}</span>${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${fmtT(sd)}</div>`;}
+  return`<div class="tcard-mk mk-un">未安排${e.isRescheduled?'調課':'補課'}</div>`;
+}
 function tcardHtml(e){
   const id=esc(e.id);
   const tcv=calColor(e.calName);
@@ -486,7 +492,8 @@ function tcardHtml(e){
   const absInline=e.isRescheduled?`<div class="tcard-abs"><span class="l">調課</span>${e.rescheduleReason?esc(e.rescheduleReason):'未輸入原因'}</div>`:
     e.isAbsent?`<div class="tcard-abs"><span class="l">請假</span>${e.absType==='老師請假'?'老師請假':esc(e.absentStudents.join('、'))+'請假'}</div>`:'';
   const noteInline=e.notes?`<div class="tcard-note"><span class="l">備註</span>${esc(e.notes)}</div>`:'';
-  const extras=(absInline||noteInline)?`<div class="tcard-extras">${noteInline}${absInline}</div>`:'';
+  const mkSt=getMkSt(e);
+  const extras=(absInline||noteInline||mkSt)?`<div class="tcard-extras">${noteInline}${absInline}${mkSt}</div>`:'';
   return `<div class="${cls}" id="cc-${id}" style="border-left-color:${tcv}" onclick="selectWeekEvent('${id}')">
     <div class="tcard-row">
       <div class="tcard-time">${fmtT(e.startDt)}<span class="dash">—</span>${fmtT(e.endDt)}</div>
@@ -613,7 +620,8 @@ function wcardHtml(e){
   const absInline=e.isRescheduled?`<div class="tcard-abs"><span class="l">調課</span>${e.rescheduleReason?esc(e.rescheduleReason):'未輸入原因'}</div>`:
     e.isAbsent?`<div class="tcard-abs"><span class="l">請假</span>${e.absType==='老師請假'?'老師請假':esc(e.absentStudents.join('、'))+'請假'}</div>`:'';
   const noteInline=e.notes?`<div class="tcard-note"><span class="l">備註</span>${esc(e.notes)}</div>`:'';
-  const extras=(absInline||noteInline)?`<div class="tcard-extras">${noteInline}${absInline}</div>`:'';
+  const mkSt=getMkSt(e);
+  const extras=(absInline||noteInline||mkSt)?`<div class="tcard-extras">${noteInline}${absInline}${mkSt}</div>`:'';
   return `<div class="${cls}" id="wc-${id}" style="border-left-color:${tcv}" onclick="selectWeekEvent('${id}')">
     <div class="tcard-row">
       <div class="tcard-time">${fmtT(e.startDt)}<span class="dash">—</span>${fmtT(e.endDt)}</div>
@@ -671,6 +679,7 @@ function selectWeekEvent(id){
           ${ev.teacher?`<span>👤 ${esc(ev.teacher)}</span>`:''}
           <span style="color:${COLORS[ev.type]};font-weight:500">${typeLbl(ev.type)}${ev.classroom?`・${esc(ev.classroom)}`:''}</span>
           ${ev.isFullAbsent?`<span style="color:var(--dg);font-weight:500">${ev.isRescheduled?('調課'+(ev.rescheduleReason?'：'+esc(ev.rescheduleReason):'')): ev.absType==='老師請假'?'老師請假':esc(ev.absentStudents.join('、'))+'請假'}</span>`:''}
+          ${(()=>{if(!ev.isFullAbsent&&!ev.isRescheduled)return'';const rec=new Map(getMakeupScheduled().map(s=>[s.originalId,s])).get(ev.id);if(rec){const sd=new Date(rec.scheduledDate);return`<span style="color:#166534;font-weight:500;background:#dcfce7;border:1px solid #86efac;padding:2px 8px;border-radius:4px;font-size:12px">${ev.isRescheduled?'調課':'補課'}：${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${fmtT(sd)}${rec.room?' '+esc(rec.room):''}</span>`;}return`<span style="color:#991b1b;font-weight:500;background:#fee2e2;border:1px solid #fca5a5;padding:2px 8px;border-radius:4px;font-size:12px">未安排${ev.isRescheduled?'調課':'補課'}</span>`;})()}
         </div>
       </div>
       <div class="cc-actions">
@@ -1079,11 +1088,14 @@ function renderMakeup(){
     html+=`<div class="mk-grid">`;
     scheduledRecs.forEach(s=>{
       const sd=new Date(s.scheduledDate);
+      const orig=list.find(e=>e.id===s.originalId);
+      const od=orig?orig.startDt:null;
+      const absWho=orig?(orig.absType==='調課'?'調課':orig.absType==='老師請假'?'老師假':`${orig.absentWho||'學生'}假`):'';
       const key=s.originalId+'_s';
       const isOpen=mkOpenId===key;
       html+=`<div class="mk-card-mini scheduled${isOpen?' open':''}" onclick="toggleMkCard('${esc(key)}')">
         <div class="mk-mini-name">${esc(s.origTitle)}</div>
-        <div class="mk-mini-date">${sd.getMonth()+1}/${sd.getDate()} ${WD[sd.getDay()]}</div>
+        <div class="mk-mini-date">${od?`${od.getMonth()+1}/${od.getDate()} ${absWho} → `:''}補${sd.getMonth()+1}/${sd.getDate()} ${WD[sd.getDay()]}</div>
         <span class="mk-mini-badge scheduled">已安排</span>
       </div>`;
     });
@@ -1716,20 +1728,21 @@ function getStudentStats(name,periodId){
     if(e.absType==='老師請假')return e.students?.includes(name);
     return false;
   });
+  const now=new Date();
   const pairs=absences.map(e=>({absence:e,makeup:scheduledMap.get(e.id)||null}));
   const byCourse={};
   pairs.forEach(({absence:a,makeup:m})=>{
     const c=a.origTitle;
     if(!byCourse[c])byCourse[c]={total:0,owed:0,studentAbs:0,reschedules:0,teacherAbs:0,pairs:[],type:a.type};
     byCourse[c].total++;
-    if(!m)byCourse[c].owed++;
+    if(!m||new Date(m.scheduledEnd)>=now)byCourse[c].owed++;
     if(a.absType==='學生請假')byCourse[c].studentAbs++;
     else if(a.absType==='調課')byCourse[c].reschedules++;
     else if(a.absType==='老師請假')byCourse[c].teacherAbs++;
     byCourse[c].pairs.push({absence:a,makeup:m});
   });
-  const owed=pairs.filter(p=>!p.makeup).length;
-  return{total:pairs.length,made:pairs.filter(p=>p.makeup).length,owed,pairs,byCourse};
+  const owed=pairs.filter(p=>!p.makeup||new Date(p.makeup.scheduledEnd)>=now).length;
+  return{total:pairs.length,made:pairs.filter(p=>p.makeup&&new Date(p.makeup.scheduledEnd)<now).length,owed,pairs,byCourse};
 }
 function hasThresholdWarning(stats,pid){
   const t=getThreshold(pid||currentPeriodId);
@@ -1779,13 +1792,17 @@ function openStudentModal(id){
   // Individual absence records
   if(stats.pairs.length){
     body+=`<div><div class="stu-modal-sec-lbl">請假紀錄</div>`;
+    const _now=new Date();
     body+=stats.pairs.map(({absence:a,makeup:m})=>{
       const absDate=`${a.startDt.getMonth()+1}/${a.startDt.getDate()}（${WD[a.startDt.getDay()]}）`;
       const absTypeLabel=a.absType==='老師請假'?'老師請假':a.absType==='調課'?'調課':'學生請假';
-      const makeupStr=m
-        ?`<div class="stu-pair-makeup done">✓ 補課：${new Date(m.scheduledDate).getMonth()+1}/${new Date(m.scheduledDate).getDate()}（${WD[new Date(m.scheduledDate).getDay()]}）</div>`
+      const isDone=m&&new Date(m.scheduledEnd)<_now;
+      const makeupStr=isDone
+        ?`<div class="stu-pair-makeup done">✓ 已補課：${new Date(m.scheduledDate).getMonth()+1}/${new Date(m.scheduledDate).getDate()}（${WD[new Date(m.scheduledDate).getDay()]}）</div>`
+        :m
+        ?`<div class="stu-pair-makeup pending">○ 待上補課：${new Date(m.scheduledDate).getMonth()+1}/${new Date(m.scheduledDate).getDate()}（${WD[new Date(m.scheduledDate).getDay()]}）${fmtT(new Date(m.scheduledDate))}</div>`
         :`<div class="stu-pair-makeup owed link" onclick="jumpToMakeup('${esc(a.id)}')">○ 尚未安排補課</div>`;
-      return`<div class="stu-pair"><div class="stu-pair-icon">${m?'✓':'○'}</div><div class="stu-pair-body"><div class="stu-pair-course">${esc(a.origTitle)}</div><div class="stu-pair-abs">${absTypeLabel}：${absDate}</div>${makeupStr}</div></div>`;
+      return`<div class="stu-pair"><div class="stu-pair-icon">${isDone?'✓':'○'}</div><div class="stu-pair-body"><div class="stu-pair-course">${esc(a.origTitle)}</div><div class="stu-pair-abs">${absTypeLabel}：${absDate}</div>${makeupStr}</div></div>`;
     }).join('');
     body+=`</div>`;
   }

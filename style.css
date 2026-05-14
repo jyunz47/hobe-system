@@ -264,7 +264,8 @@ input[type=date]:focus{border-color:var(--ac)}
 .tcard:hover{box-shadow:0 1px 6px rgba(0,0,0,.07);border-color:var(--brs)}
 .tcard.t-now{border-color:var(--ac);box-shadow:0 4px 14px rgba(45,90,61,.10)}
 .tcard.t-past{opacity:.55}
-.tcard.t-absent{opacity:.62}
+.tcard.t-absent{position:relative}
+.tcard.t-absent::after{content:'';position:absolute;inset:0;background:rgba(255,255,255,.42);border-radius:inherit;pointer-events:none;z-index:1}
 .tcard.highlight{animation:hl .6s ease 2;border-color:var(--ac);position:relative;z-index:1}
 .tcard.card-active{transform:scale(1.01) translateY(-2px);box-shadow:0 8px 22px rgba(0,0,0,.12);border-color:var(--ac);position:relative;z-index:1;transition:transform .2s,box-shadow .2s}
 .tcard.selected{border-color:var(--ac) !important;box-shadow:0 0 0 2px var(--al)}
@@ -294,6 +295,10 @@ input[type=date]:focus{border-color:var(--ac)}
 .tcard-note{background:var(--wl);color:var(--wn);border:1px solid #E8C97A}
 .tcard-abs{background:var(--dl);color:var(--dg);border:1px solid #E8B4B4}
 .tcard-note .l,.tcard-abs .l{font-size:9.5px;font-weight:700;letter-spacing:.08em;opacity:.7}
+.tcard-mk{padding:3px 9px;border-radius:5px;font-size:11px;display:inline-flex;align-items:center;gap:6px;position:relative;z-index:2}
+.tcard-mk .l{font-size:9.5px;font-weight:700;letter-spacing:.08em;opacity:.7}
+.tcard-mk.mk-arr{background:#dcfce7;color:#166534;border:1px solid #86efac}
+.tcard-mk.mk-un{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}
 
 /* ── W4 Week: day summary chips + focus day ── */
 .wsum-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:14px}
@@ -375,6 +380,7 @@ input[type=date]:focus{border-color:var(--ac)}
 .stu-pair-makeup.owed{color:#c0392b}
 .stu-pair-makeup.owed.link{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}
 .stu-pair-makeup.owed.link:hover{color:#a93226}
+.stu-pair-makeup.pending{color:#92400e}
 /* ── Student edit ── */
 .stu-edit-btn{font-size:11px;color:var(--tx3);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;opacity:0;transition:opacity .12s}
 .stu-card-hd:hover .stu-edit-btn{opacity:1}
