@@ -14,7 +14,7 @@ let weekEvents=[];
 let absState={};
 let makeupList=[];
 let driveData={studentList:[],makeupScheduled:[]};
-let driveFileId=null,driveSaveTimer=null;
+let driveFileId=null,driveSaveTimer=null,driveScopeNeeded=false;
 let makeupMatchMap=new Map(); // absenceEventId → {calEventId,scheduledDate,scheduledEnd,room,origTitle,absentStudents}
 let selectedWeekEvent=null;
 let weekOffset=0; // 0=this week, -1=last week, +1=next week
@@ -70,6 +70,7 @@ async function initAPIs(){
       }
       saveToken();
       scheduleTokenRefresh();
+      if(driveScopeNeeded){driveScopeNeeded=false;await loadFromDrive();renderStudents();}
       if(currentPanel==='login')await onSignedIn();
       else await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
     }
@@ -159,13 +160,7 @@ async function loadFromDrive(){
     const d=await r.json();
     driveData={studentList:d.studentList||[],makeupScheduled:d.makeupScheduled||[]};
   }catch(e){
-    if(e.code===403){
-      const el=document.getElementById('toast');
-      el.className='toast tinf';
-      el.innerHTML='ℹ 需要授權雲端硬碟權限 <span style="text-decoration:underline;cursor:pointer;margin-left:6px" onclick="tokenClient.requestAccessToken({prompt:\'consent\'})">點此授權</span>';
-      el.style.display='block';
-      return;
-    }
+    if(e.code===403){driveScopeNeeded=true;return;}
     console.error('loadFromDrive failed',e);
     driveData={studentList:JSON.parse(localStorage.getItem('studentList')||'[]'),makeupScheduled:JSON.parse(localStorage.getItem('makeupScheduled')||'[]')};
   }
@@ -1893,9 +1888,13 @@ function addEditCourse(id){
 }
 
 function renderStudents(){
-  const list=getStudentList();
   const container=document.getElementById('stu-list');
   if(!container)return;
+  if(driveScopeNeeded){
+    container.innerHTML=periodTabsHtml()+'<div class="empty" style="display:flex;flex-direction:column;align-items:center;gap:12px"><div>需要授權雲端硬碟才能載入學生資料</div><button class="btn btnp" onclick="tokenClient.requestAccessToken({prompt:\'consent\'})">點此授權</button></div>';
+    return;
+  }
+  const list=getStudentList();
   if(!list.length){container.innerHTML=periodTabsHtml()+'<div class="empty">尚未新增學生，點右上角「新增學生」開始</div>';return;}
   const byGrade={};
   GRADES.forEach(g=>{byGrade[g]=[];});
