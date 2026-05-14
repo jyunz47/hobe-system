@@ -1,5 +1,5 @@
 const CLIENT_ID='729031557572-tjn0hoiph1b0dbkp57lut0l6ekshm629.apps.googleusercontent.com';
-const SCOPES='https://www.googleapis.com/auth/calendar';
+const SCOPES='https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/drive.appdata';
 const DISCOVERY_DOC='https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
 const CAL_NAMES=['一般課程','補課','調課','試聽','練習課','加課'];
 const MAKEUP_CALS=['一般課程','調課','試聽','練習課','加課']; // exclude 補課
@@ -13,6 +13,8 @@ let dayEvents=[];
 let weekEvents=[];
 let absState={};
 let makeupList=[];
+let driveData={studentList:[],makeupScheduled:[]};
+let driveFileId=null,driveSaveTimer=null;
 let makeupMatchMap=new Map(); // absenceEventId → {calEventId,scheduledDate,scheduledEnd,room,origTitle,absentStudents}
 let selectedWeekEvent=null;
 let weekOffset=0; // 0=this week, -1=last week, +1=next week
@@ -118,6 +120,7 @@ function signOut(){
   const t=gapi.client.getToken();
   if(t){google.accounts.oauth2.revoke(t.access_token);gapi.client.setToken(null);}
   calendarIds={};dayEvents=[];weekEvents=[];makeupList=[];
+  driveData={studentList:[],makeupScheduled:[]};driveFileId=null;
   sessionStorage.removeItem('gtoken');
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='none');
   setUSt('','未登入','請登入 Google 帳號');
@@ -129,10 +132,52 @@ async function onSignedIn(){
   scheduleTokenRefresh();
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='inline-block');
   try{const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+gapi.client.getToken().access_token}}).then(r=>r.json());setUSt('ok',info.email||'已登入','Google 帳號');}catch(e){setUSt('ok','已登入','Google 帳號');}
+  await loadFromDrive();
   await fetchCalIds();
   showPanel('courses');
   await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
   updateWeekTitle();
+}
+
+// ── Google Drive Sync ──
+const DRIVE_FILE='hobe-system.json';
+function getToken(){return gapi.client.getToken()?.access_token;}
+async function findDriveFile(){
+  const r=await fetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D%22'+DRIVE_FILE+'%22&fields=files(id)',{headers:{Authorization:'Bearer '+getToken()}});
+  const d=await r.json();return d.files?.[0]?.id||null;
+}
+async function loadFromDrive(){
+  try{
+    driveFileId=await findDriveFile();
+    if(!driveFileId){
+      driveData={studentList:JSON.parse(localStorage.getItem('studentList')||'[]'),makeupScheduled:JSON.parse(localStorage.getItem('makeupScheduled')||'[]')};
+      if(driveData.studentList.length||driveData.makeupScheduled.length)await saveToDrive();
+      return;
+    }
+    const r=await fetch('https://www.googleapis.com/drive/v3/files/'+driveFileId+'?alt=media',{headers:{Authorization:'Bearer '+getToken()}});
+    const d=await r.json();
+    driveData={studentList:d.studentList||[],makeupScheduled:d.makeupScheduled||[]};
+  }catch(e){
+    console.error('loadFromDrive failed',e);
+    driveData={studentList:JSON.parse(localStorage.getItem('studentList')||'[]'),makeupScheduled:JSON.parse(localStorage.getItem('makeupScheduled')||'[]')};
+  }
+}
+function scheduleDriveSave(){clearTimeout(driveSaveTimer);driveSaveTimer=setTimeout(saveToDrive,1500);}
+async function saveToDrive(){
+  try{
+    const token=getToken();if(!token)return;
+    const body=JSON.stringify(driveData);
+    if(driveFileId){
+      await fetch('https://www.googleapis.com/upload/drive/v3/files/'+driveFileId+'?uploadType=media',{method:'PATCH',headers:{Authorization:'Bearer '+token,'Content-Type':'application/json'},body});
+    }else{
+      const meta={name:DRIVE_FILE,parents:['appDataFolder']};
+      const form=new FormData();
+      form.append('metadata',new Blob([JSON.stringify(meta)],{type:'application/json'}));
+      form.append('file',new Blob([body],{type:'application/json'}));
+      const r=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{method:'POST',headers:{Authorization:'Bearer '+token},body:form});
+      const d=await r.json();driveFileId=d.id;
+    }
+  }catch(e){console.error('saveToDrive failed',e);}
 }
 
 async function fetchCalIds(){
@@ -984,16 +1029,18 @@ function renderMakeup(){
   const fs=document.getElementById('f-subject').value;
   const ft=document.getElementById('f-type').value;
   const so=document.getElementById('f-sort').value;
-  const deletedIds=getDeletedMakeupIds();
-  let list=makeupList.filter(e=>!deletedIds.has(e.id)&&e.startDt>=period.start&&e.startDt<=period.end).filter(e=>!fs||e.subject===fs).filter(e=>!ft||e.absType===ft);
+  const now=new Date();
+  const scheduledAll=getMakeupScheduled();
+  const completedIds=new Set(scheduledAll.filter(s=>new Date(s.scheduledEnd)<now).map(s=>s.originalId));
+  const scheduledFutureIds=new Set(scheduledAll.filter(s=>new Date(s.scheduledEnd)>=now).map(s=>s.originalId));
+  let list=makeupList.filter(e=>!completedIds.has(e.id)&&e.startDt>=period.start&&e.startDt<=period.end).filter(e=>!fs||e.subject===fs).filter(e=>!ft||e.absType===ft);
   if(so==='desc')list=[...list].reverse();
   document.getElementById('rc').textContent=`共 ${list.length} 筆`;
   const c=document.getElementById('clist-makeup');
   c.innerHTML=periodTabsHtml();
   if(!list.length){c.innerHTML+=`<div class="empty">${period.label}沒有待補課/調課 🎉</div>`;return;}
-  const scheduledIds=new Set(getMakeupScheduled().map(x=>x.originalId));
-  const pending=list.filter(e=>!scheduledIds.has(e.id));
-  const scheduledRecs=getMakeupScheduled().filter(s=>list.some(e=>e.id===s.originalId));
+  const pending=list.filter(e=>!scheduledFutureIds.has(e.id));
+  const scheduledRecs=scheduledAll.filter(s=>scheduledFutureIds.has(s.originalId)&&list.some(e=>e.id===s.originalId));
   let html='';
 
   // 待安排
@@ -1034,7 +1081,6 @@ function renderMakeup(){
         ${openEv.absentStudents?.length?`<div class="mk-note">${esc(openEv.absentStudents.join('、'))}</div>`:''}
         <div class="mk-detail-actions">
           <button class="btn btns btnp" style="font-size:12px" onclick="openSlotPicker('${esc(openEv.id)}',${openEv.absType==='調課'?`'reschedule'`:`'makeup'`})">${openEv.absType==='調課'?'安排調課':'安排補課'}</button>
-          <button class="btn btns" style="font-size:12px;color:var(--dg)" onclick="permanentDeleteMakeup('${esc(openEv.id)}')">刪除記錄</button>
         </div>
       </div>`;
     }
@@ -1073,7 +1119,6 @@ function renderMakeup(){
         ${openRec.absentStudents?.length?`<div class="mk-note">${esc(openRec.absentStudents.join('、'))}</div>`:''}
         <div class="mk-detail-actions">
           <button class="btn btns" style="font-size:12px" onclick="deleteMakeupScheduled('${esc(openRec.originalId)}')">取消安排</button>
-          <button class="btn btns" style="font-size:12px;color:var(--dg)" onclick="permanentDeleteMakeup('${esc(openRec.originalId)}')">刪除記錄</button>
         </div>
       </div>`;
     }
@@ -1094,7 +1139,7 @@ async function gotoMakeupEvent(id, ts){
 }
 
 function updateBadge(n){const b=document.getElementById('badge-makeup');b.textContent=n;b.style.display=n>0?'inline':'none';}
-function updateMakeupBadge(){const period=getCurrentPeriod();const deletedIds=getDeletedMakeupIds();const scheduledIds=new Set(getMakeupScheduled().map(x=>x.originalId));const n=makeupList.filter(e=>!deletedIds.has(e.id)&&!scheduledIds.has(e.id)&&e.startDt>=period.start&&e.startDt<=period.end).length;updateBadge(n);return n;}
+function updateMakeupBadge(){const period=getCurrentPeriod();const scheduledIds=new Set(getMakeupScheduled().map(x=>x.originalId));const n=makeupList.filter(e=>!scheduledIds.has(e.id)&&e.startDt>=period.start&&e.startDt<=period.end).length;updateBadge(n);return n;}
 
 // ── Date nav ──
 function changeDay(d){currentDate=new Date(currentDate.getTime()+d*864e5);setDateDisplay(currentDate);document.getElementById('date-picker').value=toDateStr(currentDate);if(gapi.client.getToken())Promise.all([loadToday(),loadWeek()]);}
@@ -1461,15 +1506,15 @@ async function confirmSlotPicker(){
     }
   }catch(err){hideL();toast('操作失敗：'+(err.result?.error?.message||err.message),'err');}
 }
-// localStorage for makeup records (fallback/persistence)
-function getMakeupScheduledLS(){try{return JSON.parse(localStorage.getItem('makeupScheduled')||'[]');}catch{return[];}}
+function getMakeupScheduledLS(){return driveData.makeupScheduled||[];}
 function getMakeupScheduled(){return[...makeupMatchMap.entries()].map(([originalId,v])=>({originalId,...v}));}
 function saveMakeupScheduled(ev,sS,sE,room,calEventId,calName='補課'){
   const rec={originalId:ev.id,origTitle:ev.origTitle,originalDate:ev.startDt.toISOString(),scheduledDate:sS.toISOString(),scheduledEnd:sE.toISOString(),room,calEventId:calEventId||null,absentStudents:ev.absentStudents||[],calName};
   makeupMatchMap.set(ev.id,{calEventId:calEventId||null,scheduledDate:sS.toISOString(),scheduledEnd:sE.toISOString(),room,origTitle:ev.origTitle,absentStudents:ev.absentStudents||[],calName});
   const list=getMakeupScheduledLS().filter(x=>x.originalId!==ev.id);
   list.push(rec);
-  localStorage.setItem('makeupScheduled',JSON.stringify(list));
+  driveData.makeupScheduled=list;
+  scheduleDriveSave();
 }
 async function deleteMakeupScheduled(originalId){
   const rec=makeupMatchMap.get(originalId);
@@ -1479,16 +1524,8 @@ async function deleteMakeupScheduled(originalId){
     catch(e){console.warn(`刪除${calName}事件失敗`,e);}
   }
   makeupMatchMap.delete(originalId);
-  localStorage.setItem('makeupScheduled',JSON.stringify(getMakeupScheduledLS().filter(x=>x.originalId!==originalId)));
-  renderMakeup();updateMakeupBadge();
-}
-function getDeletedMakeupIds(){try{return new Set(JSON.parse(localStorage.getItem('deletedMakeupIds')||'[]'));}catch{return new Set();}}
-function permanentDeleteMakeup(originalId){
-  const deleted=getDeletedMakeupIds();
-  deleted.add(originalId);
-  localStorage.setItem('deletedMakeupIds',JSON.stringify([...deleted]));
-  makeupMatchMap.delete(originalId);
-  localStorage.setItem('makeupScheduled',JSON.stringify(getMakeupScheduledLS().filter(x=>x.originalId!==originalId)));
+  driveData.makeupScheduled=getMakeupScheduledLS().filter(x=>x.originalId!==originalId);
+  scheduleDriveSave();
   renderMakeup();updateMakeupBadge();
 }
 
@@ -1496,8 +1533,8 @@ window.addEventListener('resize',()=>{if(currentPanel==='courses')renderTL();});
 
 // ── Student Management ──
 const GRADES=['國小','國一','國二','國三','高一','高二','高三','大學'];
-function getStudentList(){try{return JSON.parse(localStorage.getItem('studentList')||'[]');}catch{return[];}}
-function saveStudentList(list){localStorage.setItem('studentList',JSON.stringify(list));}
+function getStudentList(){return driveData.studentList||[];}
+function saveStudentList(list){driveData.studentList=list;scheduleDriveSave();}
 
 let scanData=null,_scanUnreg=[],_scanReg=[];
 
@@ -1684,12 +1721,10 @@ function getThreshold(pid){return(pid==='sem1'||pid==='sem2')?3:2;}
 function getStudentStats(name,periodId){
   const pid=periodId||currentPeriodId;
   const period=getPeriods().find(p=>p.id===pid)||getPeriods()[0];
-  const deletedIds=getDeletedMakeupIds();
   const scheduled=getMakeupScheduled();
   const scheduledMap=new Map(scheduled.map(s=>[s.originalId,s]));
   const absences=makeupList.filter(e=>{
     if(!e.startDt||e.startDt<period.start||e.startDt>period.end)return false;
-    if(deletedIds.has(e.id))return false;
     if(e.absType==='學生請假'||e.absType==='調課')return e.absentStudents?.includes(name);
     if(e.absType==='老師請假')return e.students?.includes(name);
     return false;
