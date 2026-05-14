@@ -144,6 +144,7 @@ const DRIVE_FILE='hobe-system.json';
 function getToken(){return gapi.client.getToken()?.access_token;}
 async function findDriveFile(){
   const r=await fetch('https://www.googleapis.com/drive/v3/files?spaces=appDataFolder&q=name%3D%22'+DRIVE_FILE+'%22&fields=files(id)',{headers:{Authorization:'Bearer '+getToken()}});
+  if(r.status===403)throw Object.assign(new Error('drive_scope_missing'),{code:403});
   const d=await r.json();return d.files?.[0]?.id||null;
 }
 async function loadFromDrive(){
@@ -158,6 +159,11 @@ async function loadFromDrive(){
     const d=await r.json();
     driveData={studentList:d.studentList||[],makeupScheduled:d.makeupScheduled||[]};
   }catch(e){
+    if(e.code===403){
+      toast('需要重新授權 Drive 權限，請稍候...','inf');
+      tokenClient.requestAccessToken({prompt:'consent'});
+      return;
+    }
     console.error('loadFromDrive failed',e);
     driveData={studentList:JSON.parse(localStorage.getItem('studentList')||'[]'),makeupScheduled:JSON.parse(localStorage.getItem('makeupScheduled')||'[]')};
   }
