@@ -3,6 +3,7 @@ const SCOPES='https://www.googleapis.com/auth/calendar';
 const DISCOVERY_DOC='https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
 const CAL_NAMES=['一般課程','補課','調課','試聽','練習課','加課'];
 const MAKEUP_CALS=['一般課程','調課','試聽','練習課','加課']; // exclude 補課
+const TL_ROOMS=['大教室','小教室','108','208','309'];
 
 let tokenClient=null,gapiReady=false,gisReady=false;
 let tokenRefreshTimer=null;
@@ -44,6 +45,7 @@ const ROOM_CAP={'小教室':5,'108':6,'208':6,'309':6};
 const ROOMS_SMALL=['小教室','108','208','309'];
 let slotPicker={ev:null,mode:null,date:null,time:null,room:null,avail:null};
 let heroProgressTimer=null;
+let tlAxisStart=0,tlTotalMins=0,tlNowTimer=null;
 
 // ── Init ──
 window.addEventListener('load',()=>{
@@ -377,6 +379,67 @@ function trigHL(c){
 }
 
 // ── Render Today List (V4 card grid + hero for current/next) ──
+function renderTimeline(evs){
+  const body=document.getElementById('tl-body');
+  if(!body)return;
+  const roomEvs=evs.filter(e=>TL_ROOMS.includes(e.classroom)&&!e.isFullAbsent&&!e.isRescheduled);
+  if(!roomEvs.length){
+    body.innerHTML='<div style="padding:16px;font-size:12px;color:var(--tx3)">今日無教室課程</div>';
+    if(tlNowTimer){clearInterval(tlNowTimer);tlNowTimer=null;}
+    return;
+  }
+  let minMin=999,maxMin=0;
+  roomEvs.forEach(e=>{
+    const s=e.startDt.getHours()*60+e.startDt.getMinutes();
+    const en=e.endDt.getHours()*60+e.endDt.getMinutes();
+    if(s<minMin)minMin=s;if(en>maxMin)maxMin=en;
+  });
+  const axisStartH=Math.max(0,Math.floor(minMin/60));
+  const axisEndH=Math.min(24,Math.ceil(maxMin/60));
+  tlAxisStart=axisStartH*60;
+  tlTotalMins=Math.max((axisEndH-axisStartH)*60,120);
+  const today=new Date();today.setHours(0,0,0,0);
+  const vd=new Date(currentDate);vd.setHours(0,0,0,0);
+  const isToday=vd.getTime()===today.getTime();
+  const nowMin=isToday?new Date().getHours()*60+new Date().getMinutes():-1;
+  const nowPct=nowMin>=0?((nowMin-tlAxisStart)/tlTotalMins*100).toFixed(1):null;
+  let ticks='';
+  for(let h=axisStartH;h<=axisEndH;h++){
+    const p=((h*60-tlAxisStart)/tlTotalMins*100).toFixed(1);
+    ticks+=`<span class="tl-tick" style="left:${p}%">${String(h).padStart(2,'0')}:00</span>`;
+  }
+  const nowHdrLbl=nowPct!==null?`<span class="tl-now-hdr-lbl" id="tl-now-hdr-lbl" style="left:${nowPct}%">▾</span>`:'';
+  let vlinePcts=[];
+  for(let h=axisStartH+1;h<axisEndH;h++)vlinePcts.push(((h*60-tlAxisStart)/tlTotalMins*100).toFixed(1));
+  const vlinesHtml=vlinePcts.map(p=>`<div class="tl-vline" style="left:${p}%"></div>`).join('');
+  const nowLineHtml=nowPct!==null?`<div class="tl-now-line" data-tlnow style="left:${nowPct}%"></div>`:'';
+  let rowsHtml='';
+  TL_ROOMS.forEach(room=>{
+    let blocksHtml='';
+    roomEvs.filter(e=>e.classroom===room).forEach(e=>{
+      const s=e.startDt.getHours()*60+e.startDt.getMinutes();
+      const en=e.endDt.getHours()*60+e.endDt.getMinutes();
+      const left=((s-tlAxisStart)/tlTotalMins*100).toFixed(1);
+      const width=Math.max((en-s)/tlTotalMins*100,1).toFixed(1);
+      const clr=calColor(e.calName);
+      blocksHtml+=`<div class="tl-block" style="left:${left}%;width:${width}%;background:${clr}28;border-left:2.5px solid ${clr}" onclick="selectWeekEvent('${esc(e.id)}')"><div class="tl-block-nm">${esc(e.origTitle)}</div><div class="tl-block-t">${fmtT(e.startDt)}</div></div>`;
+    });
+    rowsHtml+=`<div class="tl-room-lbl">${esc(room)}</div><div class="tl-track">${vlinesHtml}${nowLineHtml}${blocksHtml}</div>`;
+  });
+  body.innerHTML=`<div class="tl-wrap"><div class="tl-corner"></div><div class="tl-hdr">${ticks}${nowHdrLbl}</div>${rowsHtml}</div>`;
+  if(tlNowTimer){clearInterval(tlNowTimer);tlNowTimer=null;}
+  if(isToday)tlNowTimer=setInterval(updateTlNow,60000);
+}
+
+function updateTlNow(){
+  if(!tlTotalMins)return;
+  const nowMin=new Date().getHours()*60+new Date().getMinutes();
+  const pct=((nowMin-tlAxisStart)/tlTotalMins*100).toFixed(1);
+  const lbl=document.getElementById('tl-now-hdr-lbl');
+  if(lbl)lbl.style.left=pct+'%';
+  document.querySelectorAll('[data-tlnow]').forEach(el=>el.style.left=pct+'%');
+}
+
 function renderToday(){
   const c=document.getElementById('clist-today');
   const sum=document.getElementById('today-summary');
@@ -404,15 +467,12 @@ function renderToday(){
   // Hero: 進行中（可多堂）or 下一堂
   const nowEvs=evs.filter(x=>x.status==='now');
   const nextEv=!nowEvs.length?evs.find(x=>x.status==='upcoming'):null;
-  const sep=document.getElementById('today-sep');
   if(isToday&&(nowEvs.length||nextEv)){
     hero.innerHTML=nowEvs.length
       ?nowEvs.map(e=>heroHtml(e,true)).join('')
       :heroHtml(nextEv,false);
-    if(sep)sep.style.display='block';
   }else{
     hero.innerHTML='';
-    if(sep)sep.style.display='none';
   }
 
   // 自動更新所有進行中課程的進度條與時間（一個 timer，各自用自己的 data-start/end 計算）
@@ -455,6 +515,7 @@ function renderToday(){
   sum.innerHTML=sumHtml;
 
   c.innerHTML=evs.map(tcardHtml).join('');
+  renderTimeline(evs);
 }
 
 function heroHtml(e,isNow){
