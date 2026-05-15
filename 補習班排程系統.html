@@ -63,27 +63,110 @@
     <div id="panel-courses" class="panel" style="display:none">
       <div id="err-courses" class="err" style="display:none"></div>
 
-      <!-- Today -->
-      <div class="sec-hd"><span id="today-sec-title">今日課程</span><div class="sec-hd-line"></div></div>
-      <div class="date-nav">
-        <div class="date-title" id="date-title">—</div>
-        <button class="dbtn" onclick="changeDay(-1)">‹ 前一天</button>
-        <button class="dbtn" onclick="goToday()">今天</button>
-        <button class="dbtn" onclick="changeDay(1)">後一天 ›</button>
-        <input type="date" id="date-picker" onchange="pickDate(this.value)">
+      <!-- Today + Add Course layout -->
+      <div class="courses-layout">
+        <div class="today-panel">
+          <div class="today-panel-hd">
+            <span id="today-sec-title" class="today-panel-title">今日課程</span>
+            <div class="date-nav">
+              <div class="date-title" id="date-title">—</div>
+              <button class="dbtn" onclick="changeDay(-1)">‹ 前一天</button>
+              <button class="dbtn" onclick="goToday()">今天</button>
+              <button class="dbtn" onclick="changeDay(1)">後一天 ›</button>
+              <input type="date" id="date-picker" onchange="pickDate(this.value)">
+            </div>
+          </div>
+          <div class="today-panel-body">
+            <div class="legend">
+              <div class="lgi"><div class="lgd" style="background:#3B82F6"></div>一般課程</div>
+              <div class="lgi"><div class="lgd" style="background:#EF4444"></div>調課</div>
+              <div class="lgi"><div class="lgd" style="background:#F97316"></div>補課</div>
+              <div class="lgi"><div class="lgd" style="background:#EAB308"></div>加課</div>
+              <div class="lgi"><div class="lgd" style="background:#22C55E"></div>試聽</div>
+              <div class="lgi"><div class="lgd" style="background:#A855F7"></div>練習課</div>
+            </div>
+            <div id="today-hero"></div>
+            <div class="today-sep" id="today-sep" style="display:none"></div>
+            <div class="tsum" id="today-summary"></div>
+            <div class="tgrid" id="clist-today"><div class="empty" style="grid-column:1/-1">載入中...</div></div>
+          </div>
+        </div>
 
+        <!-- Inline Add Course Panel -->
+        <div class="ac-inline-panel">
+          <div class="ac-panel-hd">新增課程</div>
+          <div class="ac-panel-body">
+            <div class="ac-row">
+              <label class="ac-lbl">課程名稱</label>
+              <input id="ac-name" class="ac-input" placeholder="例：國二理化班">
+            </div>
+            <div class="ac-row2">
+              <div>
+                <label class="ac-lbl">行事曆</label>
+                <select id="ac-cal" class="ac-select">
+                  <option value="一般課程">一般課程</option>
+                  <option value="試聽">試聽</option>
+                  <option value="練習課">練習課</option>
+                  <option value="加課">加課</option>
+                </select>
+              </div>
+              <div>
+                <label class="ac-lbl">重複</label>
+                <div class="ac-radios">
+                  <label><input type="radio" name="ac-repeat" value="once" checked> 單次</label>
+                  <label><input type="radio" name="ac-repeat" value="weekly"> 每週</label>
+                </div>
+              </div>
+            </div>
+            <div class="ac-row">
+              <label class="ac-lbl">日期</label>
+              <input id="ac-date" class="ac-input" type="date">
+            </div>
+            <div class="ac-row2">
+              <div>
+                <label class="ac-lbl">開始</label>
+                <input id="ac-start" class="ac-input" type="time">
+              </div>
+              <div>
+                <label class="ac-lbl">結束</label>
+                <input id="ac-end" class="ac-input" type="time">
+              </div>
+            </div>
+            <div class="ac-row2">
+              <div>
+                <label class="ac-lbl">教室</label>
+                <select id="ac-room" class="ac-select">
+                  <option value="">不指定</option>
+                  <option>小教室</option>
+                  <option>大教室</option>
+                  <option>108</option>
+                  <option>208</option>
+                  <option>309</option>
+                </select>
+              </div>
+              <div>
+                <label class="ac-lbl">老師</label>
+                <input id="ac-teacher" class="ac-input" placeholder="老師姓名">
+              </div>
+            </div>
+            <div class="ac-row">
+              <label class="ac-lbl">學生</label>
+              <div class="ac-chips-wrap" onclick="document.getElementById('ac-stu-input').focus()">
+                <div class="ac-chips" id="ac-chips">
+                  <input id="ac-stu-input" class="ac-stu-input" placeholder="輸入姓名按 Enter 新增" onkeydown="acStuKeydown(event)">
+                </div>
+              </div>
+              <div class="ac-disambig" id="ac-disambig" style="display:none">
+                <div class="ac-disambig-title" id="ac-disambig-title"></div>
+                <div class="ac-disambig-opts" id="ac-disambig-opts"></div>
+              </div>
+            </div>
+          </div>
+          <div class="ac-panel-ft">
+            <button class="btn btnp" style="width:100%" onclick="submitAddCourse()">新增課程</button>
+          </div>
+        </div>
       </div>
-      <div class="legend">
-        <div class="lgi"><div class="lgd" style="background:#3B82F6"></div>一般課程</div>
-        <div class="lgi"><div class="lgd" style="background:#EF4444"></div>調課</div>
-        <div class="lgi"><div class="lgd" style="background:#F97316"></div>補課</div>
-        <div class="lgi"><div class="lgd" style="background:#EAB308"></div>加課</div>
-        <div class="lgi"><div class="lgd" style="background:#22C55E"></div>試聽</div>
-        <div class="lgi"><div class="lgd" style="background:#A855F7"></div>練習課</div>
-      </div>
-      <div id="today-hero"></div>
-      <div class="tsum" id="today-summary"></div>
-      <div class="tgrid mb20" id="clist-today"><div class="empty" style="grid-column:1/-1">載入中...</div></div>
 
       <!-- This week -->
       <div class="sec-hd">
@@ -194,5 +277,6 @@
     <div class="stu-modal-body" id="stu-modal-body"></div>
   </div>
 </div>
+
 </body>
 </html>

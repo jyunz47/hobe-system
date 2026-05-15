@@ -136,6 +136,7 @@ async function onSignedIn(){
   await loadFromFirestore();
   await fetchCalIds();
   showPanel('courses');
+  openAddCourse();
   await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
   updateWeekTitle();
 }
@@ -403,12 +404,15 @@ function renderToday(){
   // Hero: 進行中（可多堂）or 下一堂
   const nowEvs=evs.filter(x=>x.status==='now');
   const nextEv=!nowEvs.length?evs.find(x=>x.status==='upcoming'):null;
+  const sep=document.getElementById('today-sep');
   if(isToday&&(nowEvs.length||nextEv)){
     hero.innerHTML=nowEvs.length
       ?nowEvs.map(e=>heroHtml(e,true)).join('')
       :heroHtml(nextEv,false);
+    if(sep)sep.style.display='block';
   }else{
     hero.innerHTML='';
+    if(sep)sep.style.display='none';
   }
 
   // 自動更新所有進行中課程的進度條與時間（一個 timer，各自用自己的 data-start/end 計算）
@@ -434,10 +438,12 @@ function renderToday(){
   const past=evs.filter(x=>x.status==='past').length;
   const absCount=evs.filter(x=>x.isFullAbsent&&!x.isRescheduled).length;
   const reschedCount=evs.filter(x=>x.isRescheduled).length;
-  const remain=evs.filter(x=>x.status==='upcoming'||x.status==='now').length;
+  const nowCount=evs.filter(x=>x.status==='now').length;
+  const remain=evs.filter(x=>x.status==='upcoming').length;
   let sumHtml=`<span>共 <b>${total}</b> 堂</span>`;
   if(isToday){
     if(past>0)sumHtml+=`<span>已完成 <b>${past}</b></span>`;
+    if(nowCount>0)sumHtml+=`<span>進行中 <b style="color:var(--ac)">${nowCount}</b></span>`;
     if(remain>0)sumHtml+=`<span>待上 <b style="color:var(--ac)">${remain}</b></span>`;
   }
   if(absCount>0)sumHtml+=`<span class="tsum-abs">${absCount} 請假</span>`;
@@ -497,11 +503,16 @@ function tcardHtml(e){
     e.status==='now'?'<span class="tstat tstat-now"><span class="ndot"></span>進行中</span>':
     e.status==='past'?'<span class="tstat tstat-past">已結束</span>':'';
   const stuTxt=e.students.length===0?'—':e.students.length<=2?e.students.join('、'):`${e.students.length} 人`;
-  const absInline=e.isRescheduled?`<div class="tcard-abs"><span class="l">調課</span>${e.rescheduleReason?esc(e.rescheduleReason):'未輸入原因'}</div>`:
-    e.isAbsent?`<div class="tcard-abs"><span class="l">請假</span>${e.absType==='老師請假'?'老師請假':esc(e.absentStudents.join('、'))+'請假'}</div>`:'';
+  const absInline=e.isRescheduled?`<div class="tcard-abs"><span class="l">調課</span>${e.rescheduleReason?esc(e.rescheduleReason):'未輸入原因'}</div>`:'';
   const noteInline=e.notes?`<div class="tcard-note"><span class="l">備註</span>${esc(e.notes)}</div>`:'';
   const mkSt=getMkSt(e);
   const extras=(absInline||noteInline||mkSt)?`<div class="tcard-extras">${noteInline}${absInline}${mkSt}</div>`:'';
+  const absTitleEl=e.isRescheduled
+    ?`<span class="mk-badge mk-badge-reschedule">調課</span>`
+    :e.isAbsent
+      ?`<span class="tcard-abs"><span class="l">請假</span>${e.absType==='老師請假'?'老師請假':esc(e.absentStudents.join('、'))+'請假'}</span>`
+      :'';
+  const stBadge=(()=>{if(!e.isFullAbsent&&!e.isRescheduled)return'';const rec=new Map(getMakeupScheduled().map(s=>[s.originalId,s])).get(e.id);return rec?`<span class="mk-badge mk-badge-arr">已安排</span>`:`<span class="mk-badge mk-badge-un">未安排</span>`;})();
   return `<div class="${cls}" id="cc-${id}" style="border-left-color:${tcv}" onclick="selectWeekEvent('${id}')">
     <div class="tcard-row">
       <div class="tcard-time">${fmtT(e.startDt)}<span class="dash">—</span>${fmtT(e.endDt)}</div>
@@ -511,7 +522,10 @@ function tcardHtml(e){
         ${stat}
       </div>
     </div>
-    <div class="tcard-title${e.isFullAbsent?' struck':''}">${esc(e.origTitle)}</div>
+    <div class="tcard-title-row">
+      <span class="tcard-title${e.isFullAbsent?' struck':''}">${esc(e.origTitle)}</span>
+      ${absTitleEl}${stBadge}
+    </div>
     <div class="tcard-meta">
       ${e.teacher?`<span><span class="lbl">授課</span><b>${esc(e.teacher)}</b></span>`:''}
       ${e.classroom?`<span><span class="lbl">教室</span><b>${esc(e.classroom)}</b></span>`:''}
@@ -1858,6 +1872,130 @@ async function jumpToMakeup(eventId){
 function toggleMkCard(id){
   mkOpenId=mkOpenId===id?null:id;
   renderMakeup();
+}
+
+// ── 新增課程 ──
+let acStudents=[];
+let acPendingName=null;
+
+function openAddCourse(){
+  acStudents=[];acPendingName=null;
+  document.getElementById('ac-name').value='';
+  document.getElementById('ac-cal').value='一般課程';
+  document.getElementById('ac-date').value=toDateStr(currentDate);
+  document.getElementById('ac-start').value='';
+  document.getElementById('ac-end').value='';
+  document.getElementById('ac-room').value='';
+  document.getElementById('ac-teacher').value='';
+  document.getElementById('ac-disambig').style.display='none';
+  document.querySelector('[name="ac-repeat"][value="once"]').checked=true;
+  renderAcChips();
+}
+
+function closeAddCourse(){
+  openAddCourse();
+}
+
+function acStuKeydown(e){
+  if(e.key==='Enter'||e.key===','||e.key==='，'){
+    e.preventDefault();
+    const name=e.target.value.trim().replace(/[,，]/g,'');
+    if(!name)return;
+    e.target.value='';
+    acTryAddChip(name);
+  }
+}
+
+function acTryAddChip(name){
+  if(acStudents.some(s=>s.name===name))return toast('已加入同名學生','inf');
+  const matches=getStudentList().filter(s=>s.name===name);
+  if(!matches.length){
+    acAddChip(name,true,null);
+  }else{
+    acPendingName=name;
+    document.getElementById('ac-disambig-title').textContent=`找到同名學生「${name}」，請選擇：`;
+    document.getElementById('ac-disambig-opts').innerHTML=
+      matches.map(s=>`<button class="btn btns" onclick="acDisambig(${s.id})">${esc(s.name)}${s.grade?`（${s.grade}）`:''} — 舊生</button>`).join('')+
+      `<button class="btn btns" onclick="acDisambig(null)">建立新生</button>`;
+    document.getElementById('ac-disambig').style.display='block';
+  }
+}
+
+function acDisambig(existingId){
+  if(!acPendingName)return;
+  acAddChip(acPendingName,existingId===null,existingId);
+  acPendingName=null;
+  document.getElementById('ac-disambig').style.display='none';
+}
+
+function acAddChip(name,isNew,existingId){
+  acStudents.push({name,isNew,existingId});
+  renderAcChips();
+}
+
+function acRemoveChip(name){
+  acStudents=acStudents.filter(s=>s.name!==name);
+  renderAcChips();
+}
+
+function renderAcChips(){
+  const wrap=document.getElementById('ac-chips');
+  wrap.innerHTML=acStudents.map(s=>
+    `<span class="ac-chip ${s.isNew?'ac-chip-new':'ac-chip-old'}" title="${s.isNew?'新生':'舊生'}">
+      ${esc(s.name)}<button class="ac-chip-x" onclick="acRemoveChip('${esc(s.name)}')">✕</button>
+    </span>`
+  ).join('')+`<input id="ac-stu-input" class="ac-stu-input" placeholder="${acStudents.length?'':'輸入姓名按 Enter 新增'}" onkeydown="acStuKeydown(event)">`;
+}
+
+async function submitAddCourse(){
+  const name=document.getElementById('ac-name').value.trim();
+  const cal=document.getElementById('ac-cal').value;
+  const date=document.getElementById('ac-date').value;
+  const start=document.getElementById('ac-start').value;
+  const end=document.getElementById('ac-end').value;
+  const room=document.getElementById('ac-room').value;
+  const teacher=document.getElementById('ac-teacher').value.trim();
+  const repeat=document.querySelector('[name="ac-repeat"]:checked').value;
+
+  if(!name)return toast('請輸入課程名稱','inf');
+  if(!date)return toast('請選擇日期','inf');
+  if(!start||!end)return toast('請填入開始與結束時間','inf');
+  if(start>=end)return toast('結束時間需晚於開始時間','inf');
+
+  const calId=calendarIds[cal];
+  if(!calId)return toast(`找不到「${cal}」行事曆，請先確認行事曆已建立`,'err');
+
+  const sS=new Date(`${date}T${start}`);
+  const sE=new Date(`${date}T${end}`);
+  const line1=[room,teacher].filter(Boolean).join(' ');
+  const stuLine=acStudents.map(s=>s.name).join('、');
+  const desc=[line1,stuLine].filter(Boolean).join('\n');
+
+  const resource={summary:name,description:desc,start:{dateTime:sS.toISOString()},end:{dateTime:sE.toISOString()}};
+  if(repeat==='weekly')resource.recurrence=['RRULE:FREQ=WEEKLY'];
+
+  try{
+    showL('新增課程中...');
+    await gapi.client.calendar.events.insert({calendarId:calId,resource});
+
+    // 建立新生學生檔案
+    const list=getStudentList();
+    let added=0;
+    acStudents.filter(s=>s.isNew).forEach(s=>{
+      if(!list.some(x=>x.name===s.name)){
+        list.push({id:Date.now()+added++,name:s.name,grade:'',createdAt:new Date().toISOString()});
+      }
+    });
+    if(added)saveStudentList(list);
+
+    closeAddCourse();
+    hideL();
+    toast(`已新增「${name}」${repeat==='weekly'?'（每週重複）':''}，${acStudents.filter(s=>s.isNew).length?`${acStudents.filter(s=>s.isNew).length} 位新生已建立檔案`:''}`.trimEnd().replace(/，$/,''),'ok');
+    await refreshCurrent();
+  }catch(err){
+    hideL();
+    toast('新增失敗：'+(err.result?.error?.message||err.message),'err');
+  }
 }
 
 function toggleStudentEdit(id){
