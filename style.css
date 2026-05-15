@@ -223,10 +223,11 @@ input[type=date]:focus{border-color:var(--ac)}
 .mk-list-card.mk-completed{opacity:.7}
 .mk-list-bar{width:4px;flex-shrink:0}
 .mk-list-body{flex:1;padding:10px 12px;display:flex;flex-direction:column;gap:4px;min-width:0}
-.mk-list-title{font-size:13px;font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mk-list-top{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.mk-list-title{font-size:15px;font-weight:450;color:var(--tx)}
 .mk-list-badges{display:flex;gap:4px;flex-wrap:wrap}
 .mk-list-meta{display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--tx2)}
-.mk-list-makeup{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--ac);padding-top:6px;border-top:1px solid var(--br);margin-top:2px}
+.mk-list-makeup{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--tx2);border:1px solid var(--br);border-radius:var(--rs);padding:5px 10px;margin-top:6px}
 .mk-list-makeup-lbl{font-weight:600}
 .mk-dot{color:var(--tx3)}
 .mk-list-actions{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:8px 10px;flex-shrink:0}
@@ -271,6 +272,8 @@ input[type=date]:focus{border-color:var(--ac)}
 .mb20{margin-bottom:20px}
 
 /* ── V4 Today: refined card grid ── */
+#today-hero{display:flex;flex-wrap:wrap;gap:12px}
+#today-hero .thero{flex:1;min-width:280px;margin-bottom:0}
 .thero{background:var(--sf);border:1px solid var(--ac);border-radius:var(--r);padding:18px 22px 16px;position:relative;overflow:hidden;margin-bottom:14px;box-shadow:0 4px 16px rgba(45,90,61,.08);cursor:pointer;transition:box-shadow .15s}
 .thero:hover{box-shadow:0 6px 20px rgba(45,90,61,.12)}
 .thero.next{border-color:var(--br);box-shadow:0 2px 8px rgba(0,0,0,.04)}
@@ -314,7 +317,7 @@ input[type=date]:focus{border-color:var(--ac)}
 .tcard-time .dash{color:var(--tx3);font-weight:500;margin:0 4px}
 .tcard-dur{font-size:10px;color:var(--tx3);font-family:'DM Mono',monospace;padding:1px 6px;background:var(--sf2);border-radius:4px}
 .tcard-tags{display:flex;gap:6px;flex-wrap:wrap;margin-left:auto}
-.tcard-title{font-size:16px;font-weight:600;color:var(--tx);letter-spacing:-.005em;line-height:1.35}
+.tcard-title{font-size:16px;font-weight:450;color:var(--tx);letter-spacing:-.005em;line-height:1.35}
 .tcard-title.struck{text-decoration:line-through}
 .tcard-meta{display:flex;gap:16px;font-size:12px;color:var(--tx2);flex-wrap:wrap}
 .tcard-meta .lbl{color:var(--tx3);margin-right:4px;font-size:11px;letter-spacing:.04em}

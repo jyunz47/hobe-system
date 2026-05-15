@@ -400,24 +400,32 @@ function renderToday(){
     return{...e,status};
   });
 
-  // Hero: 進行中 or 下一堂
-  const nowEv=evs.find(x=>x.status==='now');
-  const nextEv=!nowEv?evs.find(x=>x.status==='upcoming'):null;
-  hero.innerHTML=(isToday&&(nowEv||nextEv))?heroHtml(nowEv||nextEv,!!nowEv):'';
+  // Hero: 進行中（可多堂）or 下一堂
+  const nowEvs=evs.filter(x=>x.status==='now');
+  const nextEv=!nowEvs.length?evs.find(x=>x.status==='upcoming'):null;
+  if(isToday&&(nowEvs.length||nextEv)){
+    hero.innerHTML=nowEvs.length
+      ?nowEvs.map(e=>heroHtml(e,true)).join('')
+      :heroHtml(nextEv,false);
+  }else{
+    hero.innerHTML='';
+  }
 
-  // 自動更新進行中課程的進度條與時間
+  // 自動更新所有進行中課程的進度條與時間（一個 timer，各自用自己的 data-start/end 計算）
   if(heroProgressTimer){clearInterval(heroProgressTimer);heroProgressTimer=null;}
-  if(isToday&&nowEv){
+  if(isToday&&nowEvs.length){
     heroProgressTimer=setInterval(()=>{
-      const prog=hero.querySelector('.thero-prog');
-      if(!prog){clearInterval(heroProgressTimer);heroProgressTimer=null;return;}
-      const start=+prog.dataset.start,end=+prog.dataset.end;
-      const totalMin=(end-start)/60000;
-      const elapMin=Math.max(0,Math.min(totalMin,(Date.now()-start)/60000));
-      const pct=(elapMin/totalMin)*100;
-      prog.querySelector('.thero-prog-fill').style.width=pct+'%';
-      prog.querySelector('.prog-elap').textContent=`已進行 ${Math.round(elapMin)} 分`;
-      prog.querySelector('.prog-remain').textContent=`剩 ${Math.round(totalMin-elapMin)} 分`;
+      const progs=hero.querySelectorAll('.thero-prog');
+      if(!progs.length){clearInterval(heroProgressTimer);heroProgressTimer=null;return;}
+      progs.forEach(prog=>{
+        const start=+prog.dataset.start,end=+prog.dataset.end;
+        const totalMin=(end-start)/60000;
+        const elapMin=Math.max(0,Math.min(totalMin,(Date.now()-start)/60000));
+        const pct=(elapMin/totalMin)*100;
+        prog.querySelector('.thero-prog-fill').style.width=pct+'%';
+        prog.querySelector('.prog-elap').textContent=`已進行 ${Math.round(elapMin)} 分`;
+        prog.querySelector('.prog-remain').textContent=`剩 ${Math.round(totalMin-elapMin)} 分`;
+      });
     },30000);
   }
 
@@ -1077,8 +1085,10 @@ function renderMakeup(){
     return`<div class="mk-list-card" onclick="openSlotPicker('${esc(e.id)}','${mode}')">
       <div class="mk-list-bar" style="background:${color}"></div>
       <div class="mk-list-body">
-        <div class="mk-list-title">${mkCardTitle(e)}</div>
-        <div class="mk-list-badges">${absBadge(e)}<span class="mk-badge mk-badge-un">未安排</span></div>
+        <div class="mk-list-top">
+          <span class="mk-list-title">${mkCardTitle(e)}</span>
+          ${absBadge(e)}<span class="mk-badge mk-badge-un">未安排</span>
+        </div>
         <div class="mk-list-meta">
           <span>📅 ${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）</span>
           <span>🕐 ${fmtT(d)}–${fmtT(de)}</span>
@@ -1101,8 +1111,10 @@ function renderMakeup(){
     return`<div class="mk-list-card${isCompleted?' mk-completed':''}">
       <div class="mk-list-bar" style="background:${color}"></div>
       <div class="mk-list-body">
-        <div class="mk-list-title">${mkCardTitle(e)}</div>
-        <div class="mk-list-badges">${absBadge(e)}${statusBadge}</div>
+        <div class="mk-list-top">
+          <span class="mk-list-title">${mkCardTitle(e)}</span>
+          ${absBadge(e)}${statusBadge}
+        </div>
         <div class="mk-list-meta">
           <span>📅 ${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）</span>
           <span>🕐 ${fmtT(d)}–${fmtT(de)}</span>
