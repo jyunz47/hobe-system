@@ -63,7 +63,20 @@
     <div id="panel-courses" class="panel" style="display:none">
       <div id="err-courses" class="err" style="display:none"></div>
 
-      <!-- Today + Add Course layout -->
+      <!-- A+B: 教室時間軸 + 進行中 -->
+      <div class="tl-ab-box">
+        <div class="tl-a">
+          <div class="tl-a-hd">教室時段</div>
+          <div class="tl-a-body" id="tl-body">
+            <div style="padding:16px;font-size:12px;color:var(--tx3)">載入中...</div>
+          </div>
+        </div>
+        <div class="tl-b">
+          <div id="today-hero"></div>
+        </div>
+      </div>
+
+      <!-- C+D: 今日課程卡 + 新增課程 -->
       <div class="courses-layout">
         <div class="today-panel">
           <div class="today-panel-hd">
@@ -85,8 +98,6 @@
               <div class="lgi"><div class="lgd" style="background:#22C55E"></div>試聽</div>
               <div class="lgi"><div class="lgd" style="background:#A855F7"></div>練習課</div>
             </div>
-            <div id="today-hero"></div>
-            <div class="today-sep" id="today-sep" style="display:none"></div>
             <div class="tsum" id="today-summary"></div>
             <div class="tgrid" id="clist-today"><div class="empty" style="grid-column:1/-1">載入中...</div></div>
           </div>
