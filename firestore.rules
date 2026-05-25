@@ -1,0 +1,35 @@
+rules_version = '2';
+
+// Firestore 安全規則 — 補習班排程系統
+//
+// 白名單管理：直接編輯下面的 emails，commit、然後在 Firebase Console
+// (https://console.firebase.google.com/project/hobe-494909/firestore/rules)
+// 重新貼上、按 Publish 即可生效。
+//
+// 修改規則時務必：
+// 1. 先在 Console 用「Rules Playground」測試新規則
+// 2. 發佈後立刻打開系統測試是否還能讀寫
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAllowed() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [
+          'william90525@gmail.com',
+          'hobemath@gmail.com'
+        ];
+    }
+
+    // 系統共用資料：學生名單、補課安排
+    match /sharedData/main {
+      allow read, write: if isAllowed();
+    }
+
+    // 預設拒絕其他所有路徑
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

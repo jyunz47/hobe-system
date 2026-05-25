@@ -93,7 +93,23 @@ async function initAPIs(){
   }
 }
 
-function signIn(){if(!gisReady){toast('系統初始化中...','inf');return;}showL('開啟 Google 授權...');tokenClient.requestAccessToken({prompt:''}); }
+function signIn(){
+  if(!gisReady){toast('系統初始化中...','inf');return;}
+  ensureFirebaseAuth().then(()=>{
+    showL('開啟 Google Calendar 授權...');
+    tokenClient.requestAccessToken({prompt:''});
+  }).catch(e=>{
+    if(e?.code==='auth/popup-closed-by-user'||e?.code==='auth/cancelled-popup-request')return;
+    if(e?.code==='auth/popup-blocked'){toast('彈窗被瀏覽器封鎖，請允許彈窗後重試','err');return;}
+    toast('Firebase 登入失敗：'+(e?.message||e),'err');
+  });
+}
+
+async function ensureFirebaseAuth(){
+  if(firebase.auth().currentUser)return;
+  const provider=new firebase.auth.GoogleAuthProvider();
+  await firebase.auth().signInWithPopup(provider);
+}
 
 function saveToken(){const t=gapi.client.getToken();if(t)sessionStorage.setItem('gtoken',JSON.stringify({access_token:t.access_token,expires_at:Date.now()+3500000}));}
 
@@ -149,19 +165,28 @@ firebase.initializeApp(firebaseConfig);
 const db=firebase.firestore();
 const SHARED_DOC=db.collection('sharedData').doc('main');
 async function loadFromFirestore(){
+  driveData={studentList:[],makeupScheduled:[]};
   try{
-    await firebase.auth().signInAnonymously();
+    // 等 Firebase 從 localStorage 還原登入狀態（cmd+R 後 currentUser 起初是 null）
+    if(!firebase.auth().currentUser){
+      await new Promise(resolve=>{
+        const unsub=firebase.auth().onAuthStateChanged(u=>{unsub();resolve(u);});
+      });
+    }
+    if(!firebase.auth().currentUser){
+      toast('請重新登入以同步雲端資料','inf',true);
+      return;
+    }
     const snap=await SHARED_DOC.get();
     if(snap.exists){
       const d=snap.data();
       driveData={studentList:d.studentList||[],makeupScheduled:d.makeupScheduled||[]};
-    }else{
-      driveData={studentList:JSON.parse(localStorage.getItem('studentList')||'[]'),makeupScheduled:JSON.parse(localStorage.getItem('makeupScheduled')||'[]')};
-      if(driveData.studentList.length||driveData.makeupScheduled.length)await saveToFirestore();
     }
   }catch(e){
     console.error('loadFromFirestore failed',e);
-    driveData={studentList:JSON.parse(localStorage.getItem('studentList')||'[]'),makeupScheduled:JSON.parse(localStorage.getItem('makeupScheduled')||'[]')};
+    const denied=e?.code==='permission-denied'||/permission|denied|unauthor/i.test(e?.message||'');
+    if(denied)toast('此 Google 帳號未獲授權使用系統，請聯繫管理員加入白名單','err',false);
+    else toast('讀取雲端資料失敗：'+(e?.message||e),'err');
   }
 }
 function scheduleDriveSave(){clearTimeout(driveSaveTimer);driveSaveTimer=setTimeout(saveToFirestore,1500);}
