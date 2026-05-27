@@ -273,7 +273,16 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://apis.google.com/js/api.js" async defer></script>
-<script src="app.js"></script>
+<!-- 應用程式分模組（順序：state → utils → 解析 → 各 panel → init 最後）-->
+<script src="js/state.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/parse.js"></script>
+<script src="js/today.js"></script>
+<script src="js/week.js"></script>
+<script src="js/absence.js"></script>
+<script src="js/makeup.js"></script>
+<script src="js/students.js"></script>
+<script src="js/init.js"></script>
 
 <div class="stu-modal-wrap" id="stu-modal-wrap">
   <div class="stu-modal-overlay" onclick="closeStudentModal()"></div>

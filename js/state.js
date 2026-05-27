@@ -1,0 +1,58 @@
+// 常數與全域狀態
+// 用 var 而非 let/const，因為跨多個 <script> 時 let/const 是 script-local，
+// 不會掛到 window；var 才能被其他檔案的程式碼讀到。
+
+// ── 設定常數 ──
+var CLIENT_ID='729031557572-tjn0hoiph1b0dbkp57lut0l6ekshm629.apps.googleusercontent.com';
+var SCOPES='https://www.googleapis.com/auth/calendar';
+var DISCOVERY_DOC='https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
+var CAL_NAMES=['一般課程','補課','調課','試聽','練習課','加課'];
+var MAKEUP_CALS=['一般課程','調課','試聽','練習課','加課']; // exclude 補課
+var TL_ROOMS=['大教室','小教室','108','208','309'];
+
+// ── 全域狀態 ──
+var tokenClient=null,gapiReady=false,gisReady=false;
+var tokenRefreshTimer=null;
+var calendarIds={};
+var currentPanel='login';
+var currentDate=new Date();
+var dayEvents=[];
+var weekEvents=[];
+var absState={};
+var makeupList=[];
+var driveData={studentList:[],makeupScheduled:[]};
+var driveSaveTimer=null;
+var makeupMatchMap=new Map(); // absenceEventId → {calEventId,scheduledDate,scheduledEnd,room,origTitle,absentStudents}
+var selectedWeekEvent=null;
+var weekOffset=0; // 0=this week, -1=last week, +1=next week
+var selectedWeekDayIdx=null; // 0=Mon..6=Sun, null = default to today
+
+// ── 學期 helpers ──
+function getSchoolYear(){const now=new Date();return now.getMonth()>=8?now.getFullYear():now.getFullYear()-1;}
+function getPeriods(){
+  const y=getSchoolYear();
+  return[
+    {id:'sem1',label:'上學期',start:new Date(y,8,1),end:new Date(y+1,0,31,23,59,59)},
+    {id:'winter',label:'寒假',start:new Date(y+1,1,1),end:new Date(y+1,1,28,23,59,59)},
+    {id:'sem2',label:'下學期',start:new Date(y+1,2,1),end:new Date(y+1,5,30,23,59,59)},
+    {id:'summer',label:'暑假',start:new Date(y+1,6,1),end:new Date(y+1,7,31,23,59,59)},
+  ];
+}
+function detectPeriodId(){const now=new Date();return(getPeriods().find(p=>now>=p.start&&now<=p.end)||getPeriods()[0]).id;}
+var currentPeriodId=detectPeriodId();
+function switchPeriod(id){currentPeriodId=id;renderMakeup();renderStudents();}
+function periodTabsHtml(){return`<div class="period-tabs">${getPeriods().map(p=>`<button class="period-tab${p.id===currentPeriodId?' active':''}" onclick="switchPeriod('${p.id}')">${p.label}</button>`).join('')}</div>`;}
+function getCurrentPeriod(){return getPeriods().find(p=>p.id===currentPeriodId)||getPeriods()[0];}
+
+// ── 顏色與教室常數 ──
+var COLORS={one:'#4A7C8C',pair:'#7C5A8C',group:'#2D5A3D',practice:'#8C6A2D'};
+var CAL_COLORS={'一般課程':'#3B82F6','調課':'#EF4444','補課':'#F97316','加課':'#EAB308','試聽':'#22C55E','練習課':'#A855F7'};
+function calColor(calName){return CAL_COLORS[calName]||'#9E9A93';}
+var WD=['日','一','二','三','四','五','六'];
+var ROOM_CAP={'小教室':5,'108':6,'208':6,'309':6};
+var ROOMS_SMALL=['小教室','108','208','309'];
+
+// slot picker 與 timeline 狀態
+var slotPicker={ev:null,mode:null,date:null,time:null,room:null,avail:null};
+var heroProgressTimer=null;
+var tlAxisStart=0,tlTotalMins=0,tlNowTimer=null;
