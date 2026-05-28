@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<title>單元測試 — 補習班排程系統</title>
+<style>
+  body { font-family: -apple-system, system-ui, 'Noto Sans TC', sans-serif; max-width: 900px; margin: 20px auto; padding: 0 20px; color: #222; line-height: 1.5; }
+  h1 { font-size: 18px; margin: 0 0 16px; }
+  h2 { font-size: 14px; margin: 20px 0 8px; padding-bottom: 4px; border-bottom: 1px solid #ddd; color: #555; }
+  .summary { padding: 10px 14px; background: #f0f0f0; border-radius: 6px; margin-bottom: 16px; font-size: 14px; }
+  .summary.all-pass { background: #d4edda; color: #155724; }
+  .summary.has-fail { background: #f8d7da; color: #721c24; }
+  .case { padding: 3px 10px; font-size: 13px; border-radius: 3px; margin: 2px 0; font-family: 'Menlo', 'Monaco', monospace; }
+  .pass { color: #28a745; }
+  .fail { color: #dc3545; background: #fff5f5; padding: 6px 10px; }
+  pre { margin: 6px 0 0 22px; padding: 8px 10px; background: #f5f5f5; border-radius: 3px; font-size: 11px; overflow-x: auto; white-space: pre-wrap; color: #333; }
+  .hint { color: #888; font-size: 12px; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+
+<h1>parse.js 單元測試</h1>
+<div class="hint">改 <code>js/parse.js</code> 後，重新整理本頁即可看到所有測試結果。失敗的會用紅底顯示預期與實際差異。</div>
+
+<div id="results"></div>
+
+<!-- 1. 被測程式 -->
+<script src="../js/parse.js"></script>
+
+<!-- 2. 測試框架（會註冊 DOM 載入後自動跑） -->
+<script src="test-runner.js"></script>
+
+<!-- 3. 各個測試檔（每個檔註冊自己的 suite） -->
+<script src="parse.test.js"></script>
+
+</body>
+</html>

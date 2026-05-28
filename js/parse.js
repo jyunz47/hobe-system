@@ -24,12 +24,15 @@ function parseEv(e){
   // Distinguish student name lines from note lines
   // stripNote: remove parenthetical annotations like (國一) or （國二） before checking
   const stripNote=s=>s.trim().replace(/\([^)]*\)/g,'').replace(/（[^）]*）/g,'').trim();
-  const isNameLine=l=>l.split(/[、,，]/).map(stripNote).filter(Boolean)
-    .every(p=>p.length<=8&&/^[一-鿿A-Za-z]+$/.test(p));
+  // 排除以指令動詞開頭的假名字（請帶筆、需考卷、別遲到、勿..、麻煩..、記得..、務必..）
+  // 這些不會是真實學生名，但長度與字元都會通過原本的規則
+  const NOTE_PREFIX=/^(請|需|別|勿|麻煩|記得|務必|注意)/;
+  const isNameLike=p=>p.length<=8&&/^[一-鿿A-Za-z]+$/.test(p)&&!NOTE_PREFIX.test(p);
+  const isNameLine=l=>l.split(/[、,，]/).map(stripNote).filter(Boolean).every(isNameLike);
   const isSubjectLine=l=>{
     if(!l.includes('：'))return false;
     const rest=l.slice(l.indexOf('：')+1);
-    return rest.split(/[、,，]/).map(stripNote).filter(Boolean).every(p=>p.length<=8&&/^[一-鿿A-Za-z]+$/.test(p));
+    return rest.split(/[、,，]/).map(stripNote).filter(Boolean).every(isNameLike);
   };
   const isStudentLine=l=>isNameLine(l)||isSubjectLine(l);
   const allDescLines=desc.split('\n').slice(1).filter(Boolean);
