@@ -30,11 +30,7 @@
 ### 優先
 > 對使用者體驗影響大
 
-- [ ] **登入流程改用單一 popup（修「第二個彈窗被擋」風險）**
-  - 為什麼：目前 `signIn` 連開兩個 popup（Firebase auth → Google Calendar OAuth），第二個容易因為 await 後 user gesture 失效被瀏覽器擋
-  - 症狀：正式環境第一次登入或 session 過期重登時，會卡在「開啟 Google Calendar 授權...」spinner（2026-05-28 實際踩到）
-  - 解法：用 `firebase.auth.GoogleAuthProvider().addScope('calendar')` 合併成單一 popup，從 `credential.accessToken` 取 Calendar token；或改用 `signInWithRedirect`
-  - 注意：合併後要驗證 Calendar token 仍能自動續約（原本靠 GIS tokenClient）
+- [x] **登入流程改用單一 popup**：用 GoogleAuthProvider.addScope('calendar') 合併（2026-05-28 完成）
 
 - [ ] **學生刪除要完全清乾淨**
   - 為什麼：目前 `deleteStudent` 只從 Firestore `studentList` 移除，學生名字還留在：

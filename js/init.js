@@ -49,22 +49,36 @@ async function initAPIs(){
   }
 }
 
+// 登入：用單一 Firebase popup 同時取得 Firebase auth + Google Calendar OAuth token
+// 避免兩個 popup 連環觸發時，第二個被瀏覽器擋（user gesture 在 await 後失效）
 function signIn(){
   if(!gisReady){toast('系統初始化中...','inf');return;}
-  ensureFirebaseAuth().then(()=>{
-    showL('開啟 Google Calendar 授權...');
-    tokenClient.requestAccessToken({prompt:''});
-  }).catch(e=>{
+  showL('開啟 Google 登入...');
+  doSignIn().catch(e=>{
+    hideL();
     if(e?.code==='auth/popup-closed-by-user'||e?.code==='auth/cancelled-popup-request')return;
     if(e?.code==='auth/popup-blocked'){toast('彈窗被瀏覽器封鎖，請允許彈窗後重試','err');return;}
-    toast('Firebase 登入失敗：'+(e?.message||e),'err');
+    toast('登入失敗：'+(e?.message||e),'err');
   });
 }
 
-async function ensureFirebaseAuth(){
-  if(firebase.auth().currentUser)return;
+async function doSignIn(){
+  // Case 1：Firebase 已登入（localStorage 還原），只需 Calendar token
+  // 走 GIS silent refresh，已授權過的話不會跳 popup
+  if(firebase.auth().currentUser){
+    tokenClient.requestAccessToken({prompt:''});
+    return;
+  }
+  // Case 2：全新登入，combined popup 一次拿 Firebase auth + Calendar OAuth token
   const provider=new firebase.auth.GoogleAuthProvider();
-  await firebase.auth().signInWithPopup(provider);
+  provider.addScope(SCOPES); // 'https://www.googleapis.com/auth/calendar'
+  const result=await firebase.auth().signInWithPopup(provider);
+  const accessToken=result.credential?.accessToken;
+  if(!accessToken)throw new Error('登入成功但沒拿到 Calendar 授權，請重試');
+  gapi.client.setToken({access_token:accessToken});
+  saveToken();
+  scheduleTokenRefresh();
+  await onSignedIn();
 }
 
 function saveToken(){const t=gapi.client.getToken();if(t)sessionStorage.setItem('gtoken',JSON.stringify({access_token:t.access_token,expires_at:Date.now()+3500000}));}
