@@ -76,8 +76,10 @@
         </div>
       </div>
 
-      <!-- C+D: 今日課程卡 + 新增課程 -->
-      <div class="courses-layout">
+      <!-- C+D: 今日課程卡 + 新增課程
+           新增課程面板 2026-05-28 暫時隱藏（使用頻率太低）。
+           恢復方式：拿掉下方 ac-inline-panel 的 hidden、拿掉這層 courses-layout 的 inline style -->
+      <div class="courses-layout" style="grid-template-columns:1fr">
         <div class="today-panel">
           <div class="today-panel-hd">
             <span id="today-sec-title" class="today-panel-title">今日課程</span>
@@ -104,7 +106,7 @@
         </div>
 
         <!-- Inline Add Course Panel -->
-        <div class="ac-inline-panel">
+        <div class="ac-inline-panel" hidden>
           <div class="ac-panel-hd">新增課程</div>
           <div class="ac-panel-body">
             <div class="ac-row">
