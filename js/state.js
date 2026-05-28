@@ -57,6 +57,22 @@ function findMakeupScheduledById(originalId){
   return v?{originalId,...v}:undefined;
 }
 
+// ── Calendar API 快取 ──
+// 同一 timeRange 在 TTL 內重複查同一行事曆 → 直接用上次的結果，省一次網路請求
+// 切換日期/週次、開 slot picker 都會大量受益
+// 寫操作（patch/insert/delete）後務必呼叫 invalidateEventCache()，否則會看到過時資料
+var _eventListCache=new Map();
+var EVENT_CACHE_TTL_MS=30000; // 30 秒
+async function cachedEventList(params){
+  const key=JSON.stringify(params);
+  const cached=_eventListCache.get(key);
+  if(cached&&Date.now()-cached.ts<EVENT_CACHE_TTL_MS)return cached.response;
+  const response=await gapi.client.calendar.events.list(params);
+  _eventListCache.set(key,{ts:Date.now(),response});
+  return response;
+}
+function invalidateEventCache(){_eventListCache.clear();}
+
 // ── 顏色與教室常數 ──
 var COLORS={one:'#4A7C8C',pair:'#7C5A8C',group:'#2D5A3D',practice:'#8C6A2D'};
 var CAL_COLORS={'一般課程':'#3B82F6','調課':'#EF4444','補課':'#F97316','加課':'#EAB308','試聽':'#22C55E','練習課':'#A855F7'};

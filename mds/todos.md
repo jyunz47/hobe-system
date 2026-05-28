@@ -17,7 +17,9 @@
 - [x] **拆 app.js**：拆成 `js/` 底下 9 個模組（2026-05-25 完成）
 - [x] **為 `parseEv` 寫單元測試**：43 個案例，順手修了「短中文備註被誤認為學生」bug（2026-05-28 完成）
 - [x] **抽 EventStore**：findEventById / findMakeupScheduledById helpers（2026-05-28 完成）
-- [ ] ⏳ **Calendar API 快取**：同一 timeRange 30 秒內快取，避免切換週/日重撈
+- [x] **Calendar API 快取**：30 秒 TTL，6 處讀走 cache、8 處寫清 cache（2026-05-28 完成）
+
+🎉 **架構梳理列的 5 條開發路線項目全部完成。** 下一步要加新的開發路線項目，可以從功能 backlog 挑、或重新審視程式碼找新方向。
 
 ---
 

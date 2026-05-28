@@ -29,7 +29,7 @@ async function loadWeek(){
   const sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
   try{
     const all=await Promise.all(Object.entries(calendarIds).map(async([name,id])=>{
-      try{const r=await gapi.client.calendar.events.list({calendarId:id,timeMin:mon.toISOString(),timeMax:sun.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:500});
+      try{const r=await cachedEventList({calendarId:id,timeMin:mon.toISOString(),timeMax:sun.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:500});
       return(r.result.items||[]).map(e=>({...e,_calId:id,_calName:name}));}catch(e){return[];}
     }));
     weekEvents=all.flat().map(parseEv).sort((a,b)=>a.startDt-b.startDt);
@@ -243,6 +243,7 @@ async function confirmReschedule(id){
   showL('標記調課...');
   try{
     await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:ev.id,resource:{summary:newTitle}});
+    invalidateEventCache();
     hideL();toast('已標記調課，請至待補課/調課清單安排新時段','ok');
     closeWeekModal();
     await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
@@ -254,6 +255,7 @@ async function cancelReschedule(id){
   showL('取消調課...');
   try{
     await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:ev.id,resource:{summary:ev.origTitle}});
+    invalidateEventCache();
     if(makeupMatchMap.has(id))await deleteMakeupScheduled(id);
     hideL();toast('已取消調課','ok');
     closeWeekModal();

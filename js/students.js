@@ -19,7 +19,7 @@ async function scanStudentsFromCalendar(){
       Object.entries(calendarIds).filter(([n])=>SCAN_CALS.includes(n))
         .map(async([name,id])=>{
           try{
-            const r=await gapi.client.calendar.events.list({
+            const r=await cachedEventList({
               calendarId:id,timeMin:now.toISOString(),timeMax:end.toISOString(),
               singleEvents:true,orderBy:'startTime',maxResults:500
             });
@@ -410,6 +410,7 @@ async function submitAddCourse(){
   try{
     showL('新增課程中...');
     await gapi.client.calendar.events.insert({calendarId:calId,resource});
+    invalidateEventCache();
 
     // 建立新生學生檔案
     const list=getStudentList();

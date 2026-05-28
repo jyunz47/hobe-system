@@ -8,7 +8,7 @@ async function loadMakeup(silent=false){
     const y=getSchoolYear(),past=new Date(y,8,1),future=new Date(y+1,7,31,23,59,59);
     const calEntries=Object.entries(calendarIds).filter(([name])=>MAKEUP_CALS.includes(name));
     const all=await Promise.all(calEntries.map(async([name,id])=>{
-      try{const r=await gapi.client.calendar.events.list({calendarId:id,timeMin:past.toISOString(),timeMax:future.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:500});
+      try{const r=await cachedEventList({calendarId:id,timeMin:past.toISOString(),timeMax:future.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:500});
       return(r.result.items||[]).map(e=>({...e,_calId:id,_calName:name}));}catch(e){return[];}
     }));
     const SUBJECTS=['數學','英文','理化','物理','化學','國文','生物','歷史','地理','社會','自然','寫作','作文'];
@@ -26,7 +26,7 @@ async function loadMakeup(silent=false){
     for(const calName of['補課','調課']){
       const calId=calendarIds[calName];if(!calId)continue;
       try{
-        const mr=await gapi.client.calendar.events.list({calendarId:calId,timeMin:past.toISOString(),timeMax:future.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:500});
+        const mr=await cachedEventList({calendarId:calId,timeMin:past.toISOString(),timeMax:future.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:500});
         (mr.result.items||[]).forEach(calEv=>{
           const desc=cleanDesc(calEv.description||'');
           const sD=new Date(calEv.start.dateTime||calEv.start.date);
@@ -325,7 +325,7 @@ async function selectSpDate(ds){
   const dayStart=new Date(y,m-1,d,0,0,0),dayEnd=new Date(y,m-1,d,23,59,59);
   try{
     const all=await Promise.all(Object.entries(calendarIds).map(async([name,id])=>{
-      try{const r=await gapi.client.calendar.events.list({calendarId:id,timeMin:dayStart.toISOString(),timeMax:dayEnd.toISOString(),singleEvents:true,orderBy:'startTime'});
+      try{const r=await cachedEventList({calendarId:id,timeMin:dayStart.toISOString(),timeMax:dayEnd.toISOString(),singleEvents:true,orderBy:'startTime'});
       return(r.result.items||[]).map(e=>({...e,_calId:id,_calName:name}));}catch(e){return[];}}));
     slotPicker.avail=all.flat().map(e=>parseEv(e));
   }catch(e){slotPicker.avail=[];}
@@ -539,6 +539,7 @@ async function confirmSlotPicker(){
       const stuLabel=ev.absentStudents&&ev.absentStudents.length>0?ev.absentStudents.join('、'):'';
       const evTitle=stuLabel?`【${stuLabel}補課】${ev.origTitle}`:`【補課】${ev.origTitle}`;
       const resp=await gapi.client.calendar.events.insert({calendarId:calId,resource:{summary:evTitle,description:newDesc||'',extendedProperties:{private:{originalAbsenceId:ev.id}},start:{dateTime:sS.toISOString()},end:{dateTime:sE.toISOString()}}});
+      invalidateEventCache();
       saveMakeupScheduled(ev,sS,sE,room,resp.result.id);
       hideL();toast('補課已安排 🎉','ok');
       closeSlotPicker();
@@ -552,6 +553,7 @@ async function confirmSlotPicker(){
       const descParts=[newDesc,reasonLine].filter(Boolean);
       const rescheduleDesc=descParts.join('\n');
       const resp=await gapi.client.calendar.events.insert({calendarId:rcalId,resource:{summary:evTitle,description:rescheduleDesc,extendedProperties:{private:{originalAbsenceId:ev.id}},start:{dateTime:sS.toISOString()},end:{dateTime:sE.toISOString()}}});
+      invalidateEventCache();
       saveMakeupScheduled(ev,sS,sE,room,resp.result.id,'調課');
       hideL();toast('調課時段已安排 🎉','ok');
       closeSlotPicker();
@@ -577,7 +579,7 @@ async function deleteMakeupScheduled(originalId){
   const rec=makeupMatchMap.get(originalId);
   const calName=rec?.calName||'補課';
   if(rec?.calEventId&&calendarIds[calName]){
-    try{await gapi.client.calendar.events.delete({calendarId:calendarIds[calName],eventId:rec.calEventId});}
+    try{await gapi.client.calendar.events.delete({calendarId:calendarIds[calName],eventId:rec.calEventId});invalidateEventCache();}
     catch(e){console.warn(`刪除${calName}事件失敗`,e);}
   }
   makeupMatchMap.delete(originalId);

@@ -8,7 +8,7 @@ async function loadToday(){
     const start=new Date(d.getFullYear(),d.getMonth(),d.getDate(),0,0,0);
     const end=new Date(d.getFullYear(),d.getMonth(),d.getDate(),23,59,59);
     const all=await Promise.all(Object.entries(calendarIds).map(async([name,id])=>{
-      try{const r=await gapi.client.calendar.events.list({calendarId:id,timeMin:start.toISOString(),timeMax:end.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:200});
+      try{const r=await cachedEventList({calendarId:id,timeMin:start.toISOString(),timeMax:end.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:200});
       return(r.result.items||[]).map(e=>({...e,_calId:id,_calName:name}));}catch(e){return[];}
     }));
     dayEvents=all.flat().map(parseEv).sort((a,b)=>a.startDt-b.startDt);

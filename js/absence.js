@@ -131,6 +131,7 @@ async function confirmAbs(id,sfx){
   showL('更新 Google Calendar...');
   try{
     await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:id,resource:{summary:newTitle}});
+    invalidateEventCache();
     hideL();toast('已標記：'+newTitle,'ok');
     await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
     if(selectedWeekEvent===id) closeWeekModal();
@@ -205,6 +206,7 @@ async function doCancel(id,ev,cancelStudents){
       }
     }
     await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:id,resource:{summary:newTitle}});
+    invalidateEventCache();
     hideL();toast('已取消請假','ok');
     await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
     closeWeekModal();
