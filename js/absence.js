@@ -101,7 +101,7 @@ function toggleChip(el){
 function updatePreview(id,sfx){
   const pid=id+(sfx||'');
   const state=absState[id]||{};const el=document.getElementById('ap-'+pid);if(!el)return;
-  const ev=[...dayEvents,...weekEvents].find(e=>e.id===id);if(!ev)return;
+  const ev=findEventById(id);if(!ev)return;
   if(!state.type){el.innerHTML='';return;}
   if(state.type==='teacher'){
     el.innerHTML=`新標題：<strong>${esc(buildTitle(ev.origTitle,'teacher',[]))}</strong>`;
@@ -118,7 +118,7 @@ function updatePreview(id,sfx){
 
 async function confirmAbs(id,sfx){
   const state=absState[id];
-  const ev=[...dayEvents,...weekEvents].find(e=>e.id===id);
+  const ev=findEventById(id);
   if(!state?.type||!ev)return;
   const existing=ev.isAbsent&&ev.absType!=='老師請假'?ev.absentStudents:[];
   const newOnes=state.type==='student-auto'?ev.students.slice(0,1):state.students;
@@ -141,7 +141,7 @@ async function confirmAbs(id,sfx){
 function cancelAbs(id){
   document.querySelectorAll('.abs-panel.open').forEach(p=>p.classList.remove('open'));
   document.querySelectorAll('[id^="cancel-picker-"]').forEach(p=>p.remove());
-  const ev=[...dayEvents,...weekEvents].find(e=>e.id===id);if(!ev)return;
+  const ev=findEventById(id);if(!ev)return;
   if(ev.type==='one'||ev.absentStudents.length===0){
     doCancel(id,ev,[]);
     return;
@@ -182,7 +182,7 @@ function showCancelPicker(ev){
 }
 
 async function confirmCancel(id){
-  const ev=[...dayEvents,...weekEvents].find(e=>e.id===id);if(!ev)return;
+  const ev=findEventById(id);if(!ev)return;
   const picker=document.getElementById('cancel-picker-'+id);if(!picker)return;
   const toCancel=[...picker.querySelectorAll('.stu-chip.checked')].map(el=>el.dataset.name);
   if(toCancel.length===0){toast('請選擇要取消請假的學生','inf');return;}

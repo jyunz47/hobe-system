@@ -212,7 +212,7 @@ function heroHtml(e,isNow){
 
 function getMkSt(e){
   if(!e.isFullAbsent&&!e.isRescheduled)return'';
-  const rec=new Map(getMakeupScheduled().map(s=>[s.originalId,s])).get(e.id);
+  const rec=findMakeupScheduledById(e.id);
   if(rec){const sd=new Date(rec.scheduledDate);return`<div class="tcard-mk mk-arr"><span class="l">${e.isRescheduled?'調課':'補課'}</span>${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${fmtT(sd)}</div>`;}
   return`<div class="tcard-mk mk-un">未安排${e.isRescheduled?'調課':'補課'}</div>`;
 }
@@ -234,7 +234,7 @@ function tcardHtml(e){
     :e.isAbsent
       ?`<span class="tcard-abs"><span class="l">請假</span>${e.absType==='老師請假'?'老師請假':esc(e.absentStudents.join('、'))+'請假'}</span>`
       :'';
-  const stBadge=(()=>{if(!e.isFullAbsent&&!e.isRescheduled)return'';const rec=new Map(getMakeupScheduled().map(s=>[s.originalId,s])).get(e.id);return rec?`<span class="mk-badge mk-badge-arr">已安排</span>`:`<span class="mk-badge mk-badge-un">未安排</span>`;})();
+  const stBadge=(()=>{if(!e.isFullAbsent&&!e.isRescheduled)return'';const rec=findMakeupScheduledById(e.id);return rec?`<span class="mk-badge mk-badge-arr">已安排</span>`:`<span class="mk-badge mk-badge-un">未安排</span>`;})();
   return `<div class="${cls}" id="cc-${id}" style="border-left-color:${tcv}" onclick="selectWeekEvent('${id}')">
     <div class="tcard-row">
       <div class="tcard-time">${fmtT(e.startDt)}<span class="dash">—</span>${fmtT(e.endDt)}</div>

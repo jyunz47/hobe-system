@@ -181,7 +181,7 @@ function selectWeekEventAndCancel(id){
 }
 
 function selectWeekEvent(id){
-  const ev=[...dayEvents,...weekEvents].find(e=>e.id===id);if(!ev)return;
+  const ev=findEventById(id);if(!ev)return;
   // Deselect previous
   document.querySelectorAll('.week-course.selected').forEach(el=>el.classList.remove('selected'));
   const wc=document.getElementById('wc-'+id);if(wc)wc.classList.add('selected');
@@ -204,7 +204,7 @@ function selectWeekEvent(id){
           ${ev.teacher?`<span>👤 ${esc(ev.teacher)}</span>`:''}
           <span style="color:${COLORS[ev.type]};font-weight:500">${typeLbl(ev.type)}${ev.classroom?`・${esc(ev.classroom)}`:''}</span>
           ${ev.isFullAbsent?`<span style="color:var(--dg);font-weight:500">${ev.isRescheduled?('調課'+(ev.rescheduleReason?'：'+esc(ev.rescheduleReason):'')): ev.absType==='老師請假'?'老師請假':esc(ev.absentStudents.join('、'))+'請假'}</span>`:''}
-          ${(()=>{if(!ev.isFullAbsent&&!ev.isRescheduled)return'';const rec=new Map(getMakeupScheduled().map(s=>[s.originalId,s])).get(ev.id);if(rec){const sd=new Date(rec.scheduledDate);return`<span style="color:#166534;font-weight:500;background:#dcfce7;border:1px solid #86efac;padding:2px 8px;border-radius:4px;font-size:12px">${ev.isRescheduled?'調課':'補課'}：${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${fmtT(sd)}${rec.room?' '+esc(rec.room):''}</span>`;}return`<span style="color:#991b1b;font-weight:500;background:#fee2e2;border:1px solid #fca5a5;padding:2px 8px;border-radius:4px;font-size:12px">未安排${ev.isRescheduled?'調課':'補課'}</span>`;})()}
+          ${(()=>{if(!ev.isFullAbsent&&!ev.isRescheduled)return'';const rec=findMakeupScheduledById(ev.id);if(rec){const sd=new Date(rec.scheduledDate);return`<span style="color:#166534;font-weight:500;background:#dcfce7;border:1px solid #86efac;padding:2px 8px;border-radius:4px;font-size:12px">${ev.isRescheduled?'調課':'補課'}：${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${fmtT(sd)}${rec.room?' '+esc(rec.room):''}</span>`;}return`<span style="color:#991b1b;font-weight:500;background:#fee2e2;border:1px solid #fca5a5;padding:2px 8px;border-radius:4px;font-size:12px">未安排${ev.isRescheduled?'調課':'補課'}</span>`;})()}
         </div>
       </div>
       <div class="cc-actions">
@@ -237,7 +237,7 @@ function toggleReschedulePanel(id){
 }
 
 async function confirmReschedule(id){
-  const ev=[...dayEvents,...weekEvents].find(e=>e.id===id);if(!ev)return;
+  const ev=findEventById(id);if(!ev)return;
   const reason=(document.getElementById('rp-reason-'+id)?.value||'').trim();
   const newTitle=reason?`【調課：${reason}】${ev.origTitle}`:`【調課】${ev.origTitle}`;
   showL('標記調課...');
@@ -250,7 +250,7 @@ async function confirmReschedule(id){
 }
 
 async function cancelReschedule(id){
-  const ev=[...dayEvents,...weekEvents].find(e=>e.id===id);if(!ev)return;
+  const ev=findEventById(id);if(!ev)return;
   showL('取消調課...');
   try{
     await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:ev.id,resource:{summary:ev.origTitle}});

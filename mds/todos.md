@@ -16,7 +16,8 @@
 - [x] **系統地圖**：`mds/系統地圖.md`（2026-05-25 完成）
 - [x] **拆 app.js**：拆成 `js/` 底下 9 個模組（2026-05-25 完成）
 - [x] **為 `parseEv` 寫單元測試**：43 個案例，順手修了「短中文備註被誤認為學生」bug（2026-05-28 完成）
-- [ ] ⏳ **抽 EventStore + Calendar API 快取**：消除散落各處的「在多份 events 陣列裡找 id」模式
+- [x] **抽 EventStore**：findEventById / findMakeupScheduledById helpers（2026-05-28 完成）
+- [ ] ⏳ **Calendar API 快取**：同一 timeRange 30 秒內快取，避免切換週/日重撈
 
 ---
 

@@ -238,7 +238,7 @@ function getEffectiveStudentCount(){
 }
 
 function openSlotPicker(id,mode){
-  const ev=[...dayEvents,...weekEvents,...makeupList].find(e=>e.id===id);
+  const ev=findEventById(id);
   if(!ev)return;
   const branch=ev.classroom==='石牌分校'?'石牌':'北投';
   slotPicker={ev,mode,date:null,time:null,room:null,avail:null,branch};

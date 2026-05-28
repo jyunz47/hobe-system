@@ -44,6 +44,19 @@ function switchPeriod(id){currentPeriodId=id;renderMakeup();renderStudents();}
 function periodTabsHtml(){return`<div class="period-tabs">${getPeriods().map(p=>`<button class="period-tab${p.id===currentPeriodId?' active':''}" onclick="switchPeriod('${p.id}')">${p.label}</button>`).join('')}</div>`;}
 function getCurrentPeriod(){return getPeriods().find(p=>p.id===currentPeriodId)||getPeriods()[0];}
 
+// ── 事件查找 helpers ──
+// 過去散在 7 處：[...dayEvents,...weekEvents].find(e=>e.id===id)
+// 整合成單一函式，且短路一找到就返回（不再每次 spread 建臨時陣列）
+function findEventById(id){
+  return dayEvents.find(e=>e.id===id)||weekEvents.find(e=>e.id===id)||makeupList.find(e=>e.id===id);
+}
+// 過去散在 3 處：new Map(getMakeupScheduled().map(s=>[s.originalId,s])).get(id)
+// 直接從 makeupMatchMap 取（O(1)），不用每次建臨時 Map
+function findMakeupScheduledById(originalId){
+  const v=makeupMatchMap.get(originalId);
+  return v?{originalId,...v}:undefined;
+}
+
 // ── 顏色與教室常數 ──
 var COLORS={one:'#4A7C8C',pair:'#7C5A8C',group:'#2D5A3D',practice:'#8C6A2D'};
 var CAL_COLORS={'一般課程':'#3B82F6','調課':'#EF4444','補課':'#F97316','加課':'#EAB308','試聽':'#22C55E','練習課':'#A855F7'};
