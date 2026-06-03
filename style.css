@@ -385,7 +385,30 @@ input[type=date]:focus{border-color:var(--ac)}
 .stu-card{background:var(--sf);border:1.5px solid var(--br);border-radius:10px;padding:10px 8px 8px;display:flex;flex-direction:column;align-items:center;cursor:pointer;position:relative;aspect-ratio:2/3;transition:box-shadow .15s,border-color .15s;overflow:hidden;user-select:none}
 .stu-card:hover{box-shadow:0 4px 14px rgba(0,0,0,.1);border-color:var(--brs)}
 .stu-card.open{border-color:var(--ac);background:var(--al)}
-.stu-card-name{font-size:16px;font-weight:700;color:var(--tx);flex:1;display:flex;align-items:center;justify-content:center;text-align:center;word-break:break-all;line-height:1.3}
+.stu-card-name-wrap{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;width:100%;padding:0 4px}
+.stu-card-name{font-size:16px;font-weight:700;color:var(--tx);text-align:center;word-break:break-all;line-height:1.3}
+.stu-card-school{font-size:10px;color:var(--tx3);text-align:center;line-height:1.2;word-break:break-all}
+.stu-info-chip{font-size:9px;padding:1px 6px;border-radius:99px;background:#DBEAFE;color:#1E40AF;font-weight:600;line-height:1.5}
+body.hide-todo-chip .stu-info-chip{display:none}
+
+/* 學生管理頁分頁切換（在學 / 歷屆） */
+.stu-tab-bar{display:flex;gap:6px;margin-bottom:12px;border-bottom:1.5px solid var(--br)}
+.stu-tab-btn{background:none;border:none;cursor:pointer;font-size:14px;font-family:inherit;padding:8px 14px;color:var(--tx3);border-bottom:2px solid transparent;margin-bottom:-1.5px;transition:all .12s}
+.stu-tab-btn.active{color:var(--ac);border-bottom-color:var(--ac);font-weight:600}
+.stu-tab-btn:hover{color:var(--tx)}
+
+/* 狀態變更 modal 內的狀態選項按鈕 */
+.status-opt-btn{padding:8px 14px;border:1.5px solid var(--br);background:#fff;border-radius:var(--rs);cursor:pointer;font-size:13px;font-family:inherit;color:var(--tx);transition:all .12s}
+.status-opt-btn:hover{border-color:var(--ac)}
+.status-opt-btn.selected{background:var(--ac);color:#fff;border-color:var(--ac)}
+
+/* 歷屆學生卡降低存在感 */
+.stu-card.alumni{opacity:.65}
+.stu-card.alumni:hover{opacity:1}
+
+/* 歷屆區塊標題（畢業 / 離開 / 暫停） */
+.stu-status-sec{margin-bottom:20px}
+.stu-status-sec-lbl{font-size:15px;font-weight:600;color:var(--tx2);padding:8px 4px;margin-bottom:8px;border-bottom:1.5px solid var(--br)}
 .stu-stat{display:flex;gap:6px;width:100%;justify-content:center}
 .stu-stat-item{display:flex;flex-direction:column;align-items:center}
 .stu-stat-item .n{font-size:12px;font-weight:700;font-family:'DM Mono',monospace;color:var(--tx)}
@@ -440,6 +463,10 @@ input[type=date]:focus{border-color:var(--ac)}
 .stu-edit-save:hover{opacity:.82}
 .stu-edit-cancel{padding:6px 12px;border-radius:var(--rs);border:1.5px solid var(--br);cursor:pointer;font-size:12.5px;font-family:inherit;background:#fff;color:var(--tx2);transition:border-color .12s}
 .stu-edit-cancel:hover{border-color:var(--brs)}
+.stu-edit-info-row{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap}
+.stu-edit-info-row label{display:flex;flex-direction:column;gap:3px;flex:1;min-width:130px;font-size:11px;color:var(--tx3)}
+.stu-edit-info-row input{padding:7px 10px;border:1.5px solid var(--br);border-radius:var(--rs);font-size:13px;font-family:inherit;color:var(--tx);background:#fff;transition:border-color .12s}
+.stu-edit-info-row input:focus{outline:none;border-color:var(--ac)}
 .stu-edit-courses-row{display:flex;align-items:flex-start;gap:8px}
 .stu-edit-courses-lbl{font-size:12px;color:var(--tx3);padding-top:5px;flex-shrink:0}
 .stu-edit-courses-body{display:flex;flex-wrap:wrap;gap:5px;align-items:center;flex:1}

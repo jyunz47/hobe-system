@@ -1,11 +1,68 @@
 // 學生管理 + 從行事曆掃描學生 + 新增課程表單 + 學生編輯
 
 var GRADES=['國小','國一','國二','國三','高一','高二','高三','大學'];
-function getStudentList(){return driveData.studentList||[];}
+
+// 學生 schema（2026-05-29 起）：
+//   {id, name, grade, createdAt, courses?,
+//    school, birthYear, parentPhone,
+//    status, statusChangedAt, statusNote}
+// status 列舉：在學 / 暫停 / 離開 / 畢業
+// 既有資料若無新欄位，讀取時用 fallback：s.status||'在學'、s.school||''、s.parentPhone||''、s.birthYear??null、s.statusNote||''
+// 切換「待補資料」chip 可見性（CSS 用 body class 控制）
+function toggleTodoChipVisibility(){
+  const hidden=document.body.classList.toggle('hide-todo-chip');
+  localStorage.setItem('hideTodoChip',hidden?'1':'0');
+  const btn=document.getElementById('btn-toggle-todo-chip');
+  if(btn)btn.textContent=hidden?'🔔 待補提示':'🔕 待補提示';
+}
+// 啟動時還原狀態
+(function restoreTodoChipVisibility(){
+  if(localStorage.getItem('hideTodoChip')==='1'){
+    document.body.classList.add('hide-todo-chip');
+    document.addEventListener('DOMContentLoaded',()=>{
+      const btn=document.getElementById('btn-toggle-todo-chip');
+      if(btn)btn.textContent='🔔 待補提示';
+    });
+  }
+})();
+
+function getStudentList(opts){
+  const list=driveData.studentList||[];
+  if(!opts)return list;
+  if(opts.activeOnly)return list.filter(s=>(s.status||'在學')==='在學');
+  if(opts.alumniOnly)return list.filter(s=>(s.status||'在學')!=='在學');
+  return list;
+}
 function saveStudentList(list){driveData.studentList=list;scheduleDriveSave();}
+
+// 建立新學生物件（含完整新欄位）
+// id 用單調遞增計數器：max(上次 id + 1, Date.now()*1000)
+// 同一毫秒內連續建立保證遞增、跨 session 也單調（時間始終往前）
+var _lastStudentId=0;
+function makeNewStudent({name,grade,courses}){
+  const now=new Date().toISOString();
+  _lastStudentId=Math.max(_lastStudentId+1,Date.now()*1000);
+  const s={
+    id:_lastStudentId,
+    name,grade,
+    createdAt:now,
+    school:'',
+    birthYear:null,
+    parentPhone:'',
+    status:'在學',
+    statusChangedAt:now,
+    statusNote:''
+  };
+  if(courses)s.courses=courses;
+  return s;
+}
 
 // 掃描狀態
 var scanData=null,_scanUnreg=[],_scanReg=[];
+// 學生管理頁分頁（在學 / 歷屆）
+var stuTabMode='active';
+// 狀態變更 modal context
+var statusModalCtx={studentId:null,selectedStatus:null};
 
 async function scanStudentsFromCalendar(){
   if(!Object.keys(calendarIds).length)return toast('請先登入 Google 帳號','err');
@@ -102,13 +159,19 @@ function renderScanSection(){
         </div>`;
       }else{
         const stu=matches[0];
+        const stuStatus=stu.status||'在學';
+        const isAlumni=stuStatus!=='在學';
         const changed=(stu.courses||[]).slice().sort().join(',')!==courses.slice().sort().join(',');
-        const diff=changed?courseDiffHtml(stu.courses||[],courses):'';
+        const diff=changed&&!isAlumni?courseDiffHtml(stu.courses||[],courses):'';
+        const alumniChip=isAlumni?`<span class="stu-warn-chip" style="font-size:10px;background:#FEE2E2;color:#991B1B">⚠ 已${stuStatus}</span>`:'';
+        const action=isAlumni
+          ?'<span style="font-size:11px;color:#991B1B">歷屆學生，課程不更新</span>'
+          :(changed?`<button class="stu-scan-upd" onclick="updateStudentCoursesFromScan(${ri})">更新課程</button>`:'<span style="font-size:11px;color:var(--tx3)">✓ 最新</span>');
         html+=`<div class="stu-scan-exist-row">
-          <div class="stu-scan-exist-name">${esc(displayName)}</div>
+          <div class="stu-scan-exist-name">${esc(displayName)} ${alumniChip}</div>
           <div class="stu-scan-exist-grade">${esc(stu.grade)}</div>
           <div class="stu-scan-exist-courses">${courses.map(esc).join('、')}${diff}</div>
-          ${changed?`<button class="stu-scan-upd" onclick="updateStudentCoursesFromScan(${ri})">更新課程</button>`:'<span style="font-size:11px;color:var(--tx3)">✓ 最新</span>'}
+          ${action}
         </div>`;
       }
     });
@@ -128,7 +191,7 @@ function addStudentFromScan(i){
   const grade=document.getElementById(`scan-g-${i}`)?.value||'國二';
   const list=getStudentList();
   if(list.some(s=>s.name===item.name&&s.grade===grade)){renderScanSection();return toast(`${item.name}（${grade}）已在名單中`,'inf');}
-  list.push({id:Date.now(),name:item.name,grade,courses:item.courses,createdAt:new Date().toISOString()});
+  list.push(makeNewStudent({name:item.name,grade,courses:item.courses}));
   saveStudentList(list);
   const btn=document.getElementById(`scan-a-${i}`);
   if(btn){btn.textContent='✓ 已加入';btn.disabled=true;}
@@ -174,8 +237,16 @@ function addStudent(){
   const grade=document.getElementById('stu-grade-input').value;
   if(!name)return toast('請輸入學生姓名','inf');
   const list=getStudentList();
-  if(list.some(s=>s.name===name&&s.grade===grade))return toast('已有同名同年級的學生','inf');
-  list.push({id:Date.now(),name,grade,createdAt:new Date().toISOString()});
+  const dups=list.filter(s=>s.name===name&&s.grade===grade);
+  if(dups.length){
+    const dupsHaveId=dups.every(s=>s.school||s.parentPhone);
+    if(!dupsHaveId){
+      const need=dups.filter(s=>!s.school&&!s.parentPhone).length;
+      return toast(`已有 ${dups.length} 位同名同年級且其中 ${need} 位尚未補學校或家長電話。請先去那位的編輯區補上辨識資料才能再新增。`,'err');
+    }
+    if(!confirm(`已有 ${dups.length} 位同名同年級。確定再新增「${name}（${grade}）」？\n\n建檔後請在編輯區補上學校或家長電話以區分。`))return;
+  }
+  list.push(makeNewStudent({name,grade}));
   saveStudentList(list);
   document.getElementById('stu-name-input').value='';
   toggleAddStudentForm();
@@ -183,16 +254,15 @@ function addStudent(){
   toast(`已新增 ${name}（${grade}）`,'ok');
 }
 
-function deleteStudent(id){
-  if(!confirm('確定刪除這位學生的紀錄？'))return;
-  saveStudentList(getStudentList().filter(s=>s.id!==id));
-  renderStudents();
-}
-
 // ── 統計與警示 ──
 function getThreshold(pid){return(pid==='sem1'||pid==='sem2')?3:2;}
 
-function getStudentStats(name,periodId){
+function getStudentStats(studentId,periodId){
+  // 2026-06-01 改 by id：先用 id 找到學生，內部仍用 name 比對 Calendar 備註
+  // （Calendar 備註只有名字字串，沒有 id，要等階段 3 enrollment 才能徹底 id 化）
+  const stu=getStudentList().find(x=>x.id===studentId);
+  if(!stu)return{total:0,made:0,owed:0,pairs:[],byCourse:{}};
+  const name=stu.name;
   const pid=periodId||currentPeriodId;
   const period=getPeriods().find(p=>p.id===pid)||getPeriods()[0];
   const scheduled=getMakeupScheduled();
@@ -235,7 +305,7 @@ function openStudentModal(id){
   const list=getStudentList();
   const s=list.find(x=>x.id===id);
   if(!s)return;
-  const stats=getStudentStats(s.name);
+  const stats=getStudentStats(s.id);
   document.getElementById('stu-modal-name').textContent=s.name;
   document.getElementById('stu-modal-grade').textContent=s.grade;
   const period=getCurrentPeriod();
@@ -452,10 +522,20 @@ function saveStudentEdit(id){
   const grade=document.getElementById(`edit-grade-${id}`)?.value;
   if(!name)return toast('姓名不能空白','err');
   const list=getStudentList();
-  if(list.some(x=>x.id!==id&&x.name===name))return toast('已有同名學生','err');
-  const s=list.find(x=>x.id===id);
-  if(!s)return;
-  s.name=name;s.grade=grade;s.courses=[..._editCourses];
+  const cur=list.find(x=>x.id===id);
+  if(!cur)return;
+  const newSchool=document.getElementById(`edit-school-${id}`)?.value.trim()||'';
+  const newPhone=document.getElementById(`edit-parentPhone-${id}`)?.value.trim()||'';
+  // 同名同年級規則：本人必須至少填學校或家長電話（既有同名者由他們自己編輯時補）
+  const dups=list.filter(s=>s.id!==id&&s.name===name&&s.grade===grade);
+  if(dups.length&&!(newSchool||newPhone)){
+    return toast(`改成「${name}（${grade}）」會與既有 ${dups.length} 位同名同年級學生衝突。請至少填本人的「學校」或「家長電話」其中一項以區分。`,'err');
+  }
+  cur.name=name;cur.grade=grade;cur.courses=[..._editCourses];
+  cur.school=newSchool;
+  const byVal=document.getElementById(`edit-birthYear-${id}`)?.value.trim();
+  cur.birthYear=byVal?parseInt(byVal,10):null;
+  cur.parentPhone=newPhone;
   saveStudentList(list);
   stuEditId=null;_editCourses=[];
   renderStudents();
@@ -492,57 +572,206 @@ function addEditCourse(id){
   input.focus();
 }
 
-// ── 學生卡片清單 ──
+// ── 學生卡片清單（分頁式：在學 / 歷屆） ──
 function renderStudents(){
   const container=document.getElementById('stu-list');
   if(!container)return;
   const list=getStudentList();
-  if(!list.length){container.innerHTML=periodTabsHtml()+'<div class="empty">尚未新增學生，點右上角「新增學生」開始</div>';return;}
+  // 「同名同年級且視覺上無法分辨」的 key 集合（顯示 ⚠ 同名 chip 用）
+  // 規則：該組必須「全部都填了學校」且「彼此學校都不重複」才算已消歧
+  // - 有任一位學校空白 → 顯示 chip（該位無法被指認）
+  // - 有兩位學校相同 → 顯示 chip（卡片視覺上看不出差異）
+  // 家長電話不參與判斷（卡片不顯示，純資料層保留）
+  const dupNeedingFix=new Set();
+  const _schoolsByKey=new Map();
+  list.forEach(s=>{
+    const k=s.name+'|'+s.grade;
+    if(!_schoolsByKey.has(k))_schoolsByKey.set(k,[]);
+    _schoolsByKey.get(k).push(s.school||'');
+  });
+  _schoolsByKey.forEach((schools,k)=>{
+    if(schools.length<=1)return;
+    const allFilled=schools.every(sc=>sc.length>0);
+    const allUnique=new Set(schools).size===schools.length;
+    if(!allFilled||!allUnique)dupNeedingFix.add(k);
+  });
+  const activeList=list.filter(s=>(s.status||'在學')==='在學');
+  const alumniList=list.filter(s=>(s.status||'在學')!=='在學');
+  let html=`<div class="stu-tab-bar">
+    <button class="stu-tab-btn${stuTabMode==='active'?' active':''}" onclick="switchStuTab('active')">在學（${activeList.length}）</button>
+    <button class="stu-tab-btn${stuTabMode==='alumni'?' active':''}" onclick="switchStuTab('alumni')">歷屆（${alumniList.length}）</button>
+  </div>`;
+  if(!list.length){
+    container.innerHTML=html+periodTabsHtml()+'<div class="empty">尚未新增學生，點右上角「新增學生」開始</div>';
+    return;
+  }
+  html+=periodTabsHtml();
+  if(stuTabMode==='active'){
+    html+=activeList.length?renderStudentGradeSections(activeList,dupNeedingFix,false):'<div class="empty">沒有在學學生</div>';
+  }else{
+    if(!alumniList.length){
+      html+='<div class="empty">尚無歷屆學生</div>';
+    }else{
+      ['畢業','離開','暫停'].forEach(status=>{
+        const arr=alumniList.filter(s=>s.status===status);
+        if(!arr.length)return;
+        html+=`<div class="stu-status-sec"><div class="stu-status-sec-lbl">${status}　${arr.length} 人</div>`;
+        html+=renderStudentGradeSections(arr,dupNeedingFix,true);
+        html+=`</div>`;
+      });
+    }
+  }
+  container.innerHTML=html;
+}
+
+function renderStudentGradeSections(studs,dupNeedingFix,isAlumni){
   const byGrade={};
   GRADES.forEach(g=>{byGrade[g]=[];});
-  list.forEach(s=>{if(!byGrade[s.grade])byGrade[s.grade]=[];byGrade[s.grade].push(s);});
-  let html=periodTabsHtml();
+  studs.forEach(s=>{if(!byGrade[s.grade])byGrade[s.grade]=[];byGrade[s.grade].push(s);});
+  let h='';
   GRADES.forEach(grade=>{
-    const studs=byGrade[grade]||[];
-    if(!studs.length)return;
-    html+=`<div class="stu-grade-sec"><div class="stu-grade-lbl">${grade}　${studs.length} 人</div><div class="stu-grid">`;
-    studs.forEach(s=>{
-      const stats=getStudentStats(s.name);
-      const warn=hasThresholdWarning(stats);
-      html+=`<div class="stu-card" onclick="toggleStudentDetail(${s.id})">
-        <div class="stu-card-actions">
-          <button class="stu-card-act-btn" onclick="event.stopPropagation();toggleStudentEdit(${s.id})" title="編輯">✎</button>
-          <button class="stu-card-act-btn del" onclick="event.stopPropagation();deleteStudent(${s.id})" title="刪除">✕</button>
-        </div>
-        <div class="stu-card-name">${esc(s.name)}</div>
-        <div class="stu-owed">
-          <span class="stu-owed-n${stats.owed>0?' gt0':''}">${stats.owed}</span>
-          <span class="stu-owed-l">欠課</span>
-          ${warn?'<span class="stu-warn-chip">⚠ 多收費</span>':''}
-        </div>
-      </div>`;
-    });
-    html+=`</div>`; // close grid
-
-    // Edit panel
-    if(stuEditId!==null&&studs.some(x=>x.id===stuEditId)){
-      const s=studs.find(x=>x.id===stuEditId);
-      const gradeOpts=GRADES.map(g=>`<option value="${g}"${g===s.grade?' selected':''}>${g}</option>`).join('');
-      html+=`<div class="stu-edit-panel"><div class="stu-edit-form">
-        <div class="stu-edit-top">
-          <input id="edit-name-${s.id}" class="stu-edit-input" value="${esc(s.name)}" placeholder="姓名" maxlength="20">
-          <select id="edit-grade-${s.id}" class="stu-edit-select">${gradeOpts}</select>
-          <button class="stu-edit-save" onclick="saveStudentEdit(${s.id})">儲存</button>
-          <button class="stu-edit-cancel" onclick="cancelStudentEdit()">取消</button>
-        </div>
-        <div class="stu-edit-courses-row">
-          <span class="stu-edit-courses-lbl">課程</span>
-          <div id="edit-courses-${s.id}" class="stu-edit-courses-body">${buildEditCoursesHtml(s.id)}</div>
-        </div>
-      </div></div>`;
+    const gs=byGrade[grade]||[];
+    if(!gs.length)return;
+    h+=`<div class="stu-grade-sec"><div class="stu-grade-lbl">${grade}　${gs.length} 人</div><div class="stu-grid">`;
+    gs.forEach(s=>{h+=renderStudentCard(s,dupNeedingFix,isAlumni);});
+    h+=`</div>`;
+    if(stuEditId!==null&&gs.some(x=>x.id===stuEditId)){
+      h+=renderStudentEditPanel(gs.find(x=>x.id===stuEditId));
     }
-
-    html+=`</div>`; // close grade section
+    h+=`</div>`;
   });
-  container.innerHTML=html;
+  return h;
+}
+
+function renderStudentCard(s,dupNeedingFix,isAlumni){
+  const stats=getStudentStats(s.id);
+  const warn=hasThresholdWarning(stats);
+  const isDup=dupNeedingFix.has(s.name+'|'+s.grade);
+  const needsInfo=!s.school&&!s.parentPhone;
+  return `<div class="stu-card${isAlumni?' alumni':''}" onclick="toggleStudentDetail(${s.id})">
+    <div class="stu-card-actions">
+      <button class="stu-card-act-btn" onclick="event.stopPropagation();toggleStudentEdit(${s.id})" title="編輯">✎</button>
+      <button class="stu-card-act-btn del" onclick="event.stopPropagation();openStatusChangeModal(${s.id})" title="變更狀態">${isAlumni?'🔄':'✕'}</button>
+    </div>
+    <div class="stu-card-name-wrap">
+      <div class="stu-card-name">${esc(s.name)}</div>
+      ${s.school?`<div class="stu-card-school">${esc(s.school)}</div>`:''}
+    </div>
+    <div class="stu-owed">
+      <span class="stu-owed-n${stats.owed>0?' gt0':''}">${stats.owed}</span>
+      <span class="stu-owed-l">欠課</span>
+      ${warn?'<span class="stu-warn-chip">⚠ 多收費</span>':''}
+      ${isDup?'<span class="stu-warn-chip">⚠ 同名</span>':''}
+      ${needsInfo?'<span class="stu-info-chip">📝 待補資料</span>':''}
+    </div>
+  </div>`;
+}
+
+function renderStudentEditPanel(s){
+  const gradeOpts=GRADES.map(g=>`<option value="${g}"${g===s.grade?' selected':''}>${g}</option>`).join('');
+  return `<div class="stu-edit-panel"><div class="stu-edit-form">
+    <div class="stu-edit-top">
+      <input id="edit-name-${s.id}" class="stu-edit-input" value="${esc(s.name)}" placeholder="姓名" maxlength="20">
+      <select id="edit-grade-${s.id}" class="stu-edit-select">${gradeOpts}</select>
+      <button class="stu-edit-save" onclick="saveStudentEdit(${s.id})">儲存</button>
+      <button class="stu-edit-cancel" onclick="cancelStudentEdit()">取消</button>
+    </div>
+    <div class="stu-edit-info-row">
+      <label>學校
+        <input id="edit-school-${s.id}" value="${esc(s.school||'')}" placeholder="例：松山國中" maxlength="30">
+      </label>
+      <label>出生年（西元）
+        <input type="number" id="edit-birthYear-${s.id}" value="${s.birthYear??''}" placeholder="例：2010" min="1990" max="2030">
+      </label>
+      <label>家長電話
+        <input id="edit-parentPhone-${s.id}" value="${esc(s.parentPhone||'')}" placeholder="例：0912xxxxxx" maxlength="15">
+      </label>
+    </div>
+    <div class="stu-edit-courses-row">
+      <span class="stu-edit-courses-lbl">課程</span>
+      <div id="edit-courses-${s.id}" class="stu-edit-courses-body">${buildEditCoursesHtml(s.id)}</div>
+    </div>
+  </div></div>`;
+}
+
+function switchStuTab(mode){
+  stuTabMode=mode;
+  cancelStudentEdit();
+  renderStudents();
+}
+
+// ── 狀態變更 modal ──
+function openStatusChangeModal(studentId){
+  const s=getStudentList().find(x=>x.id===studentId);
+  if(!s)return;
+  statusModalCtx={studentId,selectedStatus:null};
+  const current=s.status||'在學';
+  const all=['在學','畢業','離開','暫停'];
+  const opts=all.filter(o=>o!==current);
+  document.getElementById('status-modal-name').textContent=`${s.name}（${s.grade}）　目前狀態：${current}`;
+  document.getElementById('status-modal-note').value='';
+  document.getElementById('status-modal-opts').innerHTML=opts.map(o=>{
+    const label=o==='在學'?'復學（在學）':o;
+    return `<button class="status-opt-btn" data-status="${o}" onclick="selectStatusOpt('${o}')">${label}</button>`;
+  }).join('');
+  document.getElementById('status-modal-wrap').classList.add('open');
+}
+function selectStatusOpt(status){
+  statusModalCtx.selectedStatus=status;
+  document.querySelectorAll('.status-opt-btn').forEach(b=>{
+    b.classList.toggle('selected',b.dataset.status===status);
+  });
+}
+function closeStatusModal(){
+  document.getElementById('status-modal-wrap').classList.remove('open');
+  statusModalCtx={studentId:null,selectedStatus:null};
+}
+function confirmStatusChange(){
+  if(!statusModalCtx.selectedStatus)return toast('請先選一個狀態','inf');
+  const list=getStudentList();
+  const s=list.find(x=>x.id===statusModalCtx.studentId);
+  if(!s)return;
+  s.status=statusModalCtx.selectedStatus;
+  s.statusChangedAt=new Date().toISOString();
+  s.statusNote=document.getElementById('status-modal-note').value.trim();
+  saveStudentList(list);
+  closeStatusModal();
+  renderStudents();
+  const labelMap={在學:'復學（在學）',畢業:'畢業',離開:'離開',暫停:'暫停'};
+  toast(`已將 ${s.name} 設為${labelMap[s.status]}`,'ok');
+}
+
+// ── 升年級批次 ──
+// 國一~高二自動 +1
+// 國三→高一（多數會繼續補高中，例外手動改）
+// 高三→畢業（設 status='畢業'，例外手動復學）
+// 國小、大學跳過（國小不分年級無法判斷；大學是頂層）
+function batchPromoteGrade(){
+  const GRADE_NEXT={'國一':'國二','國二':'國三','國三':'高一','高一':'高二','高二':'高三'};
+  const SKIP=['國小','大學'];
+  const list=getStudentList();
+  const active=list.filter(s=>(s.status||'在學')==='在學');
+  const eligibleGrade=active.filter(s=>GRADE_NEXT[s.grade]);
+  const eligibleGraduate=active.filter(s=>s.grade==='高三');
+  const skipped=active.filter(s=>SKIP.includes(s.grade));
+  if(!eligibleGrade.length&&!eligibleGraduate.length){
+    return toast('沒有可批次升年級的在學學生','inf');
+  }
+  const gradeSummary=Object.entries(GRADE_NEXT).map(([from,to])=>{
+    const n=eligibleGrade.filter(s=>s.grade===from).length;
+    return n?`  ${from} → ${to}：${n} 位`:'';
+  }).filter(Boolean).join('\n');
+  const gradMsg=eligibleGraduate.length?`\n  高三 → 畢業（狀態變更）：${eligibleGraduate.length} 位`:'';
+  const skipMsg=skipped.length?`\n\n${skipped.length} 位跳過（國小不分年級、大學已頂層）`:'';
+  if(!confirm(`批次升年級將執行：\n${gradeSummary}${gradMsg}${skipMsg}\n\n國三→高一、高三→畢業 為自動處理。\n如有例外（國三畢業後不續、高三繼續大學），執行後個別調整即可。\n\n確定執行？`))return;
+  const now=new Date().toISOString();
+  eligibleGrade.forEach(s=>{s.grade=GRADE_NEXT[s.grade];});
+  eligibleGraduate.forEach(s=>{
+    s.status='畢業';
+    s.statusChangedAt=now;
+    if(!s.statusNote)s.statusNote='批次升年級時自動設為畢業';
+  });
+  saveStudentList(list);
+  renderStudents();
+  toast(`已升年級 ${eligibleGrade.length} 位、設畢業 ${eligibleGraduate.length} 位`,'ok');
 }
