@@ -98,6 +98,9 @@ function parseEv(e){
   // 每位學生的請假時機 map（{name:'A'|'B'|'C'}），存事件隱藏欄位，供學費系統用
   let absenceTiming={};
   try{const _raw=e.extendedProperties?.private?.absenceTiming;if(_raw)absenceTiming=JSON.parse(_raw);}catch{}
+  // 決定「不補課」的學生（家教課前1hr內請假、與家長確認後不補）→ 不算欠課、退半堂
+  let makeupSkip=[];
+  try{const _sk=e.extendedProperties?.private?.makeupSkip;if(_sk)makeupSkip=JSON.parse(_sk);}catch{}
   const absType=isRescheduled?'調課':(isTeacherAbsent?'老師請假':(isAbsent?'學生請假':''));
   const totalStudents=students.length;
   const isPartialAbsent=isAbsent&&!isTeacherAbsent&&totalStudents>0&&absentStudents.length<totalStudents;
@@ -109,7 +112,7 @@ function parseEv(e){
     durMins:Math.round((endDt-startDt)/60000),
     calId:e._calId,calName:e._calName,
     isAbsent,isPartialAbsent,isFullAbsent,isRescheduled,rescheduleReason,absentWho,absType,absentStudents,
-    isNoShow,noShowStudents,absenceTiming,
+    isNoShow,noShowStudents,absenceTiming,makeupSkip,
     origTitle,
   };
 }

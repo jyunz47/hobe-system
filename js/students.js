@@ -261,7 +261,7 @@ function getStudentStats(studentId,periodId){
   // 2026-06-01 改 by id：先用 id 找到學生，內部仍用 name 比對 Calendar 備註
   // （Calendar 備註只有名字字串，沒有 id，要等階段 3 enrollment 才能徹底 id 化）
   const stu=getStudentList().find(x=>x.id===studentId);
-  if(!stu)return{total:0,made:0,owed:0,pairs:[],byCourse:{}};
+  if(!stu)return{total:0,made:0,owed:0,pairs:[],byCourse:{},noShow:0,halfAdd:0,halfDeduct:0,pendingDecision:0};
   const name=stu.name;
   const pid=periodId||currentPeriodId;
   const period=getPeriods().find(p=>p.id===pid)||getPeriods()[0];
@@ -280,14 +280,27 @@ function getStudentStats(studentId,periodId){
     const c=a.origTitle;
     if(!byCourse[c])byCourse[c]={total:0,owed:0,studentAbs:0,reschedules:0,teacherAbs:0,pairs:[],type:a.type};
     byCourse[c].total++;
-    if(!m||new Date(m.scheduledEnd)>=now)byCourse[c].owed++;
+    // 「不補課」（家教課前1hr內請假、確認不補）不算欠課
+    if(!isMakeupSkipped(a)&&(!m||new Date(m.scheduledEnd)>=now))byCourse[c].owed++;
     if(a.absType==='學生請假')byCourse[c].studentAbs++;
     else if(a.absType==='調課')byCourse[c].reschedules++;
     else if(a.absType==='老師請假')byCourse[c].teacherAbs++;
     byCourse[c].pairs.push({absence:a,makeup:m});
   });
-  const owed=pairs.filter(p=>!p.makeup||new Date(p.makeup.scheduledEnd)>=now).length;
-  return{total:pairs.length,made:pairs.filter(p=>p.makeup&&new Date(p.makeup.scheduledEnd)<now).length,owed,pairs,byCourse};
+  const owed=pairs.filter(p=>!isMakeupSkipped(p.absence)&&(!p.makeup||new Date(p.makeup.scheduledEnd)>=now)).length;
+  // 曠課次數（含純曠課事件與請假/曠課並存事件中該生被標曠課的）
+  const noShow=makeupList.filter(e=>e.startDt>=period.start&&e.startDt<=period.end&&(e.noShowStudents||[]).includes(name)).length;
+  // 加退費（半堂）：家教/一對二課前1hr內請假 → 補(已排)+半堂、不補−半堂、未決待確認
+  let halfAdd=0,halfDeduct=0,pendingDecision=0;
+  pairs.forEach(({absence:a,makeup:m})=>{
+    const small=a.type==='one'||(a.type==='pair'&&(a.students?.length||0)===2);
+    if(a.absType==='學生請假'&&small&&(a.absenceTiming||{})[name]==='B'){
+      if((a.makeupSkip||[]).includes(name))halfDeduct+=0.5;
+      else if(m)halfAdd+=0.5;      // 已排補課＝補
+      else pendingDecision++;       // 還沒決定補/不補
+    }
+  });
+  return{total:pairs.length,made:pairs.filter(p=>p.makeup&&new Date(p.makeup.scheduledEnd)<now).length,owed,pairs,byCourse,noShow,halfAdd,halfDeduct,pendingDecision};
 }
 
 function hasThresholdWarning(stats,pid){
@@ -322,13 +335,23 @@ function openStudentModal(id){
     body+=`<table class="stu-course-tbl"><thead><tr><th>課程</th>${hasReschedules?'<th>調課</th>':''}<th>請假</th><th>欠課</th><th></th></tr></thead><tbody>`;
     Object.entries(stats.byCourse).forEach(([course,c])=>{
       const courseWarn=c.type==='group'&&c.studentAbs>=threshold;
-      body+=`<tr${courseWarn?' class="warn-row"':''}><td>${esc(course)}</td>${hasReschedules?`<td>${c.reschedules||0}</td>`:''}<td>${c.studentAbs}</td><td>${c.owed}</td><td>${courseWarn?`<span class="warn-badge">⚠ 多收費</span>`:''}</td></tr>`;
+      // 該課的學生請假日期，接在課名後（資料來自實際 Calendar 請假，名字一定相符）
+      const absDates=c.pairs.filter(p=>p.absence.absType==='學生請假').map(p=>`${p.absence.startDt.getMonth()+1}/${p.absence.startDt.getDate()}`);
+      const dateStr=absDates.length?` <span style="color:var(--tx3);font-weight:400;font-size:11px">${absDates.join('、')}</span>`:'';
+      body+=`<tr${courseWarn?' class="warn-row"':''}><td>${esc(course)}${dateStr}</td>${hasReschedules?`<td>${c.reschedules||0}</td>`:''}<td>${c.studentAbs}</td><td>${c.owed}</td><td>${courseWarn?`<span class="warn-badge">⚠ 多收費</span>`:''}</td></tr>`;
     });
     body+=`</tbody></table>`;
     if(stats.owed>0)body+=`<div class="stu-modal-total">欠課合計：${stats.owed} 堂</div>`;
   }else{
     body+=`<div style="font-size:12px;color:var(--tx3)">${period.label}無請假紀錄</div>`;
   }
+  // 曠課 + 加退費（半堂）摘要
+  const extraBits=[];
+  if(stats.noShow>0)extraBits.push(`<span style="color:#991b1b">曠課 ${stats.noShow} 次</span>`);
+  if(stats.halfAdd>0)extraBits.push(`<span style="color:#92400E">加收 +${stats.halfAdd} 堂</span>`);
+  if(stats.halfDeduct>0)extraBits.push(`<span style="color:#166534">退費 −${stats.halfDeduct} 堂</span>`);
+  if(stats.pendingDecision>0)extraBits.push(`<span style="color:var(--tx3)">待確認補課 ${stats.pendingDecision} 筆</span>`);
+  if(extraBits.length)body+=`<div style="margin-top:8px;font-size:13px;display:flex;gap:12px;flex-wrap:wrap">${extraBits.join('')}</div>`;
   body+=`</div>`;
   // Enrolled courses
   const displayCourses=(s.courses||[]).filter(c=>!/^【調課】/.test(c));
@@ -344,12 +367,15 @@ function openStudentModal(id){
       const absDate=`${a.startDt.getMonth()+1}/${a.startDt.getDate()}（${WD[a.startDt.getDay()]}）`;
       const absTypeLabel=a.absType==='老師請假'?'老師請假':a.absType==='調課'?'調課':'學生請假';
       const isDone=m&&new Date(m.scheduledEnd)<_now;
-      const makeupStr=isDone
+      const isSkipped=(a.makeupSkip||[]).includes(s.name); // 已決定不補課（退半堂）
+      const makeupStr=isSkipped
+        ?`<div class="stu-pair-makeup" style="color:var(--tx3)">— 不補課（退半堂）</div>`
+        :isDone
         ?`<div class="stu-pair-makeup done">✓ 已補課：${new Date(m.scheduledDate).getMonth()+1}/${new Date(m.scheduledDate).getDate()}（${WD[new Date(m.scheduledDate).getDay()]}）</div>`
         :m
         ?`<div class="stu-pair-makeup pending">○ 待上補課：${new Date(m.scheduledDate).getMonth()+1}/${new Date(m.scheduledDate).getDate()}（${WD[new Date(m.scheduledDate).getDay()]}）${fmtT(new Date(m.scheduledDate))}</div>`
         :`<div class="stu-pair-makeup owed link" onclick="jumpToMakeup('${esc(a.id)}')">○ 尚未安排補課</div>`;
-      return`<div class="stu-pair"><div class="stu-pair-icon">${isDone?'✓':'○'}</div><div class="stu-pair-body"><div class="stu-pair-course">${esc(a.origTitle)}</div><div class="stu-pair-abs">${absTypeLabel}：${absDate}</div>${makeupStr}</div></div>`;
+      return`<div class="stu-pair"><div class="stu-pair-icon">${isDone?'✓':isSkipped?'—':'○'}</div><div class="stu-pair-body"><div class="stu-pair-course">${esc(a.origTitle)}</div><div class="stu-pair-abs">${absTypeLabel}：${absDate}</div>${makeupStr}</div></div>`;
     }).join('');
     body+=`</div>`;
   }

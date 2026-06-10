@@ -13,7 +13,7 @@ async function loadMakeup(silent=false){
     }));
     const SUBJECTS=['數學','英文','理化','物理','化學','國文','生物','歷史','地理','社會','自然','寫作','作文'];
     makeupList=all.flat()
-      .filter(e=>/^【.+?請假】/.test(e.summary||'')||/^【調課(?:[：:].*?)?】/.test(e.summary||''))
+      .filter(e=>/^【.+?請假】/.test(e.summary||'')||/^【調課(?:[：:].*?)?】/.test(e.summary||'')||/^【[^】]*曠課】/.test(e.summary||''))
       .map(e=>{
         const ev=parseEv(e);
         const subject=SUBJECTS.find(s=>ev.origTitle.includes(s))||'其他';
@@ -72,6 +72,20 @@ function populateMkFilters(){
   if(subs.includes(cur))sel.value=cur;
 }
 
+// 純曠課事件（只有曠課、沒有請假/調課）→ 收進 makeupList 供學生統計用，但不該出現在待補課清單
+function isPureNoShow(e){return e.isNoShow&&!e.isAbsent&&!e.isRescheduled;}
+// 這筆請假是否已決定「不補課」（請假學生全在 makeupSkip 名單）→ 退半堂、不算欠課、不進待安排
+function isMakeupSkipped(e){
+  return (e.absentStudents?.length>0)&&e.absentStudents.every(s=>(e.makeupSkip||[]).includes(s));
+}
+// 課前1hr內請假、且補/不補有學費分歧 → 待與家長確認（補 +半堂、不補 −半堂）
+// 適用：一對一家教(one)、一對二(pair 兩人，沒一起調課成功而走個別補課的)。團班不適用
+function needsMakeupDecision(e){
+  if(e.absType!=='學生請假')return false; // 只有學生請假才有補/不補分歧（調課/老師請假不算）
+  const small=e.type==='one'||(e.type==='pair'&&(e.students?.length||0)===2);
+  return small&&(e.absentStudents||[]).some(s=>(e.absenceTiming||{})[s]==='B');
+}
+
 function renderMakeup(){
   const period=getCurrentPeriod();
   const fs=document.getElementById('f-subject').value;
@@ -82,8 +96,9 @@ function renderMakeup(){
   const completedIds=new Set(scheduledAll.filter(s=>new Date(s.scheduledEnd)<now).map(s=>s.originalId));
   const scheduledFutureIds=new Set(scheduledAll.filter(s=>new Date(s.scheduledEnd)>=now).map(s=>s.originalId));
 
-  const allInPeriod=makeupList.filter(e=>e.startDt>=period.start&&e.startDt<=period.end);
-  const pendingStatCnt=allInPeriod.filter(e=>!completedIds.has(e.id)&&!scheduledFutureIds.has(e.id)).length;
+  // 純曠課事件雖收在 makeupList（供學生統計），但不進補課清單
+  const allInPeriod=makeupList.filter(e=>e.startDt>=period.start&&e.startDt<=period.end&&!isPureNoShow(e));
+  const pendingStatCnt=allInPeriod.filter(e=>!completedIds.has(e.id)&&!scheduledFutureIds.has(e.id)&&!isMakeupSkipped(e)).length;
   const scheduledStatCnt=allInPeriod.filter(e=>scheduledFutureIds.has(e.id)).length;
   const completedStatCnt=allInPeriod.filter(e=>completedIds.has(e.id)).length;
 
@@ -95,9 +110,10 @@ function renderMakeup(){
   }
 
   const filteredAll=allInPeriod.filter(matchesFilter);
-  const pending=filteredAll.filter(e=>!completedIds.has(e.id)&&!scheduledFutureIds.has(e.id));
+  const pending=filteredAll.filter(e=>!completedIds.has(e.id)&&!scheduledFutureIds.has(e.id)&&!isMakeupSkipped(e));
   const scheduledList=filteredAll.filter(e=>scheduledFutureIds.has(e.id));
   const completedList=filteredAll.filter(e=>completedIds.has(e.id));
+  const skippedList=filteredAll.filter(e=>isMakeupSkipped(e)&&!scheduledFutureIds.has(e.id)&&!completedIds.has(e.id));
 
   document.getElementById('rc').textContent=`共 ${filteredAll.length} 筆`;
 
@@ -126,12 +142,13 @@ function renderMakeup(){
   function pendingCard(e){
     const d=e.startDt,de=e.endDt,color=calColor(e.calName);
     const mode=e.absType==='調課'?'reschedule':'makeup';
+    const tutorB=needsMakeupDecision(e); // 課前1hr內、補/不補待確認（一對一家教 / 個別補課的一對二）
     return`<div class="mk-list-card" onclick="openSlotPicker('${esc(e.id)}','${mode}')">
       <div class="mk-list-bar" style="background:${color}"></div>
       <div class="mk-list-body">
         <div class="mk-list-top">
           <span class="mk-list-title">${mkCardTitle(e)}</span>
-          ${absBadge(e)}<span class="mk-badge mk-badge-un">未安排</span>
+          ${absBadge(e)}<span class="mk-badge mk-badge-un">未安排</span>${tutorB?'<span class="mk-badge" style="background:#FEF3C7;color:#92400E;border:1px solid #FDE68A" title="課前1小時內請假，補課要與家長確認。去排補課＝補（多收半堂）；不補則退半堂">⚠ 待確認補課</span>':''}
         </div>
         <div class="mk-list-meta">
           <span>📅 ${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）</span>
@@ -141,7 +158,29 @@ function renderMakeup(){
         </div>
       </div>
       <div class="mk-list-actions">
+        ${tutorB?`<button class="mk-btn-cancel" style="font-size:12px;padding:5px 10px;margin-left:0" onclick="event.stopPropagation();markMakeupSkip('${esc(e.id)}')">不補課</button>`:''}
         <button class="mk-btn-arrange" onclick="event.stopPropagation();openSlotPicker('${esc(e.id)}','${mode}')">安排</button>
+      </div>
+    </div>`;
+  }
+
+  function skippedCard(e){
+    const d=e.startDt,de=e.endDt,color=calColor(e.calName);
+    return`<div class="mk-list-card mk-completed">
+      <div class="mk-list-bar" style="background:${color}"></div>
+      <div class="mk-list-body">
+        <div class="mk-list-top">
+          <span class="mk-list-title">${mkCardTitle(e)}</span>
+          <span class="mk-badge" style="background:#F3F4F6;color:#6B7280;border:1px solid #E5E7EB">不補課・退半堂</span>
+        </div>
+        <div class="mk-list-meta">
+          <span>📅 ${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）</span>
+          <span>🕐 ${fmtT(d)}–${fmtT(de)}</span>
+          ${e.teacher?`<span>👤 ${esc(e.teacher)}</span>`:''}
+        </div>
+      </div>
+      <div class="mk-list-actions">
+        <button class="mk-btn-cancel" onclick="unmarkMakeupSkip('${esc(e.id)}')">改為補課</button>
       </div>
     </div>`;
   }
@@ -197,7 +236,38 @@ function renderMakeup(){
     completedList.forEach(e=>{const rec=scheduledAll.find(s=>s.originalId===e.id);if(rec)html+=scheduledCard(e,rec,true);});
   }
 
+  // 不補課（退半堂）
+  if(skippedList.length){
+    html+=`<div class="mk-sec-lbl mk-sec-gap" style="margin-top:24px">不補課・退半堂（${skippedList.length}）</div>`;
+    skippedList.forEach(e=>{html+=skippedCard(e);});
+  }
+
   c.innerHTML=html;
+}
+
+// 標記「不補課」：把請假學生寫進事件隱藏欄位 makeupSkip → 退半堂、不算欠課、移出待安排
+async function markMakeupSkip(id){
+  const ev=findEventById(id);if(!ev)return;
+  showL('標記不補課...');
+  try{
+    const skip=[...new Set([...(ev.makeupSkip||[]),...(ev.absentStudents||[])])];
+    await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:id,resource:{extendedProperties:{private:{makeupSkip:JSON.stringify(skip)}}}});
+    invalidateEventCache();
+    hideL();toast('已標記不補課（退半堂）','ok');
+    await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
+  }catch(e){hideL();toast('操作失敗：'+(e.result?.error?.message||e.message),'err');}
+}
+// 改回補課：把這筆的請假學生從 makeupSkip 移除
+async function unmarkMakeupSkip(id){
+  const ev=findEventById(id);if(!ev)return;
+  showL('改為補課...');
+  try{
+    const skip=(ev.makeupSkip||[]).filter(s=>!(ev.absentStudents||[]).includes(s));
+    await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:id,resource:{extendedProperties:{private:{makeupSkip:skip.length?JSON.stringify(skip):null}}}});
+    invalidateEventCache();
+    hideL();toast('已改為補課','ok');
+    await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
+  }catch(e){hideL();toast('操作失敗：'+(e.result?.error?.message||e.message),'err');}
 }
 
 async function gotoMakeupEvent(id, ts){
@@ -213,7 +283,7 @@ async function gotoMakeupEvent(id, ts){
 }
 
 function updateBadge(n){const b=document.getElementById('badge-makeup');b.textContent=n;b.style.display=n>0?'inline':'none';}
-function updateMakeupBadge(){const period=getCurrentPeriod();const scheduledIds=new Set(getMakeupScheduled().map(x=>x.originalId));const n=makeupList.filter(e=>!scheduledIds.has(e.id)&&e.startDt>=period.start&&e.startDt<=period.end).length;updateBadge(n);return n;}
+function updateMakeupBadge(){const period=getCurrentPeriod();const scheduledIds=new Set(getMakeupScheduled().map(x=>x.originalId));const n=makeupList.filter(e=>!scheduledIds.has(e.id)&&e.startDt>=period.start&&e.startDt<=period.end&&!isPureNoShow(e)&&!isMakeupSkipped(e)).length;updateBadge(n);return n;}
 
 // ── Slot Picker（補課/調課時段選擇器）──
 function getEffectiveDur(){
