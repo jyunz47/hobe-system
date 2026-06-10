@@ -142,7 +142,7 @@ function wcardHtml(e){
     e.status==='past'?'<span class="tstat tstat-past">已結束</span>':'';
   const stuTxt=e.students.length===0?'—':e.students.length<=2?e.students.join('、'):`${e.students.length} 人`;
   const absInline=e.isRescheduled?`<div class="tcard-abs"><span class="l">調課</span>${e.rescheduleReason?esc(e.rescheduleReason):'未輸入原因'}</div>`:
-    e.isAbsent?`<div class="tcard-abs"><span class="l">請假</span>${e.absType==='老師請假'?'老師請假':esc(e.absentStudents.join('、'))+'請假'}</div>`:'';
+    `${e.isAbsent?`<div class="tcard-abs"><span class="l">請假</span>${e.absType==='老師請假'?'老師請假':esc(e.absentStudents.join('、'))+'請假'}</div>`:''}${e.isNoShow?`<div class="tcard-abs"><span class="l">曠課</span>${esc(e.noShowStudents.join('、'))}</div>`:''}`;
   const noteInline=e.notes?`<div class="tcard-note"><span class="l">備註</span>${esc(e.notes)}</div>`:'';
   const mkSt=getMkSt(e);
   const extras=(absInline||noteInline||mkSt)?`<div class="tcard-extras">${noteInline}${absInline}${mkSt}</div>`:'';
@@ -152,6 +152,7 @@ function wcardHtml(e){
       <div class="tcard-dur">${fmtDur(e.durMins)}</div>
       <div class="tcard-tags">
         <span class="tpill t-${e.type}"><span class="pdot"></span>${typeLbl(e.type)}</span>
+        ${typeMismatchChip(e)}
         ${stat}
       </div>
     </div>
@@ -196,7 +197,7 @@ function selectWeekEvent(id){
       <div class="cc-bar" style="background:${COLORS[ev.type]||'#888'}"></div>
       <div class="cc-body">
         <div class="cc-name">
-          <span style="${ev.isFullAbsent?'opacity:.5;text-decoration:line-through':''}">${esc(ev.origTitle)}</span>${ev.isAbsent?`<span style="font-weight:400;font-size:13px;color:var(--dg)">（${ev.absType==='老師請假'?'老師請假':esc(ev.absentStudents.join('、'))+'請假'}）</span>`:''} ${ev.notes?`<span class="cc-note-inline">${esc(ev.notes)}</span>`:''}
+          <span style="${ev.isFullAbsent?'opacity:.5;text-decoration:line-through':''}">${esc(ev.origTitle)}</span>${ev.isAbsent?`<span style="font-weight:400;font-size:13px;color:var(--dg)">（${ev.absType==='老師請假'?'老師請假':esc(ev.absentStudents.join('、'))+'請假'}）</span>`:''}${ev.isNoShow?`<span style="font-weight:400;font-size:13px;color:var(--dg)">（${esc(ev.noShowStudents.join('、'))}曠課）</span>`:''} ${ev.notes?`<span class="cc-note-inline">${esc(ev.notes)}</span>`:''}
         </div>
         <div class="cc-meta">
           <span>🕐 ${fmtT(ev.startDt)}–${fmtT(ev.endDt)}</span>
@@ -209,6 +210,7 @@ function selectWeekEvent(id){
       </div>
       <div class="cc-actions">
         ${ev.isAbsent?`<button class="btn btns btnd" onclick="selectCard(this.closest('.cc'));cancelAbs('${esc(ev.id)}')">取消請假</button>`:''}
+        ${ev.isNoShow?`<button class="btn btns btnd" onclick="selectCard(this.closest('.cc'));cancelNoShow('${esc(ev.id)}')">取消曠課</button>`:''}
         ${ev.isRescheduled?`<button class="btn btns btnd" onclick="cancelReschedule('${esc(ev.id)}')">取消調課</button>`:''}
         ${!ev.isRescheduled?`<button class="btn btns" onclick="selectCard(this.closest('.cc'));toggleAbsPanelWeek('${esc(ev.id)}')">標記請假</button>`:''}
         <button class="btn btns" onclick="toggleReschedulePanel('${esc(ev.id)}')">${ev.isRescheduled?(ev.rescheduleReason?'更新調課原因':'輸入調課原因'):'調課'}</button>

@@ -231,9 +231,7 @@ function tcardHtml(e){
   const extras=(absInline||noteInline||mkSt)?`<div class="tcard-extras">${noteInline}${absInline}${mkSt}</div>`:'';
   const absTitleEl=e.isRescheduled
     ?`<span class="mk-badge mk-badge-reschedule">調課</span>`
-    :e.isAbsent
-      ?`<span class="tcard-abs"><span class="l">請假</span>${e.absType==='老師請假'?'老師請假':esc(e.absentStudents.join('、'))+'請假'}</span>`
-      :'';
+    :`${e.isAbsent?`<span class="tcard-abs"><span class="l">請假</span>${e.absType==='老師請假'?'老師請假':esc(e.absentStudents.join('、'))+'請假'}</span>`:''}${e.isNoShow?`<span class="tcard-abs"><span class="l">曠課</span>${esc(e.noShowStudents.join('、'))}</span>`:''}`;
   const stBadge=(()=>{if(!e.isFullAbsent&&!e.isRescheduled)return'';const rec=findMakeupScheduledById(e.id);return rec?`<span class="mk-badge mk-badge-arr">已安排</span>`:`<span class="mk-badge mk-badge-un">未安排</span>`;})();
   return `<div class="${cls}" id="cc-${id}" style="border-left-color:${tcv}" onclick="selectWeekEvent('${id}')">
     <div class="tcard-row">
@@ -241,6 +239,7 @@ function tcardHtml(e){
       <div class="tcard-dur">${fmtDur(e.durMins)}</div>
       <div class="tcard-tags">
         <span class="tpill t-${e.type}"><span class="pdot"></span>${typeLbl(e.type)}</span>
+        ${typeMismatchChip(e)}
         ${stat}
       </div>
     </div>

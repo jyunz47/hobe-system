@@ -65,22 +65,39 @@ function parseEv(e){
   const startDt=new Date(e.start.dateTime||e.start.date);
   const endDt=new Date(e.end.dateTime||e.end.date);
 
-  // Detect reschedule from title: 【調課】 or 【調課：reason】 pattern
-  const rescheduleMatch=title.match(/^【調課(?:[：:](.+?))?】/);
-  const isRescheduled=!!rescheduleMatch;
-  const rescheduleReason=rescheduleMatch?.[1]?.trim()||'';
+  // 取出標題開頭連續的【...】標記，只吃得懂的（請假/曠課/調課），其餘視為課名一部分。
+  // 支援請假與曠課並存，例如：【小明請假】【小華曠課】國二數學
+  let _rest=title,_tags=[],_m;
+  while((_m=_rest.match(/^【([^】]*)】/))){
+    const c=_m[1];
+    if(!/(請假|曠課)$/.test(c)&&!/^調課(?:[：:]|$)/.test(c))break;
+    _tags.push(c);_rest=_rest.slice(_m[0].length);
+  }
+  const origTitle=_tags.length?_rest.trim():title;
 
-  // Detect absence from title: 【XXX請假】 pattern
-  const absMatch=title.match(/^【(.+?)請假】/);
-  const isAbsent=!!absMatch;
-  const absentWho=absMatch?absMatch[1]:'';
+  // Reschedule：【調課】或【調課：原因】
+  const reschedTag=_tags.find(t=>/^調課(?:[：:]|$)/.test(t));
+  const isRescheduled=!!reschedTag;
+  const rescheduleReason=reschedTag?(reschedTag.match(/^調課[：:](.+)$/)?.[1]?.trim()||''):'';
+
+  // 請假（學生或老師）：標記以「請假」結尾
+  const absTag=_tags.find(t=>/請假$/.test(t));
+  const isAbsent=!!absTag;
+  const absentWho=absTag?absTag.replace(/請假$/,''):'';
   const isTeacherAbsent=absentWho==='老師';
-  // Absent students list (from title tag)
+
+  // 曠課：標記以「曠課」結尾。曠課＝課程已開始才請假，不補課、不計欠課，與請假分開統計
+  const noShowTag=_tags.find(t=>/曠課$/.test(t));
+  const isNoShow=!!noShowTag;
+  const noShowStudents=noShowTag?noShowTag.replace(/曠課$/,'').split(/[、,，]/).map(s=>s.trim()).filter(Boolean):[];
+
+  // Absent students list (from 請假 tag)
   const absentStudents=isRescheduled?[...students]:
     (!isAbsent||isTeacherAbsent)?[]:absentWho.split(/[、,，]/).map(s=>s.trim()).filter(Boolean);
-  // For practice/group: partial absence = some but not all students absent
-  const origTitle=isRescheduled?title.replace(/^【調課(?:[：:].*?)?】/,'').trim():
-    (isAbsent?title.replace(/^【.+?請假】/,'').trim():title);
+
+  // 每位學生的請假時機 map（{name:'A'|'B'|'C'}），存事件隱藏欄位，供學費系統用
+  let absenceTiming={};
+  try{const _raw=e.extendedProperties?.private?.absenceTiming;if(_raw)absenceTiming=JSON.parse(_raw);}catch{}
   const absType=isRescheduled?'調課':(isTeacherAbsent?'老師請假':(isAbsent?'學生請假':''));
   const totalStudents=students.length;
   const isPartialAbsent=isAbsent&&!isTeacherAbsent&&totalStudents>0&&absentStudents.length<totalStudents;
@@ -92,6 +109,7 @@ function parseEv(e){
     durMins:Math.round((endDt-startDt)/60000),
     calId:e._calId,calName:e._calName,
     isAbsent,isPartialAbsent,isFullAbsent,isRescheduled,rescheduleReason,absentWho,absType,absentStudents,
+    isNoShow,noShowStudents,absenceTiming,
     origTitle,
   };
 }

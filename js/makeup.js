@@ -218,7 +218,8 @@ function updateMakeupBadge(){const period=getCurrentPeriod();const scheduledIds=
 // ── Slot Picker（補課/調課時段選擇器）──
 function getEffectiveDur(){
   const d=slotPicker.ev?.durMins||60;
-  if(slotPicker.mode==='makeup'&&slotPicker.ev?.type==='practice')return d;
+  // 補課維持原時長：練習課、家教一對一（type==='one'）。其餘（一對二 pair、團班 group）砍半堂
+  if(slotPicker.mode==='makeup'&&(slotPicker.ev?.type==='practice'||slotPicker.ev?.type==='one'))return d;
   return slotPicker.mode==='makeup'?Math.max(30,Math.floor(d/2)):d;
 }
 

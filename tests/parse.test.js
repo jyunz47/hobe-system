@@ -255,6 +255,70 @@ suite('請假標題解析', () => {
 });
 
 // ────────────────────────────────────────────────────────
+suite('曠課標題解析', () => {
+
+  test('單人曠課 → isNoShow，且不被當成請假', () => {
+    const r = parseEv(ev({
+      title: '【小明曠課】國二數學',
+      desc: '小教室 老師\n小明、小華'
+    }));
+    assertEq(r.isNoShow, true);
+    assertEqDeep(r.noShowStudents, ['小明']);
+    assertEq(r.origTitle, '國二數學');
+    assertEq(r.isAbsent, false);
+    assertEq(r.absType, '');
+  });
+
+  test('多人曠課', () => {
+    const r = parseEv(ev({
+      title: '【小明、小華曠課】國二數學',
+      desc: '小教室 老師\n小明、小華'
+    }));
+    assertEqDeep(r.noShowStudents, ['小明', '小華']);
+    assertEq(r.origTitle, '國二數學');
+  });
+
+  test('沒曠課時 isNoShow=false', () => {
+    const r = parseEv(ev({ title: '國二數學班', desc: '小教室 老師\n小明' }));
+    assertEq(r.isNoShow, false);
+    assertEqDeep(r.noShowStudents, []);
+  });
+});
+
+// ────────────────────────────────────────────────────────
+suite('請假＋曠課並存', () => {
+
+  test('請假與曠課同時存在', () => {
+    const r = parseEv(ev({
+      title: '【小明請假】【小華曠課】國二數學',
+      desc: '小教室 老師\n小明、小華'
+    }));
+    assertEq(r.isAbsent, true);
+    assertEqDeep(r.absentStudents, ['小明']);
+    assertEq(r.isNoShow, true);
+    assertEqDeep(r.noShowStudents, ['小華']);
+    assertEq(r.origTitle, '國二數學');
+  });
+
+  test('標記順序顛倒也能正確解析', () => {
+    const r = parseEv(ev({
+      title: '【小華曠課】【小明請假】國二數學',
+      desc: '小教室 老師\n小明、小華'
+    }));
+    assertEqDeep(r.absentStudents, ['小明']);
+    assertEqDeep(r.noShowStudents, ['小華']);
+    assertEq(r.origTitle, '國二數學');
+  });
+
+  test('非標記的【】不被當標記吃掉', () => {
+    const r = parseEv(ev({ title: '【特訓】數學', desc: '小教室 老師\n小明' }));
+    assertEq(r.origTitle, '【特訓】數學');
+    assertEq(r.isAbsent, false);
+    assertEq(r.isNoShow, false);
+  });
+});
+
+// ────────────────────────────────────────────────────────
 suite('調課標題解析', () => {
 
   test('調課無理由', () => {
