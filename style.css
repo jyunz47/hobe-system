@@ -573,4 +573,43 @@ body.hide-todo-chip .stu-info-chip{display:none}
   .content{padding:14px 12px calc(78px + env(safe-area-inset-bottom))}
   .login-wrap{min-height:calc(100vh - 200px)}
   .login-card{padding:28px 20px}
+
+  /* ── Part 2 各面板細修 ── */
+  /* iOS 點輸入框自動放大頁面的觸發條件是字級 <16px，全部拉到 16px 避免 */
+  input,select,textarea{font-size:16px}
+
+  /* 課程面板：時間軸高度設上限，避免把進行中卡片推到第二屏 */
+  .tl-a-body{max-height:280px}
+  .thero{padding:14px 16px 13px}
+  .thero-title{font-size:17px}
+  .thero-meta{gap:12px}
+  .tcard{padding:12px 13px}
+  .tcard-meta{gap:10px}
+
+  /* 待補課面板：統計卡 2x2、搜尋框滿版、清單卡按鈕加大好點 */
+  .mk-stats{display:grid;grid-template-columns:1fr 1fr;flex-direction:row}
+  .mk-stat{min-width:0;padding:11px 13px}
+  .f-search{width:100%;flex:1;min-width:0}
+  .filter-bar select{flex:1;min-width:0}
+  .rc{width:100%;margin-left:0;text-align:right}
+  .mk-list-chevron{padding:0 8px}
+  .mk-list-actions{padding:8px 6px}
+  .mk-btn-arrange{padding:8px 12px}
+  .mk-btn-cancel{padding:6px 10px}
+
+  /* 學生面板：編輯/刪除鈕在觸控裝置沒有 hover，常駐顯示 */
+  .stu-card-actions{opacity:1}
+  .stu-card-act-btn{font-size:13px;padding:5px 7px}
+  .stu-edit-btn{opacity:1}
+
+  /* 請假面板與彈窗：按鈕加大、內距收斂 */
+  .abs-opt{padding:9px 16px}
+  .abs-confirm{flex-wrap:wrap}
+  .abs-confirm .btn{padding:9px 16px}
+  .stu-chip{padding:8px 14px}
+  .sp-body{padding:14px;gap:16px}
+  .sp-hd{padding:14px 14px 12px}
+
+  /* toast 移到分頁列上方，置中比較好讀 */
+  .toast{left:12px;right:12px;bottom:calc(70px + env(safe-area-inset-bottom));text-align:center}
 }
