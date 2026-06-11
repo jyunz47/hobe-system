@@ -9,6 +9,44 @@ window.addEventListener('load',()=>{
   document.getElementById('date-picker').value=toDateStr(currentDate);
 });
 
+// ── PWA 獨立視窗模式：popup 開不起來，登入/授權一律改走整頁 redirect ──
+function isStandalone(){
+  return window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
+}
+
+// 整頁跳轉到 Google OAuth（implicit flow），授權後帶著 #access_token 跳回
+// redirect_uri 是本資料夾根（已在 Cloud Console 白名單），由 index.html 把 hash 轉交回主頁
+function redirectSignIn(){
+  const state=Math.random().toString(36).slice(2);
+  sessionStorage.setItem('oauth_state',state);
+  const p=new URLSearchParams({
+    client_id:CLIENT_ID,
+    redirect_uri:location.origin+location.pathname.replace(/[^/]*$/,''),
+    response_type:'token',
+    scope:SCOPES+' openid email profile',
+    include_granted_scopes:'true',
+    state
+  });
+  location.href='https://accounts.google.com/o/oauth2/v2/auth?'+p;
+}
+
+// 重新授權：桌面走 GIS 靜默 popup，App 模式走 redirect
+function requestReauth(){
+  if(isStandalone()){redirectSignIn();return;}
+  if(tokenClient)tokenClient.requestAccessToken({prompt:''});
+}
+
+// 解析 redirect 回來的 #access_token（沒有就回 null）
+function consumeOAuthHash(){
+  if(!location.hash.includes('access_token')&&!location.hash.includes('error='))return null;
+  const h=new URLSearchParams(location.hash.slice(1));
+  history.replaceState(null,'',location.pathname+location.search);
+  if(h.get('error')){toast('授權失敗：'+h.get('error'),'err');return null;}
+  if(h.get('state')!==sessionStorage.getItem('oauth_state')){toast('授權回應驗證失敗，請重新登入','err');return null;}
+  sessionStorage.removeItem('oauth_state');
+  return {access_token:h.get('access_token'),expires_in:+h.get('expires_in')||3599};
+}
+
 // ── Google Identity Services + GAPI Calendar ──
 async function initAPIs(){
   await new Promise(r=>gapi.load('client',r));
@@ -33,6 +71,20 @@ async function initAPIs(){
     }
   });
   gisReady=true;
+  // App 模式 redirect 回來：hash 裡有 token，優先處理
+  const rtok=consumeOAuthHash();
+  if(rtok){
+    showL('登入中...');
+    gapi.client.setToken({access_token:rtok.access_token});
+    sessionStorage.setItem('gtoken',JSON.stringify({access_token:rtok.access_token,expires_at:Date.now()+rtok.expires_in*1000-60000}));
+    scheduleTokenRefresh();
+    try{
+      const cred=firebase.auth.GoogleAuthProvider.credential(null,rtok.access_token);
+      await firebase.auth().signInWithCredential(cred);
+    }catch(e){hideL();toast('登入失敗：'+(e?.message||e),'err');return;}
+    await onSignedIn();
+    return;
+  }
   const saved=sessionStorage.getItem('gtoken');
   if(saved){
     try{
@@ -45,7 +97,7 @@ async function initAPIs(){
       }
     }catch(e){}
     sessionStorage.removeItem('gtoken');
-    tokenClient.requestAccessToken({prompt:''});
+    requestReauth();
   }
 }
 
@@ -53,6 +105,8 @@ async function initAPIs(){
 // 避免兩個 popup 連環觸發時，第二個被瀏覽器擋（user gesture 在 await 後失效）
 function signIn(){
   if(!gisReady){toast('系統初始化中...','inf');return;}
+  // App 模式：popup 不可用，整頁跳轉授權
+  if(isStandalone()){showL('前往 Google 授權...');redirectSignIn();return;}
   showL('開啟 Google 登入...');
   doSignIn().catch(e=>{
     hideL();
@@ -90,19 +144,24 @@ function scheduleTokenRefresh(){
   try{
     const t=JSON.parse(stored);
     const delay=Math.max(t.expires_at-Date.now()-5*60*1000,60*1000);
-    tokenRefreshTimer=setTimeout(()=>{if(tokenClient&&currentPanel!=='login')tokenClient.requestAccessToken({prompt:''});},delay);
+    tokenRefreshTimer=setTimeout(()=>{
+      if(currentPanel==='login')return;
+      // App 模式不能在使用中整頁跳走（會打斷操作），改提示讓使用者挑時機
+      if(isStandalone()){toast('授權即將過期','inf',true);return;}
+      if(tokenClient)tokenClient.requestAccessToken({prompt:''});
+    },delay);
   }catch(e){}
 }
 
 // 切回分頁時若 token 快過期就重新請求
 document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState!=='visible'||!tokenClient||currentPanel==='login')return;
+  if(document.visibilityState!=='visible'||!gisReady||currentPanel==='login')return;
   const stored=sessionStorage.getItem('gtoken');
-  if(!stored){tokenClient.requestAccessToken({prompt:''});return;}
+  if(!stored){requestReauth();return;}
   try{
     const t=JSON.parse(stored);
-    if(t.expires_at-Date.now()<5*60*1000)tokenClient.requestAccessToken({prompt:''});
-  }catch(e){tokenClient.requestAccessToken({prompt:''});}
+    if(t.expires_at-Date.now()<5*60*1000)requestReauth();
+  }catch(e){requestReauth();}
 });
 
 function signOut(){

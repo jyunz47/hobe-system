@@ -25,7 +25,7 @@ function toast(m,t,withReauth){
   const el=document.getElementById('toast');
   el.className='toast t'+t;
   if(withReauth){
-    el.innerHTML=(t==='ok'?'✓ ':t==='err'?'✕ ':'ℹ ')+m+' <span style="text-decoration:underline;cursor:pointer;margin-left:6px" onclick="tokenClient.requestAccessToken({prompt:\'\'})">點此授權</span>';
+    el.innerHTML=(t==='ok'?'✓ ':t==='err'?'✕ ':'ℹ ')+m+' <span style="text-decoration:underline;cursor:pointer;margin-left:6px" onclick="requestReauth()">點此授權</span>';
   }else{
     el.textContent=(t==='ok'?'✓ ':t==='err'?'✕ ':'ℹ ')+m;
   }

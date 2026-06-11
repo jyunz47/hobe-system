@@ -1,2 +1,5 @@
 <!DOCTYPE html>
-<html><head><meta http-equiv="refresh" content="0;url=補習班排程系統.html"></head></html>
+<html><head><meta charset="UTF-8">
+<!-- OAuth redirect 會帶 #access_token 回到資料夾根，這裡必須用 JS 轉址保留 hash（meta refresh 會弄丟） -->
+<script>location.replace('補習班排程系統.html'+location.hash)</script>
+</head></html>
