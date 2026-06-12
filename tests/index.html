@@ -19,19 +19,32 @@
 </head>
 <body>
 
-<h1>parse.js 單元測試</h1>
-<div class="hint">改 <code>js/parse.js</code> 後，重新整理本頁即可看到所有測試結果。失敗的會用紅底顯示預期與實際差異。</div>
+<h1>單元測試（parse.js + enrollment.js）</h1>
+<div class="hint">改 <code>js/parse.js</code> 或 <code>js/enrollment.js</code> 後，重新整理本頁即可看到所有測試結果。失敗的會用紅底顯示預期與實際差異。</div>
 
 <div id="results"></div>
 
+<!-- 0. enrollment.js 依賴的全域 stub（測試固定在 2025 學年下學期） -->
+<script>
+var driveData = { studentList: [], makeupScheduled: [], enrollments: [], coursePrices: [] };
+var currentPeriodId = 'sem2';
+var _saveCount = 0;
+function getSchoolYear() { return 2025; }
+function detectPeriodId() { return 'sem2'; }
+function getStudentList() { return driveData.studentList || []; }
+function scheduleDriveSave() { _saveCount++; }
+</script>
+
 <!-- 1. 被測程式 -->
 <script src="../js/parse.js"></script>
+<script src="../js/enrollment.js"></script>
 
 <!-- 2. 測試框架（會註冊 DOM 載入後自動跑） -->
 <script src="test-runner.js"></script>
 
 <!-- 3. 各個測試檔（每個檔註冊自己的 suite） -->
 <script src="parse.test.js"></script>
+<script src="enrollment.test.js"></script>
 
 </body>
 </html>

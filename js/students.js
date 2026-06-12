@@ -191,8 +191,10 @@ function addStudentFromScan(i){
   const grade=document.getElementById(`scan-g-${i}`)?.value||'國二';
   const list=getStudentList();
   if(list.some(s=>s.name===item.name&&s.grade===grade)){renderScanSection();return toast(`${item.name}（${grade}）已在名單中`,'inf');}
-  list.push(makeNewStudent({name:item.name,grade,courses:item.courses}));
+  const stu=makeNewStudent({name:item.name,grade,courses:item.courses});
+  list.push(stu);
   saveStudentList(list);
+  ensureEnrollments(stu.id,item.courses);
   const btn=document.getElementById(`scan-a-${i}`);
   if(btn){btn.textContent='✓ 已加入';btn.disabled=true;}
   renderStudents();
@@ -205,6 +207,7 @@ function updateStudentCoursesFromScan(ri){
   const s=list.find(x=>x.id===item.matches[0].id);if(!s)return;
   s.courses=item.courses;
   saveStudentList(list);
+  ensureEnrollments(s.id,item.courses); // 登記簿只補不刪，刪除走編輯面板或之後的對帳工具
   renderScanSection();renderStudents();
   toast(`已更新 ${s.name} 的課程`,'ok');
 }
@@ -215,6 +218,7 @@ function updateStudentCoursesByStuId(stuId,ri){
   const s=list.find(x=>x.id===stuId);if(!s)return;
   s.courses=item.courses;
   saveStudentList(list);
+  ensureEnrollments(s.id,item.courses);
   renderScanSection();renderStudents();
   toast(`已更新 ${s.name}（${s.grade}）的課程`,'ok');
 }
@@ -309,7 +313,9 @@ function hasThresholdWarning(stats,pid){
 }
 
 // ── 學生編輯 + modal 狀態 ──
-var stuEditId=null,_editCourses=[];
+// _editEnrollments：編輯面板的修課暫存（按儲存才寫回，取消即丟棄）
+// 每列 {id, courseTitle, price}；id=null 代表本次新加、尚未寫入登記簿
+var stuEditId=null,_editEnrollments=[];
 var mkOpenId=null;
 
 function toggleStudentDetail(id){openStudentModal(id);}
@@ -353,11 +359,21 @@ function openStudentModal(id){
   if(stats.pendingDecision>0)extraBits.push(`<span style="color:var(--tx3)">待確認補課 ${stats.pendingDecision} 筆</span>`);
   if(extraBits.length)body+=`<div style="margin-top:8px;font-size:13px;display:flex;gap:12px;flex-wrap:wrap">${extraBits.join('')}</div>`;
   body+=`</div>`;
-  // Enrolled courses
-  const displayCourses=(s.courses||[]).filter(c=>!/^【調課】/.test(c));
-  if(displayCourses.length){
-    body+=`<div><div class="stu-modal-sec-lbl">課程</div>
-      <div class="stu-courses">${displayCourses.map(c=>`<span class="stu-course-tag">${esc(c)}</span>`).join('')}</div></div>`;
+  // 修課（登記簿，含單價）；沒有本期登記時退回舊 s.courses 顯示（歷屆生）
+  const ens=getEnrollments({studentId:s.id,periodId:yearPeriodId()});
+  if(ens.length){
+    body+=`<div><div class="stu-modal-sec-lbl">修課（${period.label}）</div>
+      <div class="stu-courses">${ens.map(en=>{
+        const p=effectivePrice(en);
+        const priceStr=p!=null?`${p} 元/堂${en.price!=null?'・自訂':''}`:'未定價';
+        return`<span class="stu-course-tag">${esc(en.courseTitle)}<span class="stu-course-price${p==null?' undef':''}">${priceStr}</span></span>`;
+      }).join('')}</div></div>`;
+  }else{
+    const displayCourses=(s.courses||[]).filter(c=>!/^【調課】/.test(c));
+    if(displayCourses.length){
+      body+=`<div><div class="stu-modal-sec-lbl">課程（舊紀錄）</div>
+        <div class="stu-courses">${displayCourses.map(c=>`<span class="stu-course-tag">${esc(c)}</span>`).join('')}</div></div>`;
+    }
   }
   // Individual absence records
   if(stats.pairs.length){
@@ -532,14 +548,14 @@ async function submitAddCourse(){
 function toggleStudentEdit(id){
   if(stuEditId===id){cancelStudentEdit();return;}
   stuEditId=id;
-  const s=getStudentList().find(x=>x.id===id);
-  _editCourses=s?(s.courses||[]).filter(c=>!/^【調課】/.test(c)):[];
+  _editEnrollments=getEnrollments({studentId:id,periodId:yearPeriodId()})
+    .map(en=>({id:en.id,courseTitle:en.courseTitle,price:en.price}));
   renderStudents();
   requestAnimationFrame(()=>document.getElementById(`edit-name-${id}`)?.focus());
 }
 
 function cancelStudentEdit(){
-  stuEditId=null;_editCourses=[];
+  stuEditId=null;_editEnrollments=[];
   renderStudents();
 }
 
@@ -557,23 +573,40 @@ function saveStudentEdit(id){
   if(dups.length&&!(newSchool||newPhone)){
     return toast(`改成「${name}（${grade}）」會與既有 ${dups.length} 位同名同年級學生衝突。請至少填本人的「學校」或「家長電話」其中一項以區分。`,'err');
   }
-  cur.name=name;cur.grade=grade;cur.courses=[..._editCourses];
+  cur.name=name;cur.grade=grade;
   cur.school=newSchool;
   const byVal=document.getElementById(`edit-birthYear-${id}`)?.value.trim();
   cur.birthYear=byVal?parseInt(byVal,10):null;
   cur.parentPhone=newPhone;
+  // 修課異動寫回登記簿（本期）：暫存沒有的刪、有 id 的更新價格、id=null 的新建
+  // 註：s.courses 不再寫入，留作舊資料（rollback 與歷屆顯示用）
+  syncEditPrices(id);
+  const pid=yearPeriodId();
+  const keepIds=new Set(_editEnrollments.filter(r=>r.id).map(r=>r.id));
+  const ens=getEnrollments().filter(en=>en.studentId!==id||en.periodId!==pid||keepIds.has(en.id));
+  _editEnrollments.forEach(r=>{
+    if(r.id){const en=ens.find(x=>x.id===r.id);if(en)en.price=r.price;}
+    else ens.push(makeEnrollment({studentId:id,courseTitle:r.courseTitle,periodId:pid,price:r.price}));
+  });
+  driveData.enrollments=ens;
   saveStudentList(list);
-  stuEditId=null;_editCourses=[];
+  stuEditId=null;_editEnrollments=[];
   renderStudents();
   toast(`已更新 ${name} 的資料`,'ok');
 }
 
 function buildEditCoursesHtml(id){
-  return _editCourses.map((c,i)=>
-    `<span class="stu-edit-course-tag">${esc(c)}<button class="rm-course-btn" onclick="removeEditCourse(${i},${id})">✕</button></span>`
-  ).join('')+
+  return _editEnrollments.map((r,i)=>{
+    const def=getCourseDefaultPrice(r.courseTitle);
+    const ph=def!=null?`預設 ${def}`:'未定價';
+    return`<div class="stu-edit-enroll-row">
+      <span class="stu-edit-course-tag">${esc(r.courseTitle)}<button class="rm-course-btn" onclick="removeEditCourse(${i},${id})">✕</button></span>
+      <input type="number" class="stu-edit-price-input" id="edit-price-${id}-${i}" value="${r.price??''}" placeholder="${ph}" min="0" inputmode="numeric">
+      <span class="stu-edit-price-unit">元/堂</span>
+    </div>`;
+  }).join('')+
   `<div class="stu-edit-add-wrap">
-    <input id="edit-new-course-${id}" class="stu-edit-new-course" placeholder="新增課程…" onkeydown="if(event.key==='Enter'){event.preventDefault();addEditCourse(${id})}">
+    <input id="edit-new-course-${id}" class="stu-edit-new-course" placeholder="新增修課…" onkeydown="if(event.key==='Enter'){event.preventDefault();addEditCourse(${id})}">
     <button class="stu-edit-add-btn" onclick="addEditCourse(${id})">＋</button>
   </div>`;
 }
@@ -583,8 +616,17 @@ function renderEditCourses(id){
   if(el)el.innerHTML=buildEditCoursesHtml(id);
 }
 
+// 把畫面上的單價輸入抄回暫存（重繪或儲存前都要先呼叫，否則輸入會被吃掉）
+function syncEditPrices(id){
+  _editEnrollments.forEach((r,i)=>{
+    const v=document.getElementById(`edit-price-${id}-${i}`)?.value.trim();
+    r.price=v?Math.max(0,parseInt(v,10)||0):null;
+  });
+}
+
 function removeEditCourse(idx,id){
-  _editCourses.splice(idx,1);
+  syncEditPrices(id);
+  _editEnrollments.splice(idx,1);
   renderEditCourses(id);
 }
 
@@ -592,7 +634,8 @@ function addEditCourse(id){
   const input=document.getElementById(`edit-new-course-${id}`);
   const val=input?.value.trim();
   if(!val)return;
-  if(!_editCourses.includes(val))_editCourses.push(val);
+  syncEditPrices(id);
+  if(!_editEnrollments.some(r=>r.courseTitle===val))_editEnrollments.push({id:null,courseTitle:val,price:null});
   input.value='';
   renderEditCourses(id);
   input.focus();
@@ -714,7 +757,7 @@ function renderStudentEditPanel(s){
       </label>
     </div>
     <div class="stu-edit-courses-row">
-      <span class="stu-edit-courses-lbl">課程</span>
+      <span class="stu-edit-courses-lbl">修課（${getCurrentPeriod().label}）</span>
       <div id="edit-courses-${s.id}" class="stu-edit-courses-body">${buildEditCoursesHtml(s.id)}</div>
     </div>
   </div></div>`;

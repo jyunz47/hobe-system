@@ -168,7 +168,7 @@ function signOut(){
   const t=gapi.client.getToken();
   if(t){google.accounts.oauth2.revoke(t.access_token);gapi.client.setToken(null);}
   calendarIds={};dayEvents=[];weekEvents=[];makeupList=[];
-  driveData={studentList:[],makeupScheduled:[]};
+  driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[]};
   firebase.auth().signOut();
   sessionStorage.removeItem('gtoken');
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='none');
@@ -182,6 +182,7 @@ async function onSignedIn(){
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='inline-block');
   try{const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+gapi.client.getToken().access_token}}).then(r=>r.json());setUSt('ok',info.email||'已登入','Google 帳號');}catch(e){setUSt('ok','已登入','Google 帳號');}
   await loadFromFirestore();
+  migrateCoursesToEnrollments();
   await fetchCalIds();
   showPanel('courses');
   openAddCourse();
@@ -196,7 +197,7 @@ var db=firebase.firestore();
 var SHARED_DOC=db.collection('sharedData').doc('main');
 
 async function loadFromFirestore(){
-  driveData={studentList:[],makeupScheduled:[]};
+  driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[]};
   try{
     // 等 Firebase 從 localStorage 還原登入狀態（cmd+R 後 currentUser 起初是 null）
     if(!firebase.auth().currentUser){
@@ -211,7 +212,13 @@ async function loadFromFirestore(){
     const snap=await SHARED_DOC.get();
     if(snap.exists){
       const d=snap.data();
-      driveData={studentList:d.studentList||[],makeupScheduled:d.makeupScheduled||[]};
+      driveData={
+        studentList:d.studentList||[],
+        makeupScheduled:d.makeupScheduled||[],
+        enrollments:d.enrollments||[],
+        coursePrices:d.coursePrices||[],
+        enrollmentsMigratedAt:d.enrollmentsMigratedAt||null,
+      };
     }
   }catch(e){
     console.error('loadFromFirestore failed',e);
