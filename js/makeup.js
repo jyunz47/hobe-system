@@ -1,5 +1,14 @@
 // 待補課/調課清單 + 補課媒合 + slot picker（日期→時段→教室→確認）
 
+// 底部「已完成安排」「不補課」區塊預設收合，點標題展開；搜尋時強制展開
+var mkSecOpen={completed:false,skipped:false};
+function toggleMkSec(key){mkSecOpen[key]=!mkSecOpen[key];renderMakeup();}
+// 點頂部「已完成」統計卡 → 展開已完成區塊並捲過去
+function jumpToMkCompleted(){
+  if(!mkSecOpen.completed){mkSecOpen.completed=true;renderMakeup();}
+  document.getElementById('mk-sec-completed')?.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
 // ── 載入補課清單 + 媒合 ──
 async function loadMakeup(silent=false){
   if(!gapi.client.getToken())return;
@@ -122,7 +131,7 @@ function renderMakeup(){
     topArea.innerHTML=periodTabsHtml()+`<div class="mk-stats">
       <div class="mk-stat"><div class="mk-stat-icon" style="background:#FFF7ED;color:#F97316">⏰</div><div><div class="mk-stat-num">${pendingStatCnt}</div><div class="mk-stat-lbl">待安排總數</div></div></div>
       <div class="mk-stat"><div class="mk-stat-icon" style="background:#F0FDF4;color:#22C55E">🗓️</div><div><div class="mk-stat-num">${scheduledStatCnt}</div><div class="mk-stat-lbl">已安排</div></div></div>
-      <div class="mk-stat"><div class="mk-stat-icon" style="background:#F9FAFB;color:#6B7280">✅</div><div><div class="mk-stat-num">${completedStatCnt}</div><div class="mk-stat-lbl">已完成</div></div></div>
+      <div class="mk-stat mk-stat-link" onclick="jumpToMkCompleted()" title="點擊查看已完成安排"><div class="mk-stat-icon" style="background:#F9FAFB;color:#6B7280">✅</div><div><div class="mk-stat-num">${completedStatCnt}</div><div class="mk-stat-lbl">已完成</div></div></div>
     </div>`;
   }
 
@@ -230,16 +239,24 @@ function renderMakeup(){
   else{scheduledList.forEach(e=>{const rec=scheduledAll.find(s=>s.originalId===e.id);if(rec)html+=scheduledCard(e,rec,false);});}
   html+=`</div></div>`;
 
-  // 已完成安排
+  // 已完成安排（最近完成的在上）
   if(completedList.length){
-    html+=`<div class="mk-sec-lbl mk-sec-gap" style="margin-top:24px">已完成安排（${completedList.length}）</div>`;
-    completedList.forEach(e=>{const rec=scheduledAll.find(s=>s.originalId===e.id);if(rec)html+=scheduledCard(e,rec,true);});
+    const open=mkSecOpen.completed||!!fq;
+    html+=`<div id="mk-sec-completed" class="mk-sec-lbl mk-sec-gap mk-sec-toggle" style="margin-top:24px" onclick="toggleMkSec('completed')"><span class="mk-sec-arrow">${open?'▾':'▸'}</span>已完成安排（${completedList.length}）</div>`;
+    if(open){
+      completedList
+        .map(e=>({e,rec:scheduledAll.find(s=>s.originalId===e.id)}))
+        .filter(x=>x.rec)
+        .sort((a,b)=>new Date(b.rec.scheduledDate)-new Date(a.rec.scheduledDate))
+        .forEach(x=>{html+=scheduledCard(x.e,x.rec,true);});
+    }
   }
 
   // 不補課（退半堂）
   if(skippedList.length){
-    html+=`<div class="mk-sec-lbl mk-sec-gap" style="margin-top:24px">不補課・退半堂（${skippedList.length}）</div>`;
-    skippedList.forEach(e=>{html+=skippedCard(e);});
+    const open=mkSecOpen.skipped||!!fq;
+    html+=`<div class="mk-sec-lbl mk-sec-gap mk-sec-toggle" style="margin-top:24px" onclick="toggleMkSec('skipped')"><span class="mk-sec-arrow">${open?'▾':'▸'}</span>不補課・退半堂（${skippedList.length}）</div>`;
+    if(open)skippedList.forEach(e=>{html+=skippedCard(e);});
   }
 
   c.innerHTML=html;

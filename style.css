@@ -173,6 +173,9 @@ input[type=date]:focus{border-color:var(--ac)}
 .sp-time-sub{font-size:10px;margin-left:5px;opacity:.75;font-family:inherit}
 .mk-sec-lbl{font-size:12px;font-weight:700;color:var(--tx2);letter-spacing:.06em;padding-bottom:8px;border-bottom:1px solid var(--br);margin-bottom:10px}
 .mk-sec-gap{margin-top:20px}
+.mk-sec-toggle{cursor:pointer;user-select:none}
+.mk-sec-toggle:hover{color:var(--tx)}
+.mk-sec-arrow{display:inline-block;width:16px}
 
 /* Makeup grid cards */
 .period-tabs{display:flex;gap:4px;margin-bottom:14px;flex-wrap:wrap}
@@ -212,6 +215,8 @@ input[type=date]:focus{border-color:var(--ac)}
 .mk-stat-icon{width:36px;height:36px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:16px;flex-shrink:0}
 .mk-stat-num{font-size:22px;font-weight:700;color:var(--tx);line-height:1}
 .mk-stat-lbl{font-size:11px;color:var(--tx2);margin-top:3px}
+.mk-stat-link{cursor:pointer;transition:border-color .12s}
+.mk-stat-link:hover{border-color:var(--brs)}
 .mk-two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:start}
 .mk-col{display:flex;flex-direction:column;gap:8px}
 .mk-col-hd{display:flex;align-items:center;gap:6px;padding-bottom:8px;border-bottom:1.5px solid var(--br);margin-bottom:2px}
