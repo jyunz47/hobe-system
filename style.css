@@ -511,6 +511,23 @@ body.hide-todo-chip .stu-info-chip{display:none}
 .stu-scan-exist-courses{flex:1;font-size:11.5px;color:var(--tx2)}
 .stu-scan-upd{padding:4px 10px;border-radius:var(--rs);border:1.5px solid var(--c1);cursor:pointer;font-size:11.5px;font-weight:500;font-family:inherit;background:#fff;color:var(--c1);white-space:nowrap;transition:all .12s}
 .stu-scan-upd:hover{background:var(--il)}
+/* ── 學生編輯：危險區（徹底刪除） ── */
+.stu-edit-danger{display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--br);flex-wrap:wrap}
+.stu-edit-del-btn{padding:5px 12px;border-radius:var(--rs);border:1.5px solid #E5B7B2;background:#fff;color:#A93226;cursor:pointer;font-size:12px;font-family:inherit;font-weight:500;white-space:nowrap;transition:all .12s}
+.stu-edit-del-btn:hover{background:#A93226;color:#fff;border-color:#A93226}
+.stu-edit-danger-hint{font-size:11px;color:var(--tx3);flex:1;min-width:160px}
+.del-modal-confirm-input{width:100%;padding:8px 10px;border:1.5px solid var(--br);border-radius:var(--rs);font-family:inherit;font-size:14px;box-sizing:border-box;color:var(--tx)}
+.del-modal-confirm-input:focus{outline:none;border-color:#A93226}
+/* ── 課表對帳 ── */
+.recon-chips{display:flex;flex-wrap:wrap;gap:5px}
+.recon-chip{display:inline-flex;align-items:center;font-size:11.5px;font-family:inherit;padding:3px 10px;border-radius:99px;cursor:pointer;transition:all .12s;line-height:1.4}
+.recon-chip.add{background:#E7F4EC;color:#1F7A4D;border:1.5px solid #BCE3CC}
+.recon-chip.add:hover{background:#1F7A4D;color:#fff;border-color:#1F7A4D}
+.recon-chip.rm{background:#FDEDEC;color:#A93226;border:1.5px solid #F5C6C2}
+.recon-chip.rm:hover{background:#A93226;color:#fff;border-color:#A93226}
+.recon-hint{font-size:11px;color:var(--tx3);margin-top:6px}
+.recon-allclear{font-size:14px;font-weight:600;color:#1F7A4D;padding:8px 0}
+.recon-ok-line{font-size:12px;color:#1F7A4D;padding-top:4px;border-top:1px dashed var(--br)}
 .stu-courses{padding:4px 0 8px;display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--br);margin-bottom:2px}
 .stu-course-tag{font-size:11px;background:var(--il);color:var(--in);padding:2px 8px;border-radius:99px}
 .stu-course-price{margin-left:6px;font-size:10px;color:var(--in);opacity:.75}

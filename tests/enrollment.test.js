@@ -188,3 +188,117 @@ suite('ensureEnrollments：掃描補登（只補不刪）', () => {
     assertEq(_saveCount, 0); // 沒有變動就不觸發儲存
   });
 });
+
+// ────────────────────────────────────────────────────────
+suite('computeReconciliation：課表對帳分桶', () => {
+
+  const PID = '2025-sem2';
+  const stu = (id, name, grade, status) => ({ id, name, grade, status: status || '在學' });
+  const en = (id, studentId, courseTitle, price) => ({ id, studentId, courseTitle, periodId: PID, price: price ?? null });
+  const entry = (name, courses, gradeHint) => ({ name, gradeHint: gradeHint || null, courses });
+
+  test('完全一致 → okCount，無差異', () => {
+    const r = computeReconciliation(
+      [entry('小明', ['國二數學'])],
+      [stu(1, '小明', '國二')],
+      [en(100, 1, '國二數學')], PID);
+    assertEq(r.okCount, 1);
+    assertEq(r.diffs.length, 0);
+    assertEq(r.unknown.length, 0);
+  });
+
+  test('查無此人 → unknown', () => {
+    const r = computeReconciliation(
+      [entry('新生', ['國一英文'])],
+      [stu(1, '小明', '國二')],
+      [], PID);
+    assertEq(r.unknown.length, 1);
+    assertEq(r.unknown[0].name, '新生');
+    assertEqDeep(r.unknown[0].courses, ['國一英文']);
+  });
+
+  test('行事曆有、登記簿沒有 → missing（候選補登）', () => {
+    const r = computeReconciliation(
+      [entry('小明', ['國二數學', '國二理化'])],
+      [stu(1, '小明', '國二')],
+      [en(100, 1, '國二數學')], PID);
+    assertEq(r.diffs.length, 1);
+    assertEqDeep(r.diffs[0].missing, ['國二理化']);
+    assertEq(r.diffs[0].extra.length, 0);
+  });
+
+  test('登記簿有、行事曆沒有 → extra（候選退課，帶完整 enrollment）', () => {
+    const r = computeReconciliation(
+      [entry('小明', ['國二數學'])],
+      [stu(1, '小明', '國二')],
+      [en(100, 1, '國二數學'), en(101, 1, '國二英文', 550)], PID);
+    assertEq(r.diffs.length, 1);
+    assertEq(r.diffs[0].extra.length, 1);
+    assertEq(r.diffs[0].extra[0].id, 101);
+    assertEq(r.diffs[0].extra[0].price, 550);
+  });
+
+  test('有登記但整期沒出現在行事曆的學生也要列出', () => {
+    const r = computeReconciliation(
+      [entry('小明', ['國二數學'])],
+      [stu(1, '小明', '國二'), stu(2, '失蹤生', '國三')],
+      [en(100, 1, '國二數學'), en(101, 2, '國三數學')], PID);
+    assertEq(r.diffs.length, 1);
+    assertEq(r.diffs[0].stu.name, '失蹤生');
+    assertEq(r.diffs[0].extra[0].courseTitle, '國三數學');
+  });
+
+  test('同名兩位、無年級標注 → ambiguous', () => {
+    const r = computeReconciliation(
+      [entry('小明', ['國二數學'])],
+      [stu(1, '小明', '國二'), stu(2, '小明', '國一')],
+      [], PID);
+    assertEq(r.ambiguous.length, 1);
+    assertEq(r.ambiguous[0].matches.length, 2);
+  });
+
+  test('同名兩位、有年級標注 → 鎖定其中一位正常比對', () => {
+    const r = computeReconciliation(
+      [entry('小明', ['國二數學'], '國二')],
+      [stu(1, '小明', '國二'), stu(2, '小明', '國一')],
+      [en(100, 1, '國二數學')], PID);
+    assertEq(r.ambiguous.length, 0);
+    assertEq(r.okCount, 1);
+  });
+
+  test('歷屆生出現在課表 → alumni，不進差異', () => {
+    const r = computeReconciliation(
+      [entry('畢業生', ['高三數學'])],
+      [stu(1, '畢業生', '高三', '畢業')],
+      [], PID);
+    assertEq(r.alumni.length, 1);
+    assertEq(r.diffs.length, 0);
+  });
+
+  test('同一學生兩種寫法（小明、（國二）小明）合併歸戶', () => {
+    const r = computeReconciliation(
+      [entry('小明', ['國二數學']), entry('小明', ['國二理化'], '國二')],
+      [stu(1, '小明', '國二')],
+      [en(100, 1, '國二數學'), en(101, 1, '國二理化')], PID);
+    assertEq(r.okCount, 1);
+    assertEq(r.diffs.length, 0);
+  });
+
+  test('別期的 enrollment 不參與本期對帳', () => {
+    const r = computeReconciliation(
+      [entry('小明', ['國二數學'])],
+      [stu(1, '小明', '國二')],
+      [en(100, 1, '國二數學'), { id: 101, studentId: 1, courseTitle: '國一數學', periodId: '2024-sem2', price: null }], PID);
+    assertEq(r.okCount, 1);
+    assertEq(r.diffs.length, 0);
+  });
+
+  test('跟本期完全無關的在學生不列也不計入 okCount', () => {
+    const r = computeReconciliation(
+      [entry('小明', ['國二數學'])],
+      [stu(1, '小明', '國二'), stu(2, '路人', '高一')],
+      [en(100, 1, '國二數學')], PID);
+    assertEq(r.okCount, 1);
+    assertEq(r.diffs.length, 0);
+  });
+});

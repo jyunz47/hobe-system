@@ -1,4 +1,4 @@
-// 學生管理 + 從行事曆掃描學生 + 新增課程表單 + 學生編輯
+// 學生管理 + 課表對帳（行事曆 vs 修課登記簿）+ 新增課程表單 + 學生編輯
 
 var GRADES=['國小','國一','國二','國三','高一','高二','高三','大學'];
 
@@ -57,8 +57,8 @@ function makeNewStudent({name,grade,courses}){
   return s;
 }
 
-// 掃描狀態
-var scanData=null,_scanUnreg=[],_scanReg=[];
+// 課表對帳狀態：scanData＝行事曆掃描結果（rawName → Set(課名)），_recon＝最近一次比對分桶
+var scanData=null,_recon=null;
 // 學生管理頁分頁（在學 / 歷屆）
 var stuTabMode='active';
 // 狀態變更 modal context
@@ -66,7 +66,7 @@ var statusModalCtx={studentId:null,selectedStatus:null};
 
 async function scanStudentsFromCalendar(){
   if(!Object.keys(calendarIds).length)return toast('請先登入 Google 帳號','err');
-  showL('掃描學生中...');
+  showL('對帳中...');
   try{
     const period=getCurrentPeriod();
     const now=period.start;
@@ -106,79 +106,83 @@ function parseScanName(raw){
   return{name:raw,gradeHint:null};
 }
 
-function courseDiffHtml(oldArr,newArr){
-  const oldSet=new Set(oldArr),newSet=new Set(newArr);
-  const added=newArr.filter(c=>!oldSet.has(c));
-  const removed=oldArr.filter(c=>!newSet.has(c));
-  if(!added.length&&!removed.length)return'';
-  const parts=[];
-  if(added.length)parts.push(`<span style="color:#2d9b6a">＋${added.map(esc).join('、')}</span>`);
-  if(removed.length)parts.push(`<span style="color:#c0392b">－${removed.map(esc).join('、')}</span>`);
-  return`<div style="font-size:11px;margin-top:2px;display:flex;gap:8px;flex-wrap:wrap">${parts.join('')}</div>`;
-}
-
+// 對帳面板：只報告差異，每一條都等使用者按了才動資料
+// 注意：對帳不再寫 student.courses（舊欄位凍結），所有修課異動都進登記簿
 function renderScanSection(){
   const sec=document.getElementById('stu-scan-sec');
-  if(!scanData||!scanData.size){sec.style.display='none';return;}
-  const list=getStudentList();
-  _scanUnreg=[];_scanReg=[];
-  [...scanData.entries()].forEach(([rawName,courseSet])=>{
-    const{name,gradeHint}=parseScanName(rawName);
-    const courses=[...courseSet];
-    const matches=gradeHint
-      ?list.filter(s=>s.name===name&&s.grade===gradeHint)
-      :list.filter(s=>s.name===name);
-    if(matches.length)_scanReg.push({rawName,name,gradeHint,courses,matches});
-    else _scanUnreg.push({rawName,name,gradeHint,courses});
-  });
+  if(!scanData){sec.style.display='none';return;}
   const periodLabel=getCurrentPeriod().label;
-  let html=`<div class="stu-scan-sec"><div class="stu-scan-hd"><span>🔍 掃描結果（${periodLabel}）</span><button onclick="closeScanSection()">✕</button></div><div class="stu-scan-body">`;
-  if(_scanUnreg.length){
-    html+=`<div><div class="stu-scan-grp-lbl">尚未建檔（${_scanUnreg.length} 人）</div>`;
-    _scanUnreg.forEach(({name,gradeHint,courses},i)=>{
+  let html=`<div class="stu-scan-sec"><div class="stu-scan-hd"><span>🧾 課表對帳（${periodLabel}）</span><button onclick="closeScanSection()">✕</button></div><div class="stu-scan-body">`;
+  if(!scanData.size){
+    html+=`<div style="font-size:13px;color:var(--tx3);padding:4px 0">${periodLabel}沒有掃到任何學生，請確認行事曆備注有填寫學生姓名</div></div></div>`;
+    sec.innerHTML=html;sec.style.display='block';
+    return;
+  }
+  const entries=[...scanData.entries()].map(([rawName,courseSet])=>{
+    const{name,gradeHint}=parseScanName(rawName);
+    return{name,gradeHint,courses:[...courseSet]};
+  });
+  _recon=computeReconciliation(entries,getStudentList(),getEnrollments(),yearPeriodId());
+  const{unknown,ambiguous,alumni,diffs,okCount}=_recon;
+  if(unknown.length){
+    html+=`<div><div class="stu-scan-grp-lbl">查無此人——行事曆有、尚未建檔（${unknown.length} 人）</div>`;
+    unknown.forEach(({name,gradeHint,courses},i)=>{
       const opts=GRADES.map(g=>`<option value="${g}"${g===(gradeHint||'國二')?' selected':''}>${g}</option>`).join('');
       const displayName=gradeHint?`${name}（${gradeHint}）`:name;
       html+=`<div class="stu-scan-row">
         <div class="stu-scan-name">${esc(displayName)}</div>
         <div class="stu-scan-courses">${courses.map(esc).join('、')}</div>
-        <select class="stu-scan-grade" id="scan-g-${i}">${opts}</select>
-        <button class="stu-scan-add" id="scan-a-${i}" onclick="addStudentFromScan(${i})">加入</button>
+        <select class="stu-scan-grade" id="recon-g-${i}">${opts}</select>
+        <button class="stu-scan-add" onclick="reconCreateStudent(${i})">建檔並登記</button>
+      </div>`;
+    });
+    html+=`<div class="recon-hint">名字打錯的話不用建檔，直接去行事曆備注改字，再對帳一次。</div></div>`;
+  }
+  if(diffs.length){
+    html+=`<div><div class="stu-scan-grp-lbl">修課差異（${diffs.length} 人）</div>`;
+    diffs.forEach((d,di)=>{
+      const chips=[
+        ...d.missing.map((title,mi)=>`<button class="recon-chip add" title="行事曆有上、登記簿沒登記，點此補登" onclick="reconEnroll(${di},${mi})">＋ ${esc(title)}</button>`),
+        ...d.extra.map((en,xi)=>`<button class="recon-chip rm" title="登記簿有、這期行事曆沒出現過他，點此退課" onclick="reconUnenroll(${di},${xi})">－ ${esc(en.courseTitle)}</button>`),
+      ].join('');
+      const allBtn=d.missing.length>=2?`<button class="stu-scan-upd" onclick="reconEnrollAll(${di})">全部補登</button>`:'';
+      html+=`<div class="stu-scan-exist-row">
+        <div class="stu-scan-exist-name">${esc(d.stu.name)}</div>
+        <div class="stu-scan-exist-grade">${esc(d.stu.grade)}</div>
+        <div class="stu-scan-exist-courses recon-chips">${chips}</div>
+        ${allBtn}
+      </div>`;
+    });
+    html+=`<div class="recon-hint">＋綠色＝行事曆有上但沒登記（點了補登）；－紅色＝登記了但這期行事曆沒出現（點了退課）。不確定的先放著沒關係。</div></div>`;
+  }
+  if(alumni.length){
+    html+=`<div><div class="stu-scan-grp-lbl">歷屆生出現在課表（${alumni.length} 人）</div>`;
+    alumni.forEach(({stu,courses})=>{
+      html+=`<div class="stu-scan-exist-row">
+        <div class="stu-scan-exist-name">${esc(stu.name)} <span class="stu-warn-chip" style="font-size:10px;background:#FEE2E2;color:#991B1B">⚠ 已${esc(stu.status||'')}</span></div>
+        <div class="stu-scan-exist-grade">${esc(stu.grade)}</div>
+        <div class="stu-scan-exist-courses">${courses.map(esc).join('、')}</div>
+        <span style="font-size:11px;color:#991B1B">確定回來上課的話，先到歷屆分頁幫他復學，再對帳一次</span>
       </div>`;
     });
     html+=`</div>`;
   }
-  if(_scanReg.length){
-    html+=`<div><div class="stu-scan-grp-lbl">已在名單（${_scanReg.length} 人）</div>`;
-    _scanReg.forEach(({name,gradeHint,courses,matches},ri)=>{
+  if(ambiguous.length){
+    html+=`<div><div class="stu-scan-grp-lbl">同名無法區分（${ambiguous.length} 筆）</div>`;
+    ambiguous.forEach(({name,gradeHint,courses,matches})=>{
       const displayName=gradeHint?`${name}（${gradeHint}）`:name;
-      if(matches.length>1){
-        html+=`<div class="stu-scan-exist-row">
-          <div class="stu-scan-exist-name">${esc(displayName)} <span class="stu-warn-chip" style="font-size:10px">⚠ 同名</span></div>
-          <div class="stu-scan-exist-courses">${courses.map(esc).join('、')}</div>
-          <div style="font-size:11px;color:var(--tx3);margin-top:4px">名單中有 ${matches.length} 位同名學生，無法自動區分。請在行事曆備注加上年級，例如「（${esc(matches[0].grade)}）${esc(name)}」。</div>
-        </div>`;
-      }else{
-        const stu=matches[0];
-        const stuStatus=stu.status||'在學';
-        const isAlumni=stuStatus!=='在學';
-        const changed=(stu.courses||[]).slice().sort().join(',')!==courses.slice().sort().join(',');
-        const diff=changed&&!isAlumni?courseDiffHtml(stu.courses||[],courses):'';
-        const alumniChip=isAlumni?`<span class="stu-warn-chip" style="font-size:10px;background:#FEE2E2;color:#991B1B">⚠ 已${stuStatus}</span>`:'';
-        const action=isAlumni
-          ?'<span style="font-size:11px;color:#991B1B">歷屆學生，課程不更新</span>'
-          :(changed?`<button class="stu-scan-upd" onclick="updateStudentCoursesFromScan(${ri})">更新課程</button>`:'<span style="font-size:11px;color:var(--tx3)">✓ 最新</span>');
-        html+=`<div class="stu-scan-exist-row">
-          <div class="stu-scan-exist-name">${esc(displayName)} ${alumniChip}</div>
-          <div class="stu-scan-exist-grade">${esc(stu.grade)}</div>
-          <div class="stu-scan-exist-courses">${courses.map(esc).join('、')}${diff}</div>
-          ${action}
-        </div>`;
-      }
+      html+=`<div class="stu-scan-exist-row">
+        <div class="stu-scan-exist-name">${esc(displayName)} <span class="stu-warn-chip" style="font-size:10px">⚠ 同名</span></div>
+        <div class="stu-scan-exist-courses">${courses.map(esc).join('、')}</div>
+        <div style="font-size:11px;color:var(--tx3);margin-top:4px">名單中有 ${matches.length} 位同名學生，無法自動區分。請在行事曆備注加上年級，例如「（${esc(matches[0].grade)}）${esc(name)}」。</div>
+      </div>`;
     });
     html+=`</div>`;
   }
-  if(!_scanUnreg.length&&!_scanReg.length){
-    html+=`<div style="font-size:13px;color:var(--tx3);padding:4px 0">${periodLabel}沒有找到學生資料，請確認行事曆備注有填寫學生姓名</div>`;
+  if(!unknown.length&&!ambiguous.length&&!alumni.length&&!diffs.length){
+    html+=`<div class="recon-allclear">✓ 行事曆與登記簿完全一致（${okCount} 位在學生）</div>`;
+  }else if(okCount>0){
+    html+=`<div class="recon-ok-line">✓ 另有 ${okCount} 位在學生與登記簿一致</div>`;
   }
   html+=`</div></div>`;
   sec.innerHTML=html;
@@ -186,45 +190,48 @@ function renderScanSection(){
   sec.scrollIntoView({behavior:'smooth',block:'nearest'});
 }
 
-function addStudentFromScan(i){
-  const item=_scanUnreg[i];if(!item)return;
-  const grade=document.getElementById(`scan-g-${i}`)?.value||'國二';
+// ── 對帳動作：每一條都是使用者點了才執行 ──
+function reconCreateStudent(i){
+  const item=_recon?.unknown[i];if(!item)return;
+  const grade=document.getElementById(`recon-g-${i}`)?.value||item.gradeHint||'國二';
   const list=getStudentList();
-  if(list.some(s=>s.name===item.name&&s.grade===grade)){renderScanSection();return toast(`${item.name}（${grade}）已在名單中`,'inf');}
-  const stu=makeNewStudent({name:item.name,grade,courses:item.courses});
+  if(list.some(s=>s.name===item.name&&s.grade===grade)){
+    return toast(`已有同名同年級「${item.name}（${grade}）」。若是不同人，請在行事曆備注加年級標注區分；若年級選錯，改選正確年級再建檔。`,'err');
+  }
+  const stu=makeNewStudent({name:item.name,grade});
   list.push(stu);
   saveStudentList(list);
   ensureEnrollments(stu.id,item.courses);
-  const btn=document.getElementById(`scan-a-${i}`);
-  if(btn){btn.textContent='✓ 已加入';btn.disabled=true;}
-  renderStudents();
-  toast(`已新增 ${item.name}（${grade}）`,'ok');
+  renderScanSection();renderStudents();
+  toast(`已建檔 ${item.name}（${grade}）並登記 ${item.courses.length} 門課`,'ok');
 }
 
-function updateStudentCoursesFromScan(ri){
-  const item=_scanReg[ri];if(!item)return;
-  const list=getStudentList();
-  const s=list.find(x=>x.id===item.matches[0].id);if(!s)return;
-  s.courses=item.courses;
-  saveStudentList(list);
-  ensureEnrollments(s.id,item.courses); // 登記簿只補不刪，刪除走編輯面板或之後的對帳工具
-  renderScanSection();renderStudents();
-  toast(`已更新 ${s.name} 的課程`,'ok');
+function reconEnroll(di,mi){
+  const d=_recon?.diffs[di];if(!d)return;
+  const title=d.missing[mi];if(title==null)return;
+  ensureEnrollments(d.stu.id,[title]);
+  renderScanSection();
+  toast(`已補登記 ${d.stu.name}：${title}`,'ok');
 }
 
-function updateStudentCoursesByStuId(stuId,ri){
-  const item=_scanReg[ri];if(!item)return;
-  const list=getStudentList();
-  const s=list.find(x=>x.id===stuId);if(!s)return;
-  s.courses=item.courses;
-  saveStudentList(list);
-  ensureEnrollments(s.id,item.courses);
-  renderScanSection();renderStudents();
-  toast(`已更新 ${s.name}（${s.grade}）的課程`,'ok');
+function reconEnrollAll(di){
+  const d=_recon?.diffs[di];if(!d)return;
+  const n=ensureEnrollments(d.stu.id,d.missing);
+  renderScanSection();
+  toast(`已補登記 ${d.stu.name} 的 ${n} 門課`,'ok');
+}
+
+function reconUnenroll(di,xi){
+  const d=_recon?.diffs[di];if(!d)return;
+  const en=d.extra[xi];if(!en)return;
+  if(!confirm(`確定退課？\n\n${d.stu.name} — ${en.courseTitle}\n\n這門課整個${getCurrentPeriod().label}的行事曆都沒出現他的名字。退課會移除這筆登記（含自訂單價）；之後可在學生編輯加回。`))return;
+  saveEnrollments(getEnrollments().filter(x=>x.id!==en.id));
+  renderScanSection();
+  toast(`已退課：${d.stu.name} — ${en.courseTitle}`,'ok');
 }
 
 function closeScanSection(){
-  scanData=null;_scanUnreg=[];_scanReg=[];
+  scanData=null;_recon=null;
   document.getElementById('stu-scan-sec').style.display='none';
 }
 
@@ -760,6 +767,10 @@ function renderStudentEditPanel(s){
       <span class="stu-edit-courses-lbl">修課（${getCurrentPeriod().label}）</span>
       <div id="edit-courses-${s.id}" class="stu-edit-courses-body">${buildEditCoursesHtml(s.id)}</div>
     </div>
+    <div class="stu-edit-danger">
+      <button class="stu-edit-del-btn" onclick="openDeleteModal(${s.id})">🗑️ 徹底刪除此學生</button>
+      <span class="stu-edit-danger-hint">永久移除（含所有學期的修課登記），不可復原。給清測試帳號／重複資料用。</span>
+    </div>
   </div></div>`;
 }
 
@@ -808,6 +819,39 @@ function confirmStatusChange(){
   renderStudents();
   const labelMap={在學:'復學（在學）',畢業:'畢業',離開:'離開',暫停:'暫停'};
   toast(`已將 ${s.name} 設為${labelMap[s.status]}`,'ok');
+}
+
+// ── 徹底刪除學生（硬刪除，不可復原）──
+// 與「變更狀態」的軟刪除不同：軟刪除只改 status 搬到歷屆、資料還在；
+// 這裡把學生本人 + 其所有學期的修課登記從 Firestore 永久移除，給清測試帳號／重複資料用。
+// 注意：makeupScheduled 以名字字串記缺席者、無 id 連結，不在此清理（屬 Calendar 衍生的歷史，另循對帳/北極星處理）。
+var deleteModalCtx={studentId:null};
+function openDeleteModal(studentId){
+  const s=getStudentList().find(x=>x.id===studentId);
+  if(!s)return;
+  deleteModalCtx={studentId};
+  const enrollCount=getEnrollments().filter(e=>e.studentId===studentId).length;
+  document.getElementById('delete-modal-info').innerHTML=
+    `即將永久刪除 <b>${esc(s.name)}（${esc(s.grade)}）</b>，連同其 <b>${enrollCount}</b> 筆修課登記（所有學期）。<br>此動作<b>不可復原</b>，也不會進歷屆。`;
+  document.getElementById('delete-modal-confirm').value='';
+  document.getElementById('delete-modal-wrap').classList.add('open');
+  requestAnimationFrame(()=>document.getElementById('delete-modal-confirm')?.focus());
+}
+function closeDeleteModal(){
+  document.getElementById('delete-modal-wrap').classList.remove('open');
+  deleteModalCtx={studentId:null};
+}
+function confirmDeleteStudent(){
+  const s=getStudentList().find(x=>x.id===deleteModalCtx.studentId);
+  if(!s)return;
+  const typed=document.getElementById('delete-modal-confirm').value.trim();
+  if(typed!==s.name)return toast(`請輸入「${s.name}」以確認刪除`,'err');
+  saveStudentList(getStudentList().filter(x=>x.id!==s.id));
+  saveEnrollments(getEnrollments().filter(e=>e.studentId!==s.id));
+  closeDeleteModal();
+  stuEditId=null;_editEnrollments=[];
+  renderStudents();
+  toast(`已徹底刪除 ${s.name}（${s.grade}）`,'ok');
 }
 
 // ── 升年級批次 ──
