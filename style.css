@@ -640,6 +640,13 @@ body.hide-todo-chip .stu-info-chip{display:none}
   .stu-card-act-btn{font-size:13px;padding:5px 7px}
   .stu-edit-btn{opacity:1}
 
+  /* 學生編輯面板：窄螢幕垂直堆疊，避免姓名列按鈕與家長電話被切掉 */
+  .stu-edit-input{flex:1 1 100%;min-width:0}        /* 姓名獨佔一行 */
+  .stu-edit-select{flex:1 1 auto}                    /* 年級 + 按鈕排第二行 */
+  .stu-edit-save,.stu-edit-cancel{flex:0 0 auto}
+  .stu-edit-info-row{flex-direction:column;align-items:stretch;gap:12px}
+  .stu-edit-info-row label{flex:none;min-width:0;width:100%}  /* 學校/出生年/家長電話改直排 */
+
   /* 請假面板與彈窗：按鈕加大、內距收斂 */
   .abs-opt{padding:9px 16px}
   .abs-confirm{flex-wrap:wrap}

@@ -209,7 +209,7 @@ if ('serviceWorker' in navigator) {
     <div id="panel-students" class="panel" style="display:none">
       <div class="stu-panel-hd">
         <h2>學生管理</h2>
-        <div style="display:flex;gap:8px">
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
           <button class="btn btns" id="btn-toggle-todo-chip" onclick="toggleTodoChipVisibility()" title="切換顯示/隱藏「待補資料」提示">🔕 待補提示</button>
           <button class="btn btns" onclick="batchPromoteGrade()" title="國一~高二 +1、國三→高一、高三→畢業；國小/大學跳過">📅 升年級</button>
           <button class="btn btns" onclick="openPriceModal()" title="每門課的預設每堂單價；個別學生的優惠價在學生編輯裡設定">💰 價目表</button>
