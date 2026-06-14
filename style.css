@@ -347,7 +347,7 @@ input[type=date]:focus{border-color:var(--ac)}
 .tcard-mk{padding:3px 9px;border-radius:5px;font-size:11px;display:inline-flex;align-items:center;gap:6px;position:relative;z-index:2}
 .tcard-mk .l{font-size:9.5px;font-weight:700;letter-spacing:.08em;opacity:.7}
 .tcard-mk.mk-arr{background:#dcfce7;color:#166534;border:1px solid #86efac}
-.tcard-mk.mk-un{background:#fee2e2;color:#991b1b;border:1px solid #fca5a5}
+.tcard-mk.mk-un{background:#F8EDEA;color:#C0504A;border:1px solid #E8C5BF}
 
 /* ── W4 Week: day summary chips + focus day ── */
 .wsum-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:8px;margin-bottom:14px}
@@ -451,7 +451,7 @@ body.hide-todo-chip .stu-info-chip{display:none}
 .stu-pair-makeup.done{color:var(--ac)}
 .stu-pair-makeup.owed{color:#c0392b}
 .stu-pair-makeup.owed.link{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}
-.stu-pair-makeup.owed.link:hover{color:#a93226}
+.stu-pair-makeup.owed.link:hover{color:#C0504A}
 .stu-pair-makeup.pending{color:#92400e}
 /* ── Student edit ── */
 .stu-edit-btn{font-size:11px;color:var(--tx3);background:none;border:none;cursor:pointer;padding:2px 6px;border-radius:4px;opacity:0;transition:opacity .12s}
@@ -513,25 +513,25 @@ body.hide-todo-chip .stu-info-chip{display:none}
 .stu-scan-upd:hover{background:var(--il)}
 /* ── 學生編輯：危險區（徹底刪除） ── */
 .stu-edit-danger{display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:12px;border-top:1px dashed var(--br);flex-wrap:wrap}
-.stu-edit-del-btn{padding:5px 12px;border-radius:var(--rs);border:1.5px solid #E5B7B2;background:#fff;color:#A93226;cursor:pointer;font-size:12px;font-family:inherit;font-weight:500;white-space:nowrap;transition:all .12s}
-.stu-edit-del-btn:hover{background:#A93226;color:#fff;border-color:#A93226}
+.stu-edit-del-btn{padding:5px 12px;border-radius:var(--rs);border:1.5px solid #E8C5BF;background:#fff;color:#C0504A;cursor:pointer;font-size:12px;font-family:inherit;font-weight:500;white-space:nowrap;transition:all .12s}
+.stu-edit-del-btn:hover{background:#C0504A;color:#fff;border-color:#C0504A}
 .stu-edit-danger-hint{font-size:11px;color:var(--tx3);flex:1;min-width:160px}
 .del-modal-confirm-input{width:100%;padding:8px 10px;border:1.5px solid var(--br);border-radius:var(--rs);font-family:inherit;font-size:14px;box-sizing:border-box;color:var(--tx)}
-.del-modal-confirm-input:focus{outline:none;border-color:#A93226}
+.del-modal-confirm-input:focus{outline:none;border-color:#C0504A}
 /* ── 課表對帳 ── */
 .recon-chips{display:flex;flex-wrap:wrap;gap:5px}
 .recon-chip{display:inline-flex;align-items:center;font-size:11.5px;font-family:inherit;padding:3px 10px;border-radius:99px;cursor:pointer;transition:all .12s;line-height:1.4}
-.recon-chip.add{background:#E7F4EC;color:#1F7A4D;border:1.5px solid #BCE3CC}
-.recon-chip.add:hover{background:#1F7A4D;color:#fff;border-color:#1F7A4D}
-.recon-chip.rm{background:#FDEDEC;color:#A93226;border:1.5px solid #F5C6C2}
-.recon-chip.rm:hover{background:#A93226;color:#fff;border-color:#A93226}
+.recon-chip.add{background:#E3F0E8;color:#5C7E6A;border:1.5px solid #BCD3C6}
+.recon-chip.add:hover{background:#5C7E6A;color:#fff;border-color:#5C7E6A}
+.recon-chip.rm{background:#F8EDEA;color:#C0504A;border:1.5px solid #E8C5BF}
+.recon-chip.rm:hover{background:#C0504A;color:#fff;border-color:#C0504A}
 .recon-hint{font-size:11px;color:var(--tx3);margin-top:6px}
-.recon-allclear{font-size:14px;font-weight:600;color:#1F7A4D;padding:8px 0}
-.recon-ok-line{font-size:12px;color:#1F7A4D;padding-top:4px;border-top:1px dashed var(--br)}
+.recon-allclear{font-size:14px;font-weight:600;color:#5C7E6A;padding:8px 0}
+.recon-ok-line{font-size:12px;color:#5C7E6A;padding-top:4px;border-top:1px dashed var(--br)}
 .stu-courses{padding:4px 0 8px;display:flex;flex-wrap:wrap;gap:4px;border-bottom:1px solid var(--br);margin-bottom:2px}
 .stu-course-tag{font-size:11px;background:var(--il);color:var(--in);padding:2px 8px;border-radius:99px}
 .stu-course-price{margin-left:6px;font-size:10px;color:var(--in);opacity:.75}
-.stu-course-price.undef{color:#991b1b;opacity:1}
+.stu-course-price.undef{color:#C0504A;opacity:1}
 /* ── 課程價目表 modal ── */
 .price-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px dashed var(--br)}
 .price-row-title{flex:1;font-size:13px;color:var(--tx);font-weight:500}
@@ -584,11 +584,11 @@ body.hide-todo-chip .stu-info-chip{display:none}
 .tl-corner{border-bottom:1px solid var(--br)}
 .tl-hdr{position:relative;height:26px;border-bottom:1px solid var(--br)}
 .tl-tick{position:absolute;transform:translateX(-50%);font-size:9.5px;color:var(--tx3);top:7px;white-space:nowrap;font-family:'DM Mono',monospace}
-.tl-now-hdr-lbl{position:absolute;transform:translateX(-50%);font-size:12px;color:#ef4444;top:3px;white-space:nowrap;pointer-events:none;line-height:1}
+.tl-now-hdr-lbl{position:absolute;transform:translateX(-50%);font-size:12px;color:#C0504A;top:3px;white-space:nowrap;pointer-events:none;line-height:1}
 .tl-room-lbl{padding:0 8px;display:flex;align-items:center;height:34px;font-size:11px;color:var(--tx2);border-bottom:1px solid var(--br);font-weight:500;flex-shrink:0}
 .tl-track{position:relative;height:34px;border-bottom:1px solid var(--br);overflow:hidden}
 .tl-vline{position:absolute;top:0;bottom:0;width:1px;background:var(--br);pointer-events:none}
-.tl-now-line{position:absolute;top:0;bottom:0;width:1.5px;background:#ef4444;opacity:.65;pointer-events:none;z-index:2}
+.tl-now-line{position:absolute;top:0;bottom:0;width:1.5px;background:#C0504A;opacity:.65;pointer-events:none;z-index:2}
 .tl-block{position:absolute;top:3px;bottom:3px;border-radius:3px;overflow:hidden;cursor:pointer;transition:filter .15s;min-width:4px;z-index:1}
 .tl-block:hover{filter:brightness(.88)}
 .tl-block-nm{font-size:10px;font-weight:600;padding:0 5px;line-height:1.5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
