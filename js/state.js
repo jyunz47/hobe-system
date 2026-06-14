@@ -22,6 +22,7 @@ var absState={};
 var makeupList=[];
 var driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[]};
 var driveSaveTimer=null;
+var drivePendingSave=false; // 本機是否有尚未寫入 Firestore 的改動（refreshCurrent 重讀前用來決定要不要先 flush）
 var makeupMatchMap=new Map(); // absenceEventId → {calEventId,scheduledDate,scheduledEnd,room,origTitle,absentStudents}
 var selectedWeekEvent=null;
 var weekOffset=0; // 0=this week, -1=last week, +1=next week

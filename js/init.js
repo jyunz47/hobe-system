@@ -228,10 +228,10 @@ async function loadFromFirestore(){
   }
 }
 
-function scheduleDriveSave(){clearTimeout(driveSaveTimer);driveSaveTimer=setTimeout(saveToFirestore,1500);}
+function scheduleDriveSave(){drivePendingSave=true;clearTimeout(driveSaveTimer);driveSaveTimer=setTimeout(saveToFirestore,1500);}
 
 async function saveToFirestore(){
-  try{await SHARED_DOC.set(driveData,{merge:true});}
+  try{await SHARED_DOC.set(driveData,{merge:true});drivePendingSave=false;}
   catch(e){console.error('saveToFirestore failed',e);}
 }
 
@@ -264,8 +264,30 @@ function showPanel(id){
   document.getElementById('tbs').textContent=s;
 }
 
-function refreshCurrent(){
-  if(currentPanel==='courses')Promise.all([loadToday(),loadWeek()]);
-  if(currentPanel==='makeup')loadMakeup();
-  if(currentPanel==='students')renderStudents();
+// token 是否已過期（gapi 沒 token、或 sessionStorage 記錄的 expires_at 已到）
+function isTokenExpired(){
+  if(!gapi.client.getToken())return true;
+  try{
+    const t=JSON.parse(sessionStorage.getItem('gtoken')||'null');
+    return !t||t.expires_at<=Date.now();
+  }catch(e){return true;}
+}
+
+async function refreshCurrent(){
+  // token 過期：明確提示 + 給重新授權連結，不再靜默失敗
+  if(isTokenExpired()){
+    toast('授權已過期','inf',true);
+    return;
+  }
+  showL('更新中…');
+  try{
+    if(drivePendingSave)await saveToFirestore();   // 先把本機待存改動寫上去，避免被雲端舊值蓋掉
+    await loadFromFirestore();                       // 三頁都先重讀雲端最新（學生／修課／補課）
+    if(currentPanel==='courses')await Promise.all([loadToday(),loadWeek()]);
+    else if(currentPanel==='makeup'){await loadMakeup(true);populateMkFilters();renderMakeup();}
+    else if(currentPanel==='students')renderStudents();
+    hideL();toast('已更新','ok');
+  }catch(e){
+    hideL();toast('更新失敗：'+(e?.message||e),'err');
+  }
 }
