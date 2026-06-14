@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <circle cx="100" cy="100" r="95" fill="#1F1C19" stroke="#C8B89A" stroke-width="9"/>
+  <text x="100" y="103" text-anchor="middle" dominant-baseline="central"
+        font-family="Georgia, 'Times New Roman', serif" font-size="160" font-weight="500" fill="#C8B89A">H</text>
+</svg>

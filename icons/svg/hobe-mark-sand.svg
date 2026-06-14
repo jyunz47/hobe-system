@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200">
+  <circle cx="100" cy="100" r="86" fill="none" stroke="#C8B89A" stroke-width="2.5"></circle>
+  <circle cx="100" cy="100" r="73" fill="none" stroke="#C8B89A" stroke-width="1"></circle>
+  <text x="100" y="107" text-anchor="middle" dominant-baseline="central" font-family="&#39;Newsreader&#39;, Georgia, serif" font-size="98" font-weight="500" fill="#C8B89A">H</text>
+</svg>
