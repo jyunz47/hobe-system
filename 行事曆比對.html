@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>行事曆比對</title>
+<style>
+  :root{
+    --bg:#FBF7F0; --card:#FFFFFF; --ink:#3A332B; --muted:#9E9A93;
+    --line:#EDE6DA; --accent:#C4622D; --a:#2D5A8C; --b:#8C5A2D;
+    --only-a:#3B6EA5; --only-b:#B5772E; --diff:#C0392B; --same:#2D7A4D;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,"Segoe UI","Noto Sans TC",sans-serif;
+    background:var(--bg);color:var(--ink);font-size:14px;line-height:1.5}
+  header{background:#2B2620;color:#F5EFE5;padding:14px 20px;font-size:17px;font-weight:600}
+  .wrap{max-width:1000px;margin:0 auto;padding:20px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:16px 18px;margin-bottom:16px;box-shadow:0 1px 3px rgba(0,0,0,.04)}
+  .row{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+  .field{display:flex;flex-direction:column;gap:4px}
+  label{font-size:12px;color:var(--muted)}
+  select,input[type=date]{padding:8px 10px;border:1px solid var(--line);border-radius:8px;
+    background:#fff;font-size:14px;color:var(--ink);min-width:180px}
+  button{padding:9px 18px;border:none;border-radius:8px;background:var(--accent);
+    color:#fff;font-size:14px;font-weight:600;cursor:pointer}
+  button:disabled{opacity:.5;cursor:not-allowed}
+  button.ghost{background:#fff;border:1px solid var(--line);color:var(--ink)}
+  .hint{color:var(--muted);font-size:12px;margin-top:8px}
+  .summary{display:flex;gap:18px;flex-wrap:wrap;margin-bottom:8px}
+  .pill{font-size:13px;font-weight:600;padding:3px 10px;border-radius:20px}
+  .pill.a{background:#E8F0F8;color:var(--only-a)}
+  .pill.b{background:#FBEEDD;color:var(--only-b)}
+  .pill.d{background:#FBE6E3;color:var(--diff)}
+  .pill.s{background:#E4F3E9;color:var(--same)}
+  .section-title{font-weight:600;margin:18px 0 8px;font-size:15px}
+  .ev{padding:8px 12px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;background:#fff}
+  .ev .t{font-weight:600}
+  .ev .meta{color:var(--muted);font-size:12px;margin-top:2px}
+  .ev.a-side{border-left:3px solid var(--only-a)}
+  .ev.b-side{border-left:3px solid var(--only-b)}
+  .ev.d-side{border-left:3px solid var(--diff)}
+  .delta{font-size:12px;margin-top:4px}
+  .delta .k{color:var(--muted)}
+  .delta .va{color:var(--only-a)}
+  .delta .vb{color:var(--only-b)}
+  .empty{color:var(--muted);font-style:italic;padding:4px 0}
+  #status{color:var(--muted);font-size:13px;margin-left:8px}
+  .tabs{display:flex;gap:8px;margin-bottom:16px}
+  .tab{padding:8px 16px;border:1px solid var(--line);border-radius:20px;background:#fff;
+    cursor:pointer;font-weight:600;color:var(--muted);font-size:13px}
+  .tab.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  input[type=file]{font-size:13px;max-width:230px}
+  .badge{display:inline-block;font-size:11px;background:#F0E9DC;color:#8a7a5a;
+    padding:1px 6px;border-radius:10px;margin-left:6px}
+</style>
+</head>
+<body>
+<header>📅 行事曆比對工具</header>
+<div class="wrap">
+
+  <div class="tabs">
+    <div class="tab active" id="tab-google" onclick="switchMode('google')">Google 行事曆</div>
+    <div class="tab" id="tab-ics" onclick="switchMode('ics')">.ics 檔比對</div>
+  </div>
+
+  <div id="mode-google">
+  <div class="card" id="login-card">
+    <button id="signin-btn">用 Google 登入授權</button>
+    <span id="status"></span>
+    <div class="hint">沿用本系統的 OAuth（localhost:8080 已授權），只讀取行事曆、不會改任何資料。</div>
+  </div>
+
+  <div class="card" id="controls" style="display:none">
+    <div class="row">
+      <div class="field">
+        <label>行事曆 A</label>
+        <select id="calA"></select>
+      </div>
+      <div class="field">
+        <label>行事曆 B</label>
+        <select id="calB"></select>
+      </div>
+      <div class="field">
+        <label>起始日</label>
+        <input type="date" id="start">
+      </div>
+      <div class="field">
+        <label>結束日</label>
+        <input type="date" id="end">
+      </div>
+      <button id="compare-btn">比對</button>
+    </div>
+    <div class="hint">比對方式：以「標題 + 開始時間」配對；同一筆若結束時間 / 地點 / 說明不同，歸到「細節不同」。會自動展開重複性事件。</div>
+  </div>
+  </div><!-- /mode-google -->
+
+  <div id="mode-ics" style="display:none">
+    <div class="card">
+      <div class="row">
+        <div class="field"><label>行事曆 A（.ics）</label><input type="file" id="fileA" accept=".ics"></div>
+        <div class="field"><label>行事曆 B（.ics）</label><input type="file" id="fileB" accept=".ics"></div>
+        <button id="ics-compare-btn">比對</button>
+      </div>
+      <div class="hint">
+        匯出方式 — <b>Google</b>：設定 → 匯入及匯出 → 匯出（下載 zip，解壓縮後挑對應 .ics）；
+        <b>Mac 行事曆</b>：選取行事曆 → 檔案 → 輸出 → 輸出…。<br>
+        純本機解析、不上傳。比對檔案內所有事件（要縮小範圍就匯出較短區間）；重複性事件比的是「規則」,會標 🔁。
+      </div>
+    </div>
+  </div><!-- /mode-ics -->
+
+  <div id="results"></div>
+
+</div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://apis.google.com/js/api.js" async defer></script>
+<script>
+// ── 沿用主系統設定 ──
+const CLIENT_ID='729031557572-tjn0hoiph1b0dbkp57lut0l6ekshm629.apps.googleusercontent.com';
+const SCOPES='https://www.googleapis.com/auth/calendar.readonly';
+const DISCOVERY_DOC='https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
+
+let tokenClient=null, gapiReady=false, calendars=[];
+const $=id=>document.getElementById(id);
+const status=t=>{$('status').textContent=t;};
+
+window.addEventListener('load',()=>{
+  const ck=setInterval(()=>{if(window.google&&window.gapi){clearInterval(ck);init();}},100);
+  // 預設日期：今天 → 今天+60 天
+  const today=new Date(), later=new Date(Date.now()+60*86400000);
+  $('start').value=ymd(today); $('end').value=ymd(later);
+});
+
+function ymd(d){return d.toISOString().slice(0,10);}
+
+async function init(){
+  await new Promise(r=>gapi.load('client',r));
+  await gapi.client.init({discoveryDocs:[DISCOVERY_DOC]});
+  gapiReady=true;
+  tokenClient=google.accounts.oauth2.initTokenClient({
+    client_id:CLIENT_ID, scope:SCOPES,
+    callback:async resp=>{
+      if(resp.error){status('授權失敗：'+resp.error);return;}
+      status('已授權，載入行事曆清單…');
+      await loadCalendars();
+    }
+  });
+  $('signin-btn').onclick=()=>{tokenClient.requestAccessToken({prompt:''});};
+  $('compare-btn').onclick=compare;
+  $('ics-compare-btn').onclick=icsCompare;
+}
+
+function switchMode(m){
+  $('tab-google').classList.toggle('active',m==='google');
+  $('tab-ics').classList.toggle('active',m==='ics');
+  $('mode-google').style.display=m==='google'?'block':'none';
+  $('mode-ics').style.display=m==='ics'?'block':'none';
+  $('results').innerHTML='';
+}
+
+async function loadCalendars(){
+  const r=await gapi.client.calendar.calendarList.list({maxResults:250});
+  calendars=(r.result.items||[]).sort((a,b)=>(a.summary||'').localeCompare(b.summary||'','zh-Hant'));
+  const opts=calendars.map(c=>`<option value="${c.id}">${c.summary||c.id}</option>`).join('');
+  $('calA').innerHTML=opts; $('calB').innerHTML=opts;
+  if(calendars.length>1)$('calB').selectedIndex=1;
+  $('login-card').style.display='none';
+  $('controls').style.display='block';
+}
+
+// 抓某行事曆在範圍內所有事件（展開重複性、處理分頁）
+async function fetchEvents(calId,timeMin,timeMax){
+  let items=[], pageToken;
+  do{
+    const r=await gapi.client.calendar.events.list({
+      calendarId:calId, timeMin, timeMax,
+      singleEvents:true, orderBy:'startTime', maxResults:2500,
+      showDeleted:false, pageToken
+    });
+    items=items.concat(r.result.items||[]);
+    pageToken=r.result.nextPageToken;
+  }while(pageToken);
+  return items;
+}
+
+function norm(e){
+  const s=e.start?.dateTime||e.start?.date||'';
+  const en=e.end?.dateTime||e.end?.date||'';
+  const allDay=!!e.start?.date;
+  const startKey=e.start?.dateTime?String(new Date(s).getTime()):s; // 全天用日期字串
+  return{
+    id:e.id, title:(e.summary||'(無標題)').trim(),
+    start:s, end:en, allDay,
+    location:(e.location||'').trim(),
+    desc:(e.description||'').trim(),
+    recurring:!!e.recurring,
+    key:(e.summary||'(無標題)').trim()+'|'+startKey
+  };
+}
+
+// ── .ics 解析（RFC 5545，純本機）──
+function unesc(s){return(s||'').replace(/\\n/gi,'\n').replace(/\\,/g,',').replace(/\\;/g,';').replace(/\\\\/g,'\\');}
+
+function parseICS(text){
+  // 解除折行：續行以空白/tab 開頭，接回上一行
+  const unfolded=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').replace(/\n[ \t]/g,'');
+  const events=[]; let cur=null;
+  for(const line of unfolded.split('\n')){
+    if(line==='BEGIN:VEVENT'){cur={};continue;}
+    if(line==='END:VEVENT'){if(cur)events.push(cur);cur=null;continue;}
+    if(!cur)continue;
+    const idx=line.indexOf(':'); if(idx<0)continue;
+    const left=line.slice(0,idx), value=line.slice(idx+1);
+    const semi=left.indexOf(';');
+    const name=(semi<0?left:left.slice(0,semi)).toUpperCase();
+    const params={};
+    if(semi>=0)left.slice(semi+1).split(';').forEach(p=>{const[k,v]=p.split('=');if(k)params[k.toUpperCase()]=v;});
+    cur[name]={value,params};
+  }
+  return events;
+}
+
+function icsDate(prop){
+  if(!prop)return null;
+  const v=prop.value;
+  if(prop.params.VALUE==='DATE'||/^\d{8}$/.test(v))
+    return{date:`${v.slice(0,4)}-${v.slice(4,6)}-${v.slice(6,8)}`};
+  const m=v.match(/^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(Z)?$/);
+  if(!m)return{dateTime:v};
+  return{dateTime:`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}${m[7]||''}`};
+}
+
+// 轉成跟 Google event 同形狀，之後直接餵 norm()
+function icsToEvent(ve){
+  const s=icsDate(ve.DTSTART), e=icsDate(ve.DTEND)||s;
+  return{
+    summary:unesc(ve.SUMMARY?.value||''),
+    location:unesc(ve.LOCATION?.value||''),
+    description:unesc(ve.DESCRIPTION?.value||''),
+    start:s||{}, end:e||{}, recurring:!!ve.RRULE
+  };
+}
+
+function readFile(f){return new Promise((res,rej)=>{const r=new FileReader();r.onload=()=>res(r.result);r.onerror=rej;r.readAsText(f);});}
+
+async function icsCompare(){
+  const fa=$('fileA').files[0], fb=$('fileB').files[0];
+  if(!fa||!fb){$('results').innerHTML='<div class="card empty">請選兩個 .ics 檔。</div>';return;}
+  $('ics-compare-btn').disabled=true; $('results').innerHTML='<div class="card">解析中…</div>';
+  try{
+    const[ta,tb]=await Promise.all([readFile(fa),readFile(fb)]);
+    const A=parseICS(ta).map(icsToEvent).filter(e=>e.start.date||e.start.dateTime).map(norm);
+    const B=parseICS(tb).map(icsToEvent).filter(e=>e.start.date||e.start.dateTime).map(norm);
+    runDiff(fa.name.replace(/\.ics$/i,''),fb.name.replace(/\.ics$/i,''),A,B);
+  }catch(e){
+    $('results').innerHTML='<div class="card empty">解析失敗：'+(e?.message||e)+'</div>';
+  }finally{$('ics-compare-btn').disabled=false;}
+}
+
+function fmtTime(e){
+  if(e.allDay)return e.start+'（全天）';
+  const d=new Date(e.start), de=new Date(e.end);
+  const p=n=>String(n).padStart(2,'0');
+  const day=`${d.getFullYear()}/${p(d.getMonth()+1)}/${p(d.getDate())}`;
+  return `${day} ${p(d.getHours())}:${p(d.getMinutes())}–${p(de.getHours())}:${p(de.getMinutes())}`;
+}
+
+function diffFields(a,b){
+  const out=[];
+  if(a.end!==b.end)out.push(['結束時間',fmtTime(a),fmtTime(b)]);
+  if(a.location!==b.location)out.push(['地點',a.location||'(空)',b.location||'(空)']);
+  if(a.desc!==b.desc)out.push(['說明',(a.desc||'(空)').slice(0,80),(b.desc||'(空)').slice(0,80)]);
+  return out;
+}
+
+async function compare(){
+  const idA=$('calA').value, idB=$('calB').value;
+  const nameA=calendars.find(c=>c.id===idA)?.summary||idA;
+  const nameB=calendars.find(c=>c.id===idB)?.summary||idB;
+  if(idA===idB){$('results').innerHTML='<div class="card empty">兩邊選了同一個行事曆，請挑不同的。</div>';return;}
+  const timeMin=new Date($('start').value+'T00:00:00').toISOString();
+  const timeMax=new Date($('end').value+'T23:59:59').toISOString();
+  $('compare-btn').disabled=true; $('results').innerHTML='<div class="card">比對中…</div>';
+  try{
+    const [rawA,rawB]=await Promise.all([fetchEvents(idA,timeMin,timeMax),fetchEvents(idB,timeMin,timeMax)]);
+    runDiff(nameA,nameB,rawA.map(norm),rawB.map(norm));
+  }catch(e){
+    $('results').innerHTML='<div class="card empty">出錯了：'+(e?.result?.error?.message||e?.message||e)+'</div>';
+  }finally{$('compare-btn').disabled=false;}
+}
+
+// 共用比對核心：A、B 為已 norm 過的事件陣列
+function runDiff(nameA,nameB,A,B){
+  const mapA=new Map(), mapB=new Map();
+  A.forEach(e=>{(mapA.get(e.key)||mapA.set(e.key,[]).get(e.key)).push(e);});
+  B.forEach(e=>{(mapB.get(e.key)||mapB.set(e.key,[]).get(e.key)).push(e);});
+  const onlyA=[], onlyB=[], diff=[]; let same=0;
+  const keys=new Set([...mapA.keys(),...mapB.keys()]);
+  keys.forEach(k=>{
+    const as=mapA.get(k)||[], bs=mapB.get(k)||[];
+    const n=Math.max(as.length,bs.length);
+    for(let i=0;i<n;i++){
+      const a=as[i], b=bs[i];
+      if(a&&!b)onlyA.push(a);
+      else if(b&&!a)onlyB.push(b);
+      else{const d=diffFields(a,b);if(d.length)diff.push({a,b,d});else same++;}
+    }
+  });
+  render(nameA,nameB,onlyA,onlyB,diff,same,A.length,B.length);
+}
+
+function rec(e){return e.recurring?'<span class="badge">🔁重複規則</span>':'';}
+function evCard(e,cls){
+  return `<div class="ev ${cls}"><div class="t">${esc(e.title)}${rec(e)}</div><div class="meta">${fmtTime(e)}${e.location?' · '+esc(e.location):''}</div></div>`;
+}
+function diffCard(o,nameA,nameB){
+  const rows=o.d.map(([k,va,vb])=>`<div class="delta"><span class="k">${k}：</span><span class="va">${esc(va)}</span> → <span class="vb">${esc(vb)}</span></div>`).join('');
+  return `<div class="ev d-side"><div class="t">${esc(o.a.title)}${rec(o.a)}</div><div class="meta">${fmtTime(o.a)}</div>${rows}</div>`;
+}
+function esc(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+
+function render(nameA,nameB,onlyA,onlyB,diff,same,totA,totB){
+  const list=(arr,fn)=>arr.length?arr.map(fn).join(''):'<div class="empty">無</div>';
+  $('results').innerHTML=`
+    <div class="card">
+      <div class="summary">
+        <span class="pill a">只在 ${esc(nameA)}：${onlyA.length}</span>
+        <span class="pill b">只在 ${esc(nameB)}：${onlyB.length}</span>
+        <span class="pill d">細節不同：${diff.length}</span>
+        <span class="pill s">完全相同：${same}</span>
+      </div>
+      <div class="hint">${esc(nameA)} 共 ${totA} 筆、${esc(nameB)} 共 ${totB} 筆（重複性事件已展開）</div>
+
+      <div class="section-title">🔵 只在 ${esc(nameA)}</div>
+      ${list(onlyA,e=>evCard(e,'a-side'))}
+
+      <div class="section-title">🟠 只在 ${esc(nameB)}</div>
+      ${list(onlyB,e=>evCard(e,'b-side'))}
+
+      <div class="section-title">🔴 兩邊都有，但細節不同</div>
+      ${list(diff,o=>diffCard(o,nameA,nameB))}
+    </div>`;
+}
+</script>
+</body>
+</html>
