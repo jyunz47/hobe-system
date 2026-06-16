@@ -21,11 +21,24 @@ function changeWeek(delta){
 }
 
 // ── 載入本週 ──
-async function loadWeek(){
-  if(!gapi.client.getToken())return;
+// 依 weekOffset 算出目前顯示週的週一（loadWeek 與重繪共用同一套邏輯）
+function currentMonday(){
   const now=new Date();
   const day=now.getDay();
   const mon=new Date(now);mon.setDate(now.getDate()-(day===0?6:day-1)+weekOffset*7);mon.setHours(0,0,0,0);
+  return mon;
+}
+
+// 修課登記簿異動後即時重繪今日/本週課程卡（用現有事件資料，不重打 Calendar API）
+// 讓卡片名冊（eventRoster 讀登記簿）馬上反映，免得還要手動按「↻ 更新」
+function refreshCourseCards(){
+  if(typeof dayEvents!=='undefined'&&dayEvents.length&&typeof renderToday==='function')renderToday();
+  if(typeof weekEvents!=='undefined'&&weekEvents.length&&typeof renderWeek==='function')renderWeek(currentMonday());
+}
+
+async function loadWeek(){
+  if(!gapi.client.getToken())return;
+  const mon=currentMonday();
   const sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
   try{
     const all=await Promise.all(Object.entries(calendarIds).map(async([name,id])=>{
@@ -140,7 +153,8 @@ function wcardHtml(e){
   const stat=
     e.status==='now'?'<span class="tstat tstat-now"><span class="ndot"></span>進行中</span>':
     e.status==='past'?'<span class="tstat tstat-past">已結束</span>':'';
-  const stuTxt=e.students.length===0?'—':e.students.length<=2?e.students.join('、'):`${e.students.length} 人`;
+  const roster=eventRoster(e);
+  const stuTxt=roster.length===0?'—':roster.length<=2?roster.join('、'):`${roster.length} 人`;
   const absInline=e.isRescheduled?`<div class="tcard-abs"><span class="l">調課</span>${e.rescheduleReason?esc(e.rescheduleReason):'未輸入原因'}</div>`:
     `${e.isAbsent?`<div class="tcard-abs"><span class="l">請假</span>${e.absType==='老師請假'?'老師請假':esc(e.absentStudents.join('、'))+'請假'}</div>`:''}${e.isNoShow?`<div class="tcard-abs"><span class="l">曠課</span>${esc(e.noShowStudents.join('、'))}</div>`:''}`;
   const noteInline=e.notes?`<div class="tcard-note"><span class="l">備註</span>${esc(e.notes)}</div>`:'';

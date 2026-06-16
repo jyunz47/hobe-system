@@ -595,7 +595,7 @@ function saveStudentEdit(id){
     if(r.id){const en=ens.find(x=>x.id===r.id);if(en)en.price=r.price;}
     else ens.push(makeEnrollment({studentId:id,courseTitle:r.courseTitle,periodId:pid,price:r.price}));
   });
-  driveData.enrollments=ens;
+  saveEnrollments(ens);   // 寫回登記簿 + 即時重繪課程卡（不必手動按更新）
   saveStudentList(list);
   stuEditId=null;_editEnrollments=[];
   renderStudents();

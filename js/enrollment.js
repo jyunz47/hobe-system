@@ -23,7 +23,22 @@ function getEnrollments(filter){
     (filter.periodId==null||en.periodId===filter.periodId)&&
     (filter.courseTitle==null||en.courseTitle===filter.courseTitle));
 }
-function saveEnrollments(list){driveData.enrollments=list;scheduleDriveSave();}
+function saveEnrollments(list){driveData.enrollments=list;scheduleDriveSave();refreshCourseCards();}
+
+// ── 課程卡名冊：以登記簿為事實來源，查無登記時 fallback 回備註解析 ──
+// 卡片顯示「誰修這門課」改讀本期 enrollments（依課名＋本期反查 studentId → 姓名），
+// 不再只看 Calendar 備註。過渡期：尚未對帳的課登記簿是空的，回 e.students（備註解析）
+// 避免顯示空名單。註：startDate/endDate（插班/中途停課）目前不影響卡片名冊，
+// 僅供學費結算裁切堂數。
+function eventRoster(e){
+  const descNames=e.students||[];
+  if(!e.origTitle)return descNames;
+  const ens=getEnrollments({courseTitle:e.origTitle,periodId:yearPeriodId()});
+  if(!ens.length)return descNames; // 這門課這期沒有登記紀錄（尚未對帳）→ fallback 備註
+  const byId=new Map(getStudentList().map(s=>[s.id,s]));
+  const names=ens.map(en=>byId.get(en.studentId)?.name).filter(Boolean);
+  return names.length?names:descNames;
+}
 
 // id 用單調遞增計數器，同 makeNewStudent 的慣例
 var _lastEnrollmentId=0;
@@ -85,7 +100,7 @@ function ensureEnrollments(studentId,courseTitles){
     ens.push(makeEnrollment({studentId,courseTitle:title,periodId:pid}));
     added++;
   });
-  if(added){driveData.enrollments=ens;scheduleDriveSave();}
+  if(added){driveData.enrollments=ens;scheduleDriveSave();refreshCourseCards();}
   return added;
 }
 

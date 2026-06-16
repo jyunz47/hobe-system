@@ -191,7 +191,8 @@ function heroHtml(e,isNow){
       <div class="thero-prog-txt"><span class="prog-elap">已進行 ${Math.round(elap)} 分</span><span class="prog-remain">剩 ${Math.round(total-elap)} 分</span></div>
     </div>`;
   }
-  const stuRest=e.students.length>4?` <span class="stu-rest">${esc(e.students.slice(0,3).join('、'))}…</span>`:e.students.length>0?` <span class="stu-rest">${esc(e.students.join('、'))}</span>`:'';
+  const roster=eventRoster(e);
+  const stuRest=roster.length>4?` <span class="stu-rest">${esc(roster.slice(0,3).join('、'))}…</span>`:roster.length>0?` <span class="stu-rest">${esc(roster.join('、'))}</span>`:'';
   return `<div class="thero${isNow?'':' next'}" onclick="selectWeekEvent('${id}')">
     <div class="thero-bar" style="background:${tcv}"></div>
     <div class="thero-hd">
@@ -203,7 +204,7 @@ function heroHtml(e,isNow){
     <div class="thero-meta">
       ${e.teacher?`<span><span class="lbl">授課</span><b>${esc(e.teacher)}</b></span>`:''}
       ${e.classroom?`<span><span class="lbl">教室</span><b>${esc(e.classroom)}</b></span>`:''}
-      <span><span class="lbl">學生</span><b>${e.students.length} 人</b>${stuRest}</span>
+      <span><span class="lbl">學生</span><b>${roster.length} 人</b>${stuRest}</span>
     </div>
     ${e.notes?`<div class="thero-note"><span class="l">備註</span>${esc(e.notes)}</div>`:''}
     ${prog}
@@ -224,7 +225,8 @@ function tcardHtml(e){
   const stat=
     e.status==='now'?'<span class="tstat tstat-now"><span class="ndot"></span>進行中</span>':
     e.status==='past'?'<span class="tstat tstat-past">已結束</span>':'';
-  const stuTxt=e.students.length===0?'—':e.students.length<=2?e.students.join('、'):`${e.students.length} 人`;
+  const roster=eventRoster(e);
+  const stuTxt=roster.length===0?'—':roster.length<=2?roster.join('、'):`${roster.length} 人`;
   const absInline=e.isRescheduled?`<div class="tcard-abs"><span class="l">調課</span>${e.rescheduleReason?esc(e.rescheduleReason):'未輸入原因'}</div>`:'';
   const noteInline=e.notes?`<div class="tcard-note"><span class="l">備註</span>${esc(e.notes)}</div>`:'';
   const mkSt=getMkSt(e);
