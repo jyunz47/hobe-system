@@ -12,6 +12,7 @@ async function loadToday(){
       return(r.result.items||[]).map(e=>({...e,_calId:id,_calName:name}));}catch(e){return[];}
     }));
     dayEvents=all.flat().map(parseEv).sort((a,b)=>a.startDt-b.startDt);
+    await loadAttendance();
     hideErr('courses');
     renderTL();
     renderToday();
@@ -231,11 +232,64 @@ function toggleTcard(id){
   document.querySelectorAll('.tcard2.tc-open').forEach(c=>{
     c.classList.remove('tc-open');
     c.querySelector('.abs-panel.open')?.classList.remove('open');
+    const ap=c.querySelector('.att-panel');if(ap)ap.style.display='none';
   });
   if(willOpen)card.classList.add('tc-open');
 }
 function toggleRoster(id){
   const r=document.getElementById('rost-'+id);if(r)r.style.display=r.style.display==='none'?'block':'none';
+}
+
+// ── 點名 ──
+// 可點名 = 課真的有上：非整堂請假/老師請假、非（被移走的）調課原課、非試聽
+function canAttend(e){return !e.isFullAbsent&&!e.isRescheduled&&e.calName!=='試聽';}
+// 點名進度：可點人數（排除請假/曠課/無 id）與其中已標「到」數
+function attSummary(e){
+  const absSet=new Set(e.absentStudents||[]);
+  const noShowSet=new Set(e.noShowStudents||[]);
+  const markable=eventRosterWithId(e).filter(r=>r.studentId!=null&&!absSet.has(r.name)&&!noShowSet.has(r.name));
+  const here=markable.filter(r=>getAtt(e.id,r.studentId)?.status==='到').length;
+  return{here,total:markable.length};
+}
+function attBadgeHtml(e){
+  const s=attSummary(e);
+  if(!s.total)return'';
+  const done=s.here>=s.total;
+  return`<span class="tc-badge att-badge${done?' att-done':''}" id="attbadge-${esc(e.id)}">${done?'✓ 點名完成':'點名 '+s.here+'/'+s.total}</span>`;
+}
+function buildAttPanel(e){
+  const roster=eventRosterWithId(e);
+  if(!roster.length)return'<div class="att-empty">這堂沒有名單</div>';
+  const absSet=new Set(e.absentStudents||[]);
+  const noShowSet=new Set(e.noShowStudents||[]);
+  const rows=roster.map(r=>{
+    const lock=absSet.has(r.name)?'請假':noShowSet.has(r.name)?'曠課':null;
+    if(lock)return`<div class="att-row att-locked"><span class="att-nm struck">${esc(r.name)}</span><span class="att-lock">${lock}</span></div>`;
+    if(r.studentId==null)return`<div class="att-row att-noid"><span class="att-nm">${esc(r.name)}</span><span class="att-hint">需對帳</span></div>`;
+    const rec=getAtt(e.id,r.studentId);
+    const here=rec&&rec.status==='到',miss=rec&&rec.status==='未到';
+    return`<div class="att-row"><span class="att-nm">${esc(r.name)}</span>
+      <span class="att-seg">
+        <button class="att-btn${here?' on-here':''}" onclick="event.stopPropagation();onAtt('${esc(e.id)}',${r.studentId},'到')">到</button>
+        <button class="att-btn att-miss${miss?' on-miss':''}" onclick="event.stopPropagation();onAtt('${esc(e.id)}',${r.studentId},'未到')">未到</button>
+      </span></div>`;
+  }).join('');
+  return`<div class="att-list">${rows}</div>`;
+}
+function toggleAttPanel(id){
+  const p=document.getElementById('attp-'+id);if(!p)return;
+  if(p.style.display!=='none'){p.style.display='none';return;}
+  const e=findEventById(id);if(!e)return;
+  p.innerHTML=buildAttPanel(e);
+  p.style.display='block';
+}
+function onAtt(eventId,studentId,status){
+  const e=findEventById(eventId);if(!e)return;
+  const rec=getAtt(eventId,studentId);
+  if(rec&&rec.status===status)unmarkAtt(eventId,studentId);
+  else markAtt(eventId,e.startDt.toISOString(),studentId,status);
+  const p=document.getElementById('attp-'+eventId);if(p)p.innerHTML=buildAttPanel(e);
+  const b=document.getElementById('attbadge-'+eventId);if(b)b.outerHTML=attBadgeHtml(e);
 }
 
 function tcardHtml(e){
@@ -258,20 +312,24 @@ function tcardHtml(e){
   else if(e.isAbsent)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelAbs('${id}')">取消請假</button>`;
   else if(e.isNoShow)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelNoShow('${id}')">取消曠課</button>`;
   else acts=`<button class="tc-act" onclick="event.stopPropagation();toggleAbsPanel('${id}')">🗓 標記請假</button><button class="tc-act" onclick="event.stopPropagation();selectWeekEvent('${id}')">↔ 調課</button>`;
-  const rosterBtn=`<button class="tc-act roster" onclick="event.stopPropagation();toggleRoster('${id}')">名單 <b>${roster.length}</b></button>`;
+  // 能點名的課：點名面板已列出名冊，不再放「名單」鈕（避免重複）；
+  // 不能點名的課（試聽/整堂請假/調課原課）沒有點名面板 → 保留「名單」鈕當唯一名冊入口
+  const attBtn=canAttend(e)?`<button class="tc-act" onclick="event.stopPropagation();toggleAttPanel('${id}')">✓ 點名</button>`:'';
+  const rosterBtn=canAttend(e)?'':`<button class="tc-act roster" onclick="event.stopPropagation();toggleRoster('${id}')">名單 <b>${roster.length}</b></button>`;
   const cls=`tcard2 t-${e.type}${e.status==='now'?' t-now':''}${e.status==='past'?' t-past':''}${e.isFullAbsent?' t-absent':''}${e.isRescheduled?' t-resched':''}`;
   return `<div class="${cls}" id="cc-${id}" style="--tcv:${tcv}">
     <div class="tcard2-head" onclick="toggleTcard('${id}')">
       <div class="tcard2-av${avCls}">${esc(letter)}</div>
       <div class="tcard2-info">
-        <div class="tcard2-name"><span class="tcard2-title${e.isFullAbsent?' struck':''}">${esc(e.origTitle)}</span>${badge}${mkBadge}${stat}${typeMismatchChip(e)}</div>
+        <div class="tcard2-name"><span class="tcard2-title${e.isFullAbsent?' struck':''}">${esc(e.origTitle)}</span>${badge}${mkBadge}${stat}${canAttend(e)?attBadgeHtml(e):''}${typeMismatchChip(e)}</div>
         <div class="tcard2-sub">${e.classroom?esc(e.classroom)+' · ':''}${e.teacher?esc(e.teacher)+' · ':''}${roster.length} 人${e.type==='practice'?' · 自習':''}</div>
       </div>
       <div class="tcard2-time"><b>${fmtT(e.startDt)}</b><span>${fmtT(e.endDt)}</span></div>
       <span class="tcard2-chev">▾</span>
     </div>
-    <div class="tcard2-actions">${acts}${rosterBtn}</div>
+    <div class="tcard2-actions">${acts}${attBtn}${rosterBtn}</div>
     <div class="tcard2-roster" id="rost-${id}" style="display:none">${roster.length?esc(roster.join('、')):'（無名單）'}</div>
+    <div class="att-panel" id="attp-${id}" style="display:none"></div>
     <div class="abs-panel" id="absp-${id}">${buildAbsPanel(e,'')}</div>
   </div>`;
 }

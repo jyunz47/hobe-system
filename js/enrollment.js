@@ -40,6 +40,25 @@ function eventRoster(e){
   return names.length?names:descNames;
 }
 
+// 點名用名冊：把名冊解析成 [{studentId, name}]。
+// 有本期登記紀錄 → 直接用 enrollment 的 studentId（同名問題在此終結）；
+// 尚未對帳（fallback 備註）時，只有「唯一同名在學生」才給得到 studentId，
+// 其餘 studentId=null（無法可靠點名，UI 顯示但不可點，引導去課表對帳）。
+function eventRosterWithId(e){
+  const byId=new Map(getStudentList().map(s=>[s.id,s]));
+  const ens=e.origTitle?getEnrollments({courseTitle:e.origTitle,periodId:yearPeriodId()}):[];
+  if(ens.length)return ens.map(en=>({studentId:en.studentId,name:byId.get(en.studentId)?.name||'(未知)'}));
+  const byName=new Map();
+  getStudentList().filter(s=>(s.status||'在學')==='在學').forEach(s=>{
+    if(!byName.has(s.name))byName.set(s.name,[]);
+    byName.get(s.name).push(s);
+  });
+  return (e.students||[]).map(nm=>{
+    const m=byName.get(nm)||[];
+    return{studentId:m.length===1?m[0].id:null,name:nm};
+  });
+}
+
 // id 用單調遞增計數器，同 makeNewStudent 的慣例
 var _lastEnrollmentId=0;
 function makeEnrollment({studentId,courseTitle,periodId,price=null,startDate=null,endDate=null,note=''}){

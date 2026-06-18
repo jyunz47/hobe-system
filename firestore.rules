@@ -23,8 +23,10 @@ service cloud.firestore {
         ];
     }
 
-    // 系統共用資料：學生名單、補課安排
-    match /sharedData/main {
+    // 系統共用資料：main（學生名單、補課安排、登記簿…）
+    // 以及按期別分文件的點名/成績/作業（attendance_<期別> 等，見資料結構.md）。
+    // 同一份白名單，涵蓋 sharedData/ 底下所有文件。
+    match /sharedData/{docId} {
       allow read, write: if isAllowed();
     }
 

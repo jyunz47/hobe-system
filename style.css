@@ -822,6 +822,25 @@ body:has(#panel-login.active) .content{padding:0}
 .tcard2-roster{padding:10px 16px 13px;font-size:12.5px;color:var(--tx2);line-height:1.7;border-top:1px solid #F0ECE2;background:#FAF8F3}
 .tcard2 .abs-panel{border-top:1px solid #F0ECE2}
 
+/* 點名面板（課程卡內嵌）*/
+.att-badge{background:var(--sf2);color:var(--tx2)}
+.att-badge.att-done{background:var(--al);color:var(--am)}
+.att-panel{border-top:1px solid #F0ECE2;background:#FAF8F3;padding:8px 14px 12px}
+.att-empty{font-size:12.5px;color:var(--tx3);padding:6px 2px}
+.att-list{display:flex;flex-direction:column}
+.att-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 2px;border-bottom:1px solid #F0ECE2}
+.att-row:last-child{border-bottom:none}
+.att-nm{font-size:13px;color:var(--tx1);font-weight:500}
+.att-nm.struck{text-decoration:line-through;color:var(--tx3);font-weight:400}
+.att-lock{font-size:11px;font-weight:700;color:#C16B36;background:#FBF4EA;padding:2px 8px;border-radius:7px}
+.att-hint{font-size:11px;color:var(--tx3);background:var(--sf2);padding:2px 8px;border-radius:7px}
+.att-row.att-noid .att-nm{color:var(--tx3)}
+.att-seg{display:inline-flex;gap:6px}
+.att-btn{padding:5px 13px;border-radius:9px;border:1px solid var(--brd);background:#fff;color:var(--tx2);font-size:12.5px;font-weight:600;font-family:inherit;cursor:pointer;transition:background .12s,color .12s}
+.att-btn:hover{background:var(--sf2)}
+.att-btn.on-here{background:var(--am);border-color:var(--am);color:#fff}
+.att-btn.att-miss.on-miss{background:#C0504A;border-color:#C0504A;color:#fff}
+
 /* 進行中 hero：漸層砂綠（沿用既有 .thero 結構，覆蓋為白字）*/
 #today-hero .thero:not(.next){background:linear-gradient(150deg,#6B8F7A,#5C7E6A);border:none;color:#fff;box-shadow:0 8px 24px -8px rgba(45,90,61,.35)}
 #today-hero .thero:not(.next) .thero-bar{display:none}

@@ -8,33 +8,9 @@
 
 ---
 
-## 方向C 視覺改版（進行中 · 下個 session 接這個）
+## Claude Design 元件 gallery（⏸ 暫停 · 改 fill-on-demand）
 
-> **設計真相來源**：[`design/方向C 完整系統.dc.html`](../design/方向C%20完整系統.dc.html)（2202 行，含所有畫面，樣式為 inline；一比一移植對著它抄）。
-> **已完成**（細節見 [`進展紀錄.md`](進展紀錄.md)）：Part A 皮膚、登入頁雙欄、待補課清單、學生 modal、補課時段選擇器、手機底欄、課程主頁（今日卡可展開動作列＋hero 漸層＋教室時段時間軸實心色塊＋本週日格課名）、`CAL_COLORS` 全域暖化。
-> ⚠️ **全部尚未 commit**；登入後的畫面只有本機部分驗過，需逐頁登入驗收。
-
-### 待處理（接續課程頁收尾）
-- [ ] ⏳ **教室時段時間軸：真實資料重疊**——同教室同時段多堂家教（例：大教室 17:30–19:00 併 5 堂）會擠成一團、名字被切。設計稿是稀疏情境沒考慮。三選一待老闆定：(a) 重疊自動往下疊多排、(b) 維持現狀點得到就好、(c) 家教併成「N 個家教」一格、點開看細節。
-- [ ] **時間軸 header 動態**：設計稿是「教室時段 · 今日 ＋ ● 現在時刻」；目前只有靜態「教室時段」（看非今日時「·今日」會錯，要 JS 帶當前檢視日期＋現在時刻）。
-- [ ] **進行中 hero 群組標頭**：設計稿「● 進行中 ［2 堂同時］」是共用標頭在卡片上方；目前「進行中」標在每張 hero 卡內。
-- [ ] **本週「當日明細」卡**（點日格展開的下半部）仍是舊卡樣式未換新；設計稿改用獨立「完整週課表」畫面（畫面 1.5）。要換新樣式／要不要另做完整週課表，待定。
-
-### 一比一校準（B 系列當初照文字 spec 做，非對著 .dc.html）
-- [ ] **B2 待補課／B3 學生 modal／B4 時段選擇器**：想要像素級對齊就對著 `design/方向C 完整系統.dc.html` 重新校準（目前是「接近」非「一模一樣」）。
-
-### 待 Claude Design 補稿
-- [ ] **請假流程**（設計稿畫面 5 課程卡 modal 有；但 app 的請假是課卡內嵌面板，要確認是否照畫面 5 改版面）、**課表對帳**五桶結構——目前只暖化顏色、版面未重做。
-
-### 明確不做
-- **設定頁**（app 無此功能，不憑空做空殼）。品牌資產展示頁（圖示已做好）。
-
-### 收尾
-- [ ] 全部驗收 OK 後 **commit**。注意 `js/init.js`、`js/state.js` 有 session 前就存在的未提交改動；`js/state.js` 現也含本次 `CAL_COLORS` 暖化，commit 時用 `git add -p` 把本次改動跟舊改動分清楚。
-
----
-
-## Claude Design 元件 gallery（接續補元件 · 開新框說「嗨，接 Claude Design gallery」從這裡開始）
+> **2026-06-19 決定暫停**：gallery 是輔助工具、非產品功能，主場景皮膚已上線（`fe2d75e`/`cfd0dc6`）夠用。剩下 P2/P3 元件**不再當獨立任務刷**，改成「哪天真的動到那塊 UI 才順手補一顆」。優先回開發路線（功能成熟）。下面清單留著當補件時的索引。
 
 > **這是什麼**：Claude Design 橋樑的本機端。每顆 UI 元件一個 preview 檔放 [`design/components/`](../design/components/)，第一行 `<!-- @dsCard group="…" -->` 讓 claude.ai/design 自動建卡片。詳細背景見 [`進展紀錄.md`](進展紀錄.md) 2026-06-18「搭起 Claude Design 橋樑」。
 > **雲端專案**：claude.ai/design 的「HOBE 設計系統」，projectId `a7832be0-d223-4060-8449-f85457458db6`。
@@ -44,14 +20,14 @@
 2. 寫 `design/components/<name>.html`：第一行 `<!-- @dsCard group="Components" -->`（基礎類用 `Foundations`），`<head>` link `../../tokens.css` + `../../style.css`（這樣長相跟線上一致），body 放範例假資料的 markup，移除 onclick。
 3. 更新 `design/components/README.md` 的「目前涵蓋」清單。
 4. 推上雲端：DesignSync 工具 `list_projects`（拿 projectId）→ `finalize_plan`（writes 填新檔路徑、deletes 給 `[]`）→ `write_files`（用 localPath）。
-5. ⚠️ 若過程順手改了 `style.css`/`tokens.css`，記得也 `write_files` 推一份上雲端，否則雲端 gallery 渲染會跟本機不一致；改 `style.css` 還要把 HTML 的 `style.css?v=N` 加一。
+5. ⚠️ **新增元件必做：補 `_ds_manifest.json` 的 cards 陣列**。只推 component HTML 不會自動建卡片——雲端卡片索引讀 `_ds_manifest.json`（編譯快照），新檔不在裡面就不顯示。做法：`get_file` 讀 `_ds_manifest.json` → 在 cards 加 `{"path":"design/components/<name>.html","group":"Components"}`（基礎類 `Foundations`，排在 Foundations 組之前）→ `finalize_plan` writes 填 `_ds_manifest.json` → `write_files` 用 inline `data` 推回。改完重整 gallery 頁就出現。
+6. ⚠️ 若過程順手改了 `style.css`/`tokens.css`，記得也 `write_files` 推一份上雲端，否則雲端 gallery 渲染會跟本機不一致；改 `style.css` 還要把 HTML 的 `style.css?v=N` 加一。
 
-### 已完成（8 顆，完成即從下面刪）
-foundations、sidebar、buttons、course-card、login、makeup-stats、student-card、student-modal。
+### 已完成（9 顆，完成即從下面刪）
+foundations、sidebar、buttons、course-card、login、makeup-stats、student-card、student-modal、week-view。
 
 ### 待補 P2（中頻）
-- [ ] ⏳ **週檢視** day cards — 來源 `js/week.js`（`tcard-title` 等）、CSS「Weekly view」「W4 Week」
-- [ ] **時間軸（教室時段）** — `js/today.js` renderTimeline（`tl-*` class）、CSS「Timeline」；含「A+B timeline+hero box」hero
+- [ ] ⏳ **時間軸（教室時段）** — `js/today.js` renderTimeline（`tl-*` class）、CSS「Timeline」；含「A+B timeline+hero box」hero
 - [ ] **補課時段選擇器** — `js/makeup.js` slot picker（stepper + segmented + 練習課 highlight）、CSS「Slot Picker」「B4」
 - [ ] **補課清單卡** — `js/makeup.js` makeup list、CSS「Makeup grid cards」「Makeup list redesign」
 - [ ] **Topbar** — 靜態 HTML `.topbar`（`.tbt .tbs .tba`）
@@ -83,6 +59,7 @@ foundations、sidebar、buttons、course-card、login、makeup-stats、student-c
     - 系統靠 `calendarList` **完全比對名稱**抓六本（init.js:240）→ 登入帳號的日曆清單裡必須有名稱**完全一致**的：一般課程／補課／調課／試聽／練習課／加課。差一字就抓不到 → 匯入務必匯到名稱相符的那本
     - 學生統計/課表對帳只掃 **一般課程／練習課／加課** 三本（students.js `SCAN_CALS`）；補課/調課/試聽不進掃描
     - 備註格式（系統解析依據）見 [`功能說明.md`](功能說明.md)「課程備註格式」「請假標題格式」：第一行＝[教室 ]老師、第二行起＝學生（頓號分隔，練習課可「科目：學生」）、課型靠標題、請假/曠課/調課靠標題【】。匯入後抽幾筆確認 DESCRIPTION 有保留此結構
+  - ⚠️ **匯入真實資料會觸發已知 UI 雷**：教室時段時間軸遇同教室同時段多堂家教（例：大教室 17:30–19:00 併 5 堂，真實密集資料）會擠成一團、名字被切（設計稿只考慮稀疏情境）。屆時看實際狀況再修——三選一：(a) 重疊往下疊多排、(b) 維持點得到就好、(c) 家教併成「N 個家教」一格點開看細節
   - 預估：操作為主，工程支援約半天
 
 - [ ] ⏳ **學費系統：計算 + 學費條 + 收據**（首要）
@@ -107,8 +84,14 @@ foundations、sidebar、buttons、course-card、login、makeup-stats、student-c
     - 點名只記「到/未到」；已請假/曠課的學生自動帶入顯示、不重複操作；臨時沒到的從點名面板跳既有請假/曠課流程
     - 成績：每堂每生可登**多筆**（標籤＋分數），涵蓋課前考、練習課重寫第二份考卷的情境
     - 高中作業：每天一張清單＝在學高中生 × 本期有修數學課；課名沒含「數學」的數學課在課程設定補標科目
-  - 未定細節（動工前確認）：作業狀態欄位（提案：已交/未交＋備註）、試聽課不點名（提案）、attendance/grades/homework 的 Firestore schema（先擬進資料結構.md 給老闆過）
-  - 預估：2~3 個工作段
+  - ~~未定細節~~（2026-06-19 已定，schema 寫進 [`資料結構.md`](資料結構.md)）：作業狀態=已交/未交＋備註；試聽課不點名；**儲存=按期別分文件**（`attendance_<periodId>` 等，不塞 driveData，避 1MB 上限）；attendance 以 studentId 為鍵、status 到/未到、學費堂數=該期「到」場次數
+  - ✅ **slice 1 已做（2026-06-19）**：今日課程卡內嵌點名（到/未到分段鈕、進度徽章、請假/曠課自動帶入鎖定）+ 讀寫 `attendance_<期別>` + `eventRosterWithId`。⚠️ 上線需先在 Firebase Console 發佈放寬後的 `firestore.rules`（`sharedData/{docId}`）。
+  - **下一步（接續）**：
+    - 課程設定加「需登記成績」開關（新課預設只點名）→ 今日課程才能分「成績課在上／只點名在下」兩區
+    - 成績登記面板（每堂每生多筆 label+score，讀寫 `grades_<期別>`）
+    - 高中數學作業清單（在學高中生 × 本期數學課，讀寫 `homework_<期別>`）
+    - 學費「實際堂數」接 `attendance`（等對齊行事曆＋enrollment 對帳乾淨）
+  - 預估：剩 2 個工作段
 
 - [ ] ⏳ **請假／補課／統計也改讀登記簿（備註名字 → studentId）**
   - 為什麼：2026-06-14 課程卡顯示已切到登記簿，但「標記請假」的勾選名單、補課容量計算、學生統計（getStudentStats）仍讀 Calendar 備註 → 同一門課「卡片人數」與「請假可勾的人」可能不一致（登記簿有、備註沒有的學生：卡片看得到、請假勾不到）
