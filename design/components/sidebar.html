@@ -1,0 +1,37 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sidebar · 側欄導覽</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  body{background:var(--bg);padding:24px;font-family:'Noto Sans TC',sans-serif}
+  /* preview：把 position:fixed 的側欄收進卡片內展示 */
+  .preview-frame{position:relative;height:520px;width:240px;border:1px solid var(--brd);border-radius:var(--r);overflow:hidden}
+  .preview-frame .sidebar{position:absolute}
+</style>
+</head>
+<body>
+  <div class="preview-frame">
+    <aside class="sidebar">
+      <div class="logo"><h1>HOBE</h1><p>排程系統</p></div>
+      <nav class="nav">
+        <div class="nav-sec">課程管理</div>
+        <button class="ni active"><span class="ni-txt">課程</span></button>
+        <button class="ni"><span class="ni-txt">待補課/調課清單</span><span class="nbadge">3</span></button>
+        <button class="ni"><span class="ni-txt">學生管理</span></button>
+      </nav>
+      <div class="sf">
+        <div class="ubox">
+          <div class="udot ok"></div>
+          <div class="uinfo"><strong>王老師</strong><span>已連線</span></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</body>
+</html>

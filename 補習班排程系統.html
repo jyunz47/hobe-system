@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HOBE">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=6">
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -315,16 +315,16 @@ if ('serviceWorker' in navigator) {
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://apis.google.com/js/api.js" async defer></script>
 <!-- 應用程式分模組（順序：state → utils → 解析 → 各 panel → init 最後）-->
-<script src="js/state.js"></script>
-<script src="js/utils.js"></script>
-<script src="js/parse.js"></script>
-<script src="js/today.js"></script>
-<script src="js/week.js"></script>
-<script src="js/absence.js"></script>
-<script src="js/makeup.js"></script>
-<script src="js/enrollment.js"></script>
-<script src="js/students.js"></script>
-<script src="js/init.js"></script>
+<script src="js/state.js?v=5"></script>
+<script src="js/utils.js?v=5"></script>
+<script src="js/parse.js?v=5"></script>
+<script src="js/today.js?v=5"></script>
+<script src="js/week.js?v=5"></script>
+<script src="js/absence.js?v=5"></script>
+<script src="js/makeup.js?v=5"></script>
+<script src="js/enrollment.js?v=5"></script>
+<script src="js/students.js?v=5"></script>
+<script src="js/init.js?v=5"></script>
 
 <div class="stu-modal-wrap" id="stu-modal-wrap">
   <div class="stu-modal-overlay" onclick="closeStudentModal()"></div>
@@ -365,7 +365,7 @@ if ('serviceWorker' in navigator) {
   <div class="stu-modal-overlay" onclick="closeDeleteModal()"></div>
   <div class="stu-modal" style="max-width:400px">
     <div class="stu-modal-hd">
-      <div class="stu-modal-title"><span style="font-size:16px;font-weight:700;color:#A93226">🗑️ 徹底刪除學生</span></div>
+      <div class="stu-modal-title"><span style="font-size:16px;font-weight:700;color:#C0504A">🗑️ 徹底刪除學生</span></div>
       <button class="stu-modal-close" onclick="closeDeleteModal()">✕</button>
     </div>
     <div class="stu-modal-body">
@@ -374,7 +374,7 @@ if ('serviceWorker' in navigator) {
       <input id="delete-modal-confirm" class="del-modal-confirm-input" placeholder="輸入姓名" maxlength="20" onkeydown="if(event.key==='Enter')confirmDeleteStudent()">
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
         <button class="btn btns" onclick="closeDeleteModal()">取消</button>
-        <button class="btn btns" style="background:#A93226;color:#fff;border-color:#A93226" onclick="confirmDeleteStudent()">永久刪除</button>
+        <button class="btn btns" style="background:#C0504A;color:#fff;border-color:#C0504A" onclick="confirmDeleteStudent()">永久刪除</button>
       </div>
     </div>
   </div>

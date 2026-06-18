@@ -81,7 +81,7 @@ function renderTimeline(evs){
       const left=((s-tlAxisStart)/tlTotalMins*100).toFixed(1);
       const width=Math.max((en-s)/tlTotalMins*100,1).toFixed(1);
       const clr=calColor(e.calName);
-      blocksHtml+=`<div class="tl-block" style="left:${left}%;width:${width}%;background:${clr}28;border-left:2.5px solid ${clr}" onclick="selectWeekEvent('${esc(e.id)}')"><div class="tl-block-nm">${esc(e.origTitle)}</div><div class="tl-block-t">${fmtT(e.startDt)}</div></div>`;
+      blocksHtml+=`<div class="tl-block" style="left:${left}%;width:${width}%;background:${clr}" onclick="selectWeekEvent('${esc(e.id)}')"><div class="tl-block-nm">${esc(e.origTitle)}</div><div class="tl-block-t">${fmtT(e.startDt)}</div></div>`;
     });
     rowsHtml+=`<div class="tl-room-lbl">${esc(room)}</div><div class="tl-track">${vlinesHtml}${nowLineHtml}${blocksHtml}</div>`;
   });
@@ -218,42 +218,60 @@ function getMkSt(e){
   return`<div class="tcard-mk mk-un">未安排${e.isRescheduled?'調課':'補課'}</div>`;
 }
 
+// 科目字母（方向C 卡片左側方塊）
+function subjectLetter(e){
+  if(e.type==='practice')return'練';
+  const s=(e.subject||e.origTitle||'').trim();
+  return s?s[0]:'課';
+}
+// 點卡展開動作列（手風琴：開一張收其他，順手收已開的請假面板）
+function toggleTcard(id){
+  const card=document.getElementById('cc-'+id);if(!card)return;
+  const willOpen=!card.classList.contains('tc-open');
+  document.querySelectorAll('.tcard2.tc-open').forEach(c=>{
+    c.classList.remove('tc-open');
+    c.querySelector('.abs-panel.open')?.classList.remove('open');
+  });
+  if(willOpen)card.classList.add('tc-open');
+}
+function toggleRoster(id){
+  const r=document.getElementById('rost-'+id);if(r)r.style.display=r.style.display==='none'?'block':'none';
+}
+
 function tcardHtml(e){
   const id=esc(e.id);
   const tcv=calColor(e.calName);
-  const cls=`tcard t-${e.type}${e.status==='now'?' t-now':''}${e.status==='past'?' t-past':''}${e.isFullAbsent?' t-absent':''}`;
-  const stat=
-    e.status==='now'?'<span class="tstat tstat-now"><span class="ndot"></span>進行中</span>':
-    e.status==='past'?'<span class="tstat tstat-past">已結束</span>':'';
   const roster=eventRoster(e);
-  const stuTxt=roster.length===0?'—':roster.length<=2?roster.join('、'):`${roster.length} 人`;
-  const absInline=e.isRescheduled?`<div class="tcard-abs"><span class="l">調課</span>${e.rescheduleReason?esc(e.rescheduleReason):'未輸入原因'}</div>`:'';
-  const noteInline=e.notes?`<div class="tcard-note"><span class="l">備註</span>${esc(e.notes)}</div>`:'';
-  const mkSt=getMkSt(e);
-  const extras=(absInline||noteInline||mkSt)?`<div class="tcard-extras">${noteInline}${absInline}${mkSt}</div>`:'';
-  const absTitleEl=e.isRescheduled
-    ?`<span class="mk-badge mk-badge-reschedule">調課</span>`
-    :`${e.isAbsent?`<span class="tcard-abs"><span class="l">請假</span>${e.absType==='老師請假'?'老師請假':esc(e.absentStudents.join('、'))+'請假'}</span>`:''}${e.isNoShow?`<span class="tcard-abs"><span class="l">曠課</span>${esc(e.noShowStudents.join('、'))}</span>`:''}`;
-  const stBadge=(()=>{if(!e.isFullAbsent&&!e.isRescheduled)return'';const rec=findMakeupScheduledById(e.id);return rec?`<span class="mk-badge mk-badge-arr">已安排</span>`:`<span class="mk-badge mk-badge-un">未安排</span>`;})();
-  return `<div class="${cls}" id="cc-${id}" style="border-left-color:${tcv}" onclick="selectWeekEvent('${id}')">
-    <div class="tcard-row">
-      <div class="tcard-time">${fmtT(e.startDt)}<span class="dash">—</span>${fmtT(e.endDt)}</div>
-      <div class="tcard-dur">${fmtDur(e.durMins)}</div>
-      <div class="tcard-tags">
-        <span class="tpill t-${e.type}"><span class="pdot"></span>${typeLbl(e.type)}</span>
-        ${typeMismatchChip(e)}
-        ${stat}
+  const letter=subjectLetter(e);
+  const avCls=e.isRescheduled?' av-resched':e.type==='practice'?' av-practice':'';
+  const stat=
+    e.status==='now'?'<span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span>':
+    e.status==='past'?'<span class="tc-badge tc-badge-past">已結束</span>':'';
+  let badge='';
+  if(e.isRescheduled)badge=`<span class="tc-badge tc-badge-resched">調課</span>`;
+  else if(e.isAbsent)badge=`<span class="tc-badge tc-badge-abs">${e.absType==='老師請假'?'老師請假':'請假'}</span>`;
+  else if(e.isNoShow)badge=`<span class="tc-badge tc-badge-abs">曠課</span>`;
+  const mkBadge=(()=>{if(!e.isFullAbsent&&!e.isRescheduled)return'';const rec=findMakeupScheduledById(e.id);return rec?`<span class="tc-badge tc-badge-arr">✓ 已安排</span>`:`<span class="tc-badge tc-badge-un">未安排</span>`;})();
+  // 動作列：請假內嵌（今日情境面板），調課走 week-modal 避免 rp-${id} 撞車
+  let acts='';
+  if(e.isRescheduled)acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEvent('${id}')">看調課安排</button><button class="tc-act danger" onclick="event.stopPropagation();cancelReschedule('${id}')">取消調課</button>`;
+  else if(e.isAbsent)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelAbs('${id}')">取消請假</button>`;
+  else if(e.isNoShow)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelNoShow('${id}')">取消曠課</button>`;
+  else acts=`<button class="tc-act" onclick="event.stopPropagation();toggleAbsPanel('${id}')">🗓 標記請假</button><button class="tc-act" onclick="event.stopPropagation();selectWeekEvent('${id}')">↔ 調課</button>`;
+  const rosterBtn=`<button class="tc-act roster" onclick="event.stopPropagation();toggleRoster('${id}')">名單 <b>${roster.length}</b></button>`;
+  const cls=`tcard2 t-${e.type}${e.status==='now'?' t-now':''}${e.status==='past'?' t-past':''}${e.isFullAbsent?' t-absent':''}${e.isRescheduled?' t-resched':''}`;
+  return `<div class="${cls}" id="cc-${id}" style="--tcv:${tcv}">
+    <div class="tcard2-head" onclick="toggleTcard('${id}')">
+      <div class="tcard2-av${avCls}">${esc(letter)}</div>
+      <div class="tcard2-info">
+        <div class="tcard2-name${e.isFullAbsent?' struck':''}">${esc(e.origTitle)}${badge}${mkBadge}${stat}${typeMismatchChip(e)}</div>
+        <div class="tcard2-sub">${e.classroom?esc(e.classroom)+' · ':''}${e.teacher?esc(e.teacher)+' · ':''}${roster.length} 人${e.type==='practice'?' · 自習':''}</div>
       </div>
+      <div class="tcard2-time"><b>${fmtT(e.startDt)}</b><span>${fmtT(e.endDt)}</span></div>
+      <span class="tcard2-chev">▾</span>
     </div>
-    <div class="tcard-title-row">
-      <span class="tcard-title${e.isFullAbsent?' struck':''}">${esc(e.origTitle)}</span>
-      ${absTitleEl}${stBadge}
-    </div>
-    <div class="tcard-meta">
-      ${e.teacher?`<span><span class="lbl">授課</span><b>${esc(e.teacher)}</b></span>`:''}
-      ${e.classroom?`<span><span class="lbl">教室</span><b>${esc(e.classroom)}</b></span>`:''}
-      <span><span class="lbl">學生</span><b>${esc(stuTxt)}</b></span>
-    </div>
-    ${extras}
+    <div class="tcard2-actions">${acts}${rosterBtn}</div>
+    <div class="tcard2-roster" id="rost-${id}" style="display:none">${roster.length?esc(roster.join('、')):'（無名單）'}</div>
+    <div class="abs-panel" id="absp-${id}">${buildAbsPanel(e,'')}</div>
   </div>`;
 }

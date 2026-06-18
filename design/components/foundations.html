@@ -1,0 +1,63 @@
+<!-- @dsCard group="Foundations" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Foundations · 色彩與形狀</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<style>
+  body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--tx);padding:24px}
+  h2{font-size:15px;margin:0 0 12px;font-weight:700}
+  h3{font-size:12px;color:var(--tx3);text-transform:uppercase;letter-spacing:.08em;margin:20px 0 8px}
+  .row{display:flex;flex-wrap:wrap;gap:12px}
+  .sw{width:96px}
+  .chip{height:56px;border-radius:var(--rs);border:1px solid var(--brd)}
+  .sw b{display:block;font-size:12px;margin-top:6px;font-weight:500}
+  .sw span{display:block;font-size:11px;color:var(--tx3);font-family:'DM Mono',monospace}
+  .shape{display:flex;align-items:center;gap:8px}
+  .shape .box{width:64px;height:48px;background:var(--sf);border:1px solid var(--brd)}
+</style>
+</head>
+<body>
+  <h2>Foundations — 色彩與形狀</h2>
+
+  <h3>背景 / 表面</h3>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--bg)"></div><b>bg</b><span>#E4E0D6</span></div>
+    <div class="sw"><div class="chip" style="background:var(--sf)"></div><b>sf</b><span>#FFFFFF</span></div>
+    <div class="sw"><div class="chip" style="background:var(--sf2)"></div><b>sf2</b><span>#F3F1EC</span></div>
+    <div class="sw"><div class="chip" style="background:var(--sf3)"></div><b>sf3</b><span>#F7F4ED</span></div>
+  </div>
+
+  <h3>文字</h3>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--tx)"></div><b>tx</b><span>#1F1C19</span></div>
+    <div class="sw"><div class="chip" style="background:var(--tx2)"></div><b>tx2</b><span>#7A7368</span></div>
+    <div class="sw"><div class="chip" style="background:var(--tx3)"></div><b>tx3</b><span>#8C8A81</span></div>
+  </div>
+
+  <h3>語意色（強調 / 警告 / 危險 / 資訊）</h3>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--ac)"></div><b>ac 強調</b><span>#6B8F7A</span></div>
+    <div class="sw"><div class="chip" style="background:var(--wn)"></div><b>wn 警告</b><span>#C16B36</span></div>
+    <div class="sw"><div class="chip" style="background:var(--dg)"></div><b>dg 危險</b><span>#C0504A</span></div>
+    <div class="sw"><div class="chip" style="background:var(--in)"></div><b>in 資訊</b><span>#8A6D3B</span></div>
+  </div>
+
+  <h3>課程類別色</h3>
+  <div class="row">
+    <div class="sw"><div class="chip" style="background:var(--c1)"></div><b>c1</b><span>#7E8B83</span></div>
+    <div class="sw"><div class="chip" style="background:var(--c2)"></div><b>c2</b><span>#9A8552</span></div>
+    <div class="sw"><div class="chip" style="background:var(--c3)"></div><b>c3</b><span>#6B8F7A</span></div>
+    <div class="sw"><div class="chip" style="background:var(--c4)"></div><b>c4</b><span>#C16B36</span></div>
+  </div>
+
+  <h3>圓角</h3>
+  <div class="row">
+    <div class="shape"><div class="box" style="border-radius:var(--r)"></div><span>--r 16px</span></div>
+    <div class="shape"><div class="box" style="border-radius:var(--rs)"></div><span>--rs 11px</span></div>
+  </div>
+</body>
+</html>

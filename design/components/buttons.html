@@ -1,0 +1,36 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Buttons · 按鈕</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  body{background:var(--bg);padding:24px}
+  h2{font-size:15px;margin:0 0 16px;font-weight:700;color:var(--tx);font-family:'Noto Sans TC',sans-serif}
+  h3{font-size:12px;color:var(--tx3);text-transform:uppercase;letter-spacing:.08em;margin:18px 0 8px;font-family:'Noto Sans TC',sans-serif}
+  .row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+</style>
+</head>
+<body>
+  <h2>Buttons — 按鈕</h2>
+
+  <h3>主要 / 一般</h3>
+  <div class="row">
+    <button class="btn btnp">主要按鈕</button>
+    <button class="btn">一般按鈕</button>
+    <button class="btn btnd">危險按鈕</button>
+  </div>
+
+  <h3>小尺寸 (.btns)</h3>
+  <div class="row">
+    <button class="btn btnp btns">主要小</button>
+    <button class="btn btns">一般小</button>
+    <button class="btn btnd btns">危險小</button>
+    <button class="btn btns">↻ 更新</button>
+  </div>
+</body>
+</html>

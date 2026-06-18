@@ -76,8 +76,8 @@ function invalidateEventCache(){_eventListCache.clear();}
 
 // ── 顏色與教室常數 ──
 var COLORS={one:'#4A7C8C',pair:'#7C5A8C',group:'#2D5A3D',practice:'#8C6A2D'};
-var CAL_COLORS={'一般課程':'#3B82F6','調課':'#EF4444','補課':'#F97316','加課':'#EAB308','試聽':'#22C55E','練習課':'#A855F7'};
-function calColor(calName){return CAL_COLORS[calName]||'#9E9A93';}
+var CAL_COLORS={'一般課程':'#6B8F7A','調課':'#C0504A','補課':'#C16B36','加課':'#B98A4A','試聽':'#7E8B83','練習課':'#9A8552'};
+function calColor(calName){return CAL_COLORS[calName]||'#8A8276';}
 var WD=['日','一','二','三','四','五','六'];
 var ROOM_CAP={'小教室':5,'108':6,'208':6,'309':6};
 var ROOMS_SMALL=['小教室','108','208','309'];

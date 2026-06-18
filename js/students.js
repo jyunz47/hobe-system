@@ -159,10 +159,10 @@ function renderScanSection(){
     html+=`<div><div class="stu-scan-grp-lbl">歷屆生出現在課表（${alumni.length} 人）</div>`;
     alumni.forEach(({stu,courses})=>{
       html+=`<div class="stu-scan-exist-row">
-        <div class="stu-scan-exist-name">${esc(stu.name)} <span class="stu-warn-chip" style="font-size:10px;background:#FEE2E2;color:#991B1B">⚠ 已${esc(stu.status||'')}</span></div>
+        <div class="stu-scan-exist-name">${esc(stu.name)} <span class="stu-warn-chip" style="font-size:10px;background:#F8EDEA;color:#C0504A">⚠ 已${esc(stu.status||'')}</span></div>
         <div class="stu-scan-exist-grade">${esc(stu.grade)}</div>
         <div class="stu-scan-exist-courses">${courses.map(esc).join('、')}</div>
-        <span style="font-size:11px;color:#991B1B">確定回來上課的話，先到歷屆分頁幫他復學，再對帳一次</span>
+        <span style="font-size:11px;color:#C0504A">確定回來上課的話，先到歷屆分頁幫他復學，再對帳一次</span>
       </div>`;
     });
     html+=`</div>`;
@@ -338,7 +338,16 @@ function openStudentModal(id){
   const threshold=getThreshold(currentPeriodId);
   const warnCourses=Object.entries(stats.byCourse).filter(([,c])=>c.type==='group'&&c.studentAbs>=threshold);
   const hasReschedules=Object.values(stats.byCourse).some(c=>c.reschedules>0);
+  const leaveCnt=stats.pairs.filter(p=>p.absence.absType==='學生請假').length;
+  const reschedCnt=stats.pairs.filter(p=>p.absence.absType==='調課').length;
   let body='';
+  // B3 四格統計（請假／調課／欠課／加收半堂）
+  body+=`<div class="stu-modal-grid">
+    <div class="smg"><div class="smg-n">${leaveCnt}</div><div class="smg-l">請假</div></div>
+    <div class="smg"><div class="smg-n">${reschedCnt}</div><div class="smg-l">調課</div></div>
+    <div class="smg${stats.owed>0?' smg-owed':''}"><div class="smg-n">${stats.owed}</div><div class="smg-l">欠課</div></div>
+    <div class="smg"><div class="smg-n">${stats.halfAdd}</div><div class="smg-l">加收半堂</div></div>
+  </div>`;
   // Per-course absence section
   body+=`<div><div class="stu-modal-sec-lbl">出缺勤（${period.label}）</div>`;
   if(warnCourses.length){
@@ -360,9 +369,9 @@ function openStudentModal(id){
   }
   // 曠課 + 加退費（半堂）摘要
   const extraBits=[];
-  if(stats.noShow>0)extraBits.push(`<span style="color:#991b1b">曠課 ${stats.noShow} 次</span>`);
-  if(stats.halfAdd>0)extraBits.push(`<span style="color:#92400E">加收 +${stats.halfAdd} 堂</span>`);
-  if(stats.halfDeduct>0)extraBits.push(`<span style="color:#166534">退費 −${stats.halfDeduct} 堂</span>`);
+  if(stats.noShow>0)extraBits.push(`<span style="color:#C0504A">曠課 ${stats.noShow} 次</span>`);
+  if(stats.halfAdd>0)extraBits.push(`<span style="color:#C16B36">加收 +${stats.halfAdd} 堂</span>`);
+  if(stats.halfDeduct>0)extraBits.push(`<span style="color:#5C7E6A">退費 −${stats.halfDeduct} 堂</span>`);
   if(stats.pendingDecision>0)extraBits.push(`<span style="color:var(--tx3)">待確認補課 ${stats.pendingDecision} 筆</span>`);
   if(extraBits.length)body+=`<div style="margin-top:8px;font-size:13px;display:flex;gap:12px;flex-wrap:wrap">${extraBits.join('')}</div>`;
   body+=`</div>`;

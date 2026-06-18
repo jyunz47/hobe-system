@@ -79,21 +79,16 @@ function renderWeek(monday){
   wsum.innerHTML = days.map(({di,date,evs})=>{
     const isToday = di===todayIdx;
     const isSel   = di===selectedWeekDayIdx;
-    const by={one:0,pair:0,group:0,practice:0};
-    let absCnt=0;
-    evs.forEach(e=>{by[e.type]=(by[e.type]||0)+1;if(e.isFullAbsent)absCnt++;});
-    const barH = evs.length>0 ? (evs.length/maxCount)*100 : 0;
-    const segs = ['one','pair','group','practice'].filter(t=>by[t]>0).map(t=>{
-      return `<div class="wchip-seg s-${t}" style="flex:${by[t]};height:${barH}%"></div>`;
-    }).join('') || '<div class="wchip-bar-empty"></div>';
-    return `<button class="wchip${isSel?' w-sel':''}${isToday?' w-today':''}" onclick="selectWeekDay(${di})">
-      ${isToday?'<span class="w-today-flag">TODAY</span>':''}
-      <div>
-        <div class="wchip-dn">${WDL[di]}</div>
-        <div class="wchip-dd">${date.getMonth()+1}/${date.getDate()}</div>
-      </div>
-      <div class="wchip-bar">${segs}</div>
-      <div class="wchip-num"><span class="n">${evs.length-absCnt}</span><span class="u">堂</span>${absCnt>0?`<span class="abs">${absCnt} 假</span>`:''}</div>
+    const shown = evs.slice(0,3);
+    const rest = evs.length - shown.length;
+    const items = shown.map(e=>{
+      const clr=calColor(e.calName);
+      const nm=esc((e.subject||e.origTitle)+(e.isFullAbsent&&!e.isRescheduled?'·假':e.isRescheduled?'·調':''));
+      return `<div class="wcell-it"><span class="wcell-dot" style="background:${clr}"></span><span class="wcell-nm">${nm}</span></div>`;
+    }).join('');
+    return `<button class="wcell${isSel?' w-sel':''}${isToday?' w-today':''}" onclick="selectWeekDay(${di})">
+      <div class="wcell-hd"><span class="wcell-wd">${WDL[di].replace('週','')}</span><span class="wcell-dd">${date.getDate()}</span>${isToday?'<span class="wcell-today">今</span>':''}</div>
+      <div class="wcell-body">${items||'<div class="wcell-empty">—</div>'}${rest>0?`<div class="wcell-more">+${rest}</div>`:''}</div>
     </button>`;
   }).join('');
 
@@ -219,7 +214,7 @@ function selectWeekEvent(id){
           ${ev.teacher?`<span>👤 ${esc(ev.teacher)}</span>`:''}
           <span style="color:${COLORS[ev.type]};font-weight:500">${typeLbl(ev.type)}${ev.classroom?`・${esc(ev.classroom)}`:''}</span>
           ${ev.isFullAbsent?`<span style="color:var(--dg);font-weight:500">${ev.isRescheduled?('調課'+(ev.rescheduleReason?'：'+esc(ev.rescheduleReason):'')): ev.absType==='老師請假'?'老師請假':esc(ev.absentStudents.join('、'))+'請假'}</span>`:''}
-          ${(()=>{if(!ev.isFullAbsent&&!ev.isRescheduled)return'';const rec=findMakeupScheduledById(ev.id);if(rec){const sd=new Date(rec.scheduledDate);return`<span style="color:#166534;font-weight:500;background:#dcfce7;border:1px solid #86efac;padding:2px 8px;border-radius:4px;font-size:12px">${ev.isRescheduled?'調課':'補課'}：${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${fmtT(sd)}${rec.room?' '+esc(rec.room):''}</span>`;}return`<span style="color:#991b1b;font-weight:500;background:#fee2e2;border:1px solid #fca5a5;padding:2px 8px;border-radius:4px;font-size:12px">未安排${ev.isRescheduled?'調課':'補課'}</span>`;})()}
+          ${(()=>{if(!ev.isFullAbsent&&!ev.isRescheduled)return'';const rec=findMakeupScheduledById(ev.id);if(rec){const sd=new Date(rec.scheduledDate);return`<span style="color:#5C7E6A;font-weight:500;background:#EDF0EA;border:1px solid #CFE0D5;padding:2px 8px;border-radius:6px;font-size:12px">${ev.isRescheduled?'調課':'補課'}：${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${fmtT(sd)}${rec.room?' '+esc(rec.room):''}</span>`;}return`<span style="color:#C0504A;font-weight:500;background:#F8EDEA;border:1px solid #E8C5BF;padding:2px 8px;border-radius:6px;font-size:12px">未安排${ev.isRescheduled?'調課':'補課'}</span>`;})()}
         </div>
       </div>
       <div class="cc-actions">

@@ -129,9 +129,9 @@ function renderMakeup(){
   const topArea=document.getElementById('mk-top-area');
   if(topArea){
     topArea.innerHTML=periodTabsHtml()+`<div class="mk-stats">
-      <div class="mk-stat"><div class="mk-stat-icon" style="background:#FFF7ED;color:#F97316">⏰</div><div><div class="mk-stat-num">${pendingStatCnt}</div><div class="mk-stat-lbl">待安排總數</div></div></div>
-      <div class="mk-stat"><div class="mk-stat-icon" style="background:#F0FDF4;color:#22C55E">🗓️</div><div><div class="mk-stat-num">${scheduledStatCnt}</div><div class="mk-stat-lbl">已安排</div></div></div>
-      <div class="mk-stat mk-stat-link" onclick="jumpToMkCompleted()" title="點擊查看已完成安排"><div class="mk-stat-icon" style="background:#F9FAFB;color:#6B7280">✅</div><div><div class="mk-stat-num">${completedStatCnt}</div><div class="mk-stat-lbl">已完成</div></div></div>
+      <div class="mk-stat mk-stat-pending"><div class="mk-stat-icon">⏰</div><div><div class="mk-stat-num">${pendingStatCnt}</div><div class="mk-stat-lbl">待安排</div></div></div>
+      <div class="mk-stat mk-stat-arr"><div class="mk-stat-icon">🗓️</div><div><div class="mk-stat-num">${scheduledStatCnt}</div><div class="mk-stat-lbl">已安排</div></div></div>
+      <div class="mk-stat mk-stat-done mk-stat-link" onclick="jumpToMkCompleted()" title="點擊查看已完成安排"><div class="mk-stat-icon">✅</div><div><div class="mk-stat-num">${completedStatCnt}</div><div class="mk-stat-lbl">已完成</div></div></div>
     </div>`;
   }
 
@@ -152,12 +152,12 @@ function renderMakeup(){
     const d=e.startDt,de=e.endDt,color=calColor(e.calName);
     const mode=e.absType==='調課'?'reschedule':'makeup';
     const tutorB=needsMakeupDecision(e); // 課前1hr內、補/不補待確認（一對一家教 / 個別補課的一對二）
-    return`<div class="mk-list-card" onclick="openSlotPicker('${esc(e.id)}','${mode}')">
+    return`<div class="mk-list-card${tutorB?' mk-confirm':''}" onclick="openSlotPicker('${esc(e.id)}','${mode}')">
       <div class="mk-list-bar" style="background:${color}"></div>
       <div class="mk-list-body">
         <div class="mk-list-top">
           <span class="mk-list-title">${mkCardTitle(e)}</span>
-          ${absBadge(e)}<span class="mk-badge mk-badge-un">未安排</span>${tutorB?'<span class="mk-badge" style="background:#FEF3C7;color:#92400E;border:1px solid #FDE68A" title="課前1小時內請假，補課要與家長確認。去排補課＝補（多收半堂）；不補則退半堂">⚠ 待確認補課</span>':''}
+          ${absBadge(e)}<span class="mk-badge mk-badge-un">未安排</span>${tutorB?'<span class="mk-badge" style="background:#F8EDEA;color:#C0504A;border:1px solid #E8C5BF" title="課前1小時內請假，補課要與家長確認。去排補課＝補（多收半堂）；不補則退半堂">⚠ 待確認補課</span>':''}
         </div>
         <div class="mk-list-meta">
           <span>📅 ${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）</span>
@@ -180,7 +180,7 @@ function renderMakeup(){
       <div class="mk-list-body">
         <div class="mk-list-top">
           <span class="mk-list-title">${mkCardTitle(e)}</span>
-          <span class="mk-badge" style="background:#F3F4F6;color:#6B7280;border:1px solid #E5E7EB">不補課・退半堂</span>
+          <span class="mk-badge" style="background:var(--sf2);color:var(--tx2);border:1px solid var(--br)">不補課・退半堂</span>
         </div>
         <div class="mk-list-meta">
           <span>📅 ${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）</span>
@@ -198,9 +198,9 @@ function renderMakeup(){
     const d=e.startDt,de=e.endDt,color=calColor(e.calName);
     const sd=new Date(rec.scheduledDate),se=new Date(rec.scheduledEnd);
     const statusBadge=isCompleted
-      ?`<span class="mk-badge mk-badge-done">已完成</span>`
-      :`<span class="mk-badge mk-badge-arr">已安排</span>`;
-    return`<div class="mk-list-card${isCompleted?' mk-completed':''}">
+      ?`<span class="mk-badge mk-badge-done">✓ 已完成</span>`
+      :`<span class="mk-badge mk-badge-arr">✓ 已安排</span>`;
+    return`<div class="mk-list-card${isCompleted?' mk-completed':' mk-arr'}">
       <div class="mk-list-bar" style="background:${color}"></div>
       <div class="mk-list-body">
         <div class="mk-list-top">
@@ -225,19 +225,19 @@ function renderMakeup(){
     </div>`;
   }
 
-  let html=`<div class="mk-two-col">`;
+  let html='';
 
-  // 左欄：待安排
-  html+=`<div class="mk-col"><div class="mk-col-hd"><span style="color:#F97316">⏰</span><span class="mk-col-ttl">待安排</span><span class="mk-col-cnt">${pending.length} 筆</span></div>`;
-  if(!pending.length){html+=`<div class="empty" style="padding:16px 0">全部已安排 🎉</div>`;}
+  // 待安排
+  html+=`<div class="mk-sec"><div class="mk-sec-head"><span class="mk-sec-dot" style="background:#EE9F3C"></span>待安排<span class="mk-sec-pill">${pending.length}</span></div>`;
+  if(!pending.length){html+=`<div class="empty" style="padding:14px 0">全部已安排 🎉</div>`;}
   else{pending.forEach(e=>{html+=pendingCard(e);});}
   html+=`</div>`;
 
-  // 右欄：已安排
-  html+=`<div class="mk-col"><div class="mk-col-hd"><span style="color:var(--ac)">📅</span><span class="mk-col-ttl">已安排</span><span class="mk-col-cnt">${scheduledList.length} 筆</span></div>`;
-  if(!scheduledList.length){html+=`<div class="empty" style="padding:16px 0">尚無已安排補課</div>`;}
+  // 已安排
+  html+=`<div class="mk-sec"><div class="mk-sec-head"><span class="mk-sec-dot" style="background:#6B8F7A"></span>已安排<span class="mk-sec-pill">${scheduledList.length}</span></div>`;
+  if(!scheduledList.length){html+=`<div class="empty" style="padding:14px 0">尚無已安排補課</div>`;}
   else{scheduledList.forEach(e=>{const rec=scheduledAll.find(s=>s.originalId===e.id);if(rec)html+=scheduledCard(e,rec,false);});}
-  html+=`</div></div>`;
+  html+=`</div>`;
 
   // 已完成安排（最近完成的在上）
   if(completedList.length){
@@ -346,10 +346,24 @@ function closeSlotPicker(){
 function renderSpBody(){
   const body=document.getElementById('sp-body');
   body.innerHTML='';
+  const step=!slotPicker.date?1:!slotPicker.time?2:!slotPicker.room?3:4;
+  body.appendChild(buildSpStepper(step));
   body.appendChild(buildSpDateSection());
   if(slotPicker.date)body.appendChild(buildSpTimeSection());
   if(slotPicker.time)body.appendChild(buildSpRoomSection());
   if(slotPicker.room)body.appendChild(buildSpConfirm());
+}
+
+// B4 視覺指示 stepper（純反映目前進度，不影響流程）
+function buildSpStepper(cur){
+  const steps=['日期','時段','教室','確認'];
+  const wrap=document.createElement('div');
+  wrap.className='sp-stepper';
+  wrap.innerHTML=steps.map((s,i)=>{
+    const n=i+1,st=n<cur?'done':n===cur?'cur':'todo';
+    return`<div class="sp-step sp-step-${st}"><span class="sp-step-dot">${n<cur?'✓':n}</span><span class="sp-step-lbl">${s}</span></div>`;
+  }).join('<span class="sp-step-line"></span>');
+  return wrap;
 }
 
 function buildSpDateSection(){
@@ -466,7 +480,7 @@ function buildSpTimeSection(){
   const sec=document.createElement('div');
   const dur=getEffectiveDur();
   const isPracticeMakeup=getEffectiveType()==='practice'&&slotPicker.mode==='makeup';
-  const branchToggle=`<div class="period-tabs" style="margin-bottom:10px"><button class="period-tab${slotPicker.branch==='北投'?' active':''}" onclick="switchSpBranch('北投')">北投分校</button><button class="period-tab${slotPicker.branch==='石牌'?' active':''}" onclick="switchSpBranch('石牌')">石牌分校</button></div>`;
+  const branchToggle=`<div class="period-tabs sp-seg" style="margin-bottom:10px"><button class="period-tab${slotPicker.branch==='北投'?' active':''}" onclick="switchSpBranch('北投')">北投分校</button><button class="period-tab${slotPicker.branch==='石牌'?' active':''}" onclick="switchSpBranch('石牌')">石牌分校</button></div>`;
   sec.innerHTML=`<div class="sp-lbl">選擇時段（${fmtDur(dur)}${slotPicker.mode==='makeup'&&dur!==slotPicker.ev.durMins?'，補課縮短至原時長一半':''}）</div>${branchToggle}${slotPicker.avail===null?'<div style="color:var(--tx2);font-size:13px">讀取中...</div>':'<div class="sp-chips-wrap"></div>'}`;
   if(!slotPicker.avail)return sec;
   const wrap=sec.querySelector('.sp-chips-wrap');
@@ -504,15 +518,18 @@ function buildSpTimeSection(){
         freeSlots.push({h,mi});
       }
     }
-    const addGroup=(label,slots,mkEl)=>{
+    const addGroup=(label,slots,mkEl,highlight)=>{
       if(!slots.length)return;
+      const box=highlight?document.createElement('div'):wrap;
+      if(highlight)box.className='sp-practice-hl';
       const lbl=document.createElement('div');lbl.className='sp-group-lbl';lbl.textContent=label;
       const chips=document.createElement('div');chips.className='sp-chips';
       slots.forEach(s=>chips.appendChild(mkEl(s)));
-      wrap.appendChild(lbl);wrap.appendChild(chips);
+      box.appendChild(lbl);box.appendChild(chips);
+      if(highlight)wrap.appendChild(box);
     };
-    addGroup('可加入現有練習課',joinSlots,({h,mi,remaining})=>mkTime(h,mi,`剩${remaining}席`));
-    addGroup('獨立時段',freeSlots,({h,mi})=>mkTime(h,mi,null));
+    addGroup('⭐ 可加入現有練習課',joinSlots,({h,mi,remaining})=>mkTime(h,mi,`剩${remaining}席`),true);
+    addGroup('獨立時段',freeSlots,({h,mi})=>mkTime(h,mi,null),false);
     if(!joinSlots.length&&!freeSlots.length){
       const empty=document.createElement('div');empty.style.cssText='font-size:13px;color:var(--tx2)';empty.textContent='當天無可用時段';wrap.appendChild(empty);
     }
