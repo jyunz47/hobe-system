@@ -1,0 +1,137 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Week View · 週檢視</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  body{background:var(--bg);padding:24px;font-family:'Noto Sans TC',sans-serif}
+  .wrap{max-width:880px}
+  h3{font-size:12px;color:var(--tx3);text-transform:uppercase;letter-spacing:.08em;margin:18px 0 8px}
+  h3:first-child{margin-top:0}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h3>七日摘要 chips（wsum-grid）</h3>
+    <div class="wsum-grid">
+      <button class="wcell w-sel">
+        <div class="wcell-hd"><span class="wcell-wd">一</span><span class="wcell-dd">16</span></div>
+        <div class="wcell-body">
+          <div class="wcell-it"><span class="wcell-dot" style="background:#6B8F7A"></span><span class="wcell-nm">國一數學A</span></div>
+          <div class="wcell-it"><span class="wcell-dot" style="background:#9A8552"></span><span class="wcell-nm">國二英文B</span></div>
+          <div class="wcell-it"><span class="wcell-dot" style="background:#6B8F7A"></span><span class="wcell-nm">國三理化</span></div>
+          <div class="wcell-more">+2</div>
+        </div>
+      </button>
+      <button class="wcell">
+        <div class="wcell-hd"><span class="wcell-wd">二</span><span class="wcell-dd">17</span></div>
+        <div class="wcell-body">
+          <div class="wcell-it"><span class="wcell-dot" style="background:#6B8F7A"></span><span class="wcell-nm">高一數學</span></div>
+          <div class="wcell-it"><span class="wcell-dot" style="background:#C16B36"></span><span class="wcell-nm">補課·小明</span></div>
+        </div>
+      </button>
+      <button class="wcell w-today">
+        <div class="wcell-hd"><span class="wcell-wd">三</span><span class="wcell-dd">18</span><span class="wcell-today">今</span></div>
+        <div class="wcell-body">
+          <div class="wcell-it"><span class="wcell-dot" style="background:#6B8F7A"></span><span class="wcell-nm">國一數學A</span></div>
+          <div class="wcell-it"><span class="wcell-dot" style="background:#9A8552"></span><span class="wcell-nm">國二英文B·假</span></div>
+          <div class="wcell-it"><span class="wcell-dot" style="background:#6B8F7A"></span><span class="wcell-nm">高三物理·調</span></div>
+        </div>
+      </button>
+      <button class="wcell">
+        <div class="wcell-hd"><span class="wcell-wd">四</span><span class="wcell-dd">19</span></div>
+        <div class="wcell-body">
+          <div class="wcell-it"><span class="wcell-dot" style="background:#6B8F7A"></span><span class="wcell-nm">國三理化</span></div>
+        </div>
+      </button>
+      <button class="wcell">
+        <div class="wcell-hd"><span class="wcell-wd">五</span><span class="wcell-dd">20</span></div>
+        <div class="wcell-body">
+          <div class="wcell-it"><span class="wcell-dot" style="background:#6B8F7A"></span><span class="wcell-nm">高一數學</span></div>
+          <div class="wcell-it"><span class="wcell-dot" style="background:#9A8552"></span><span class="wcell-nm">國二英文B</span></div>
+        </div>
+      </button>
+      <button class="wcell">
+        <div class="wcell-hd"><span class="wcell-wd">六</span><span class="wcell-dd">21</span></div>
+        <div class="wcell-body"><div class="wcell-empty">—</div></div>
+      </button>
+      <button class="wcell">
+        <div class="wcell-hd"><span class="wcell-wd">日</span><span class="wcell-dd">22</span></div>
+        <div class="wcell-body"><div class="wcell-empty">—</div></div>
+      </button>
+    </div>
+
+    <h3>焦點日（wfocus）— 選定日的完整課程</h3>
+    <div class="wfocus">
+      <div class="wfocus-hd">
+        <div class="wfocus-hd-row">
+          <div class="wfocus-date">6/18 週三</div>
+          <span class="wfocus-tag">TODAY</span>
+        </div>
+        <div class="wfocus-meta"><span>3 堂</span><span class="tsum-abs">1 請假</span><span style="color:#C0504A;font-weight:500">1 調課</span><span style="color:#C16B36;font-weight:500">1 補課</span></div>
+      </div>
+      <div class="wfocus-list">
+        <div class="tcard t-regular t-now" style="border-left-color:#6B8F7A">
+          <div class="tcard-row">
+            <div class="tcard-time">18:00<span class="dash">—</span>20:00</div>
+            <div class="tcard-dur">2 小時</div>
+            <div class="tcard-tags">
+              <span class="tpill t-regular"><span class="pdot"></span>一般課程</span>
+              <span class="tstat tstat-now"><span class="ndot"></span>進行中</span>
+            </div>
+          </div>
+          <div class="tcard-title">國一數學 A班</div>
+          <div class="tcard-meta">
+            <span><span class="lbl">授課</span><b>王老師</b></span>
+            <span><span class="lbl">教室</span><b>301教室</b></span>
+            <span><span class="lbl">學生</span><b>8 人</b></span>
+          </div>
+        </div>
+
+        <div class="tcard t-regular t-absent" style="border-left-color:#9A8552">
+          <div class="tcard-row">
+            <div class="tcard-time">19:00<span class="dash">—</span>21:00</div>
+            <div class="tcard-dur">2 小時</div>
+            <div class="tcard-tags">
+              <span class="tpill t-regular"><span class="pdot"></span>一般課程</span>
+            </div>
+          </div>
+          <div class="tcard-title struck">國二英文 B班</div>
+          <div class="tcard-meta">
+            <span><span class="lbl">授課</span><b>林老師</b></span>
+            <span><span class="lbl">教室</span><b>302教室</b></span>
+            <span><span class="lbl">學生</span><b>陳大華、李小美</b></span>
+          </div>
+          <div class="tcard-extras">
+            <div class="tcard-abs"><span class="l">請假</span>陳大華、李小美請假</div>
+          </div>
+        </div>
+
+        <div class="tcard t-resched" style="border-left-color:#6B8F7A">
+          <div class="tcard-row">
+            <div class="tcard-time">17:00<span class="dash">—</span>18:30</div>
+            <div class="tcard-dur">1.5 小時</div>
+            <div class="tcard-tags">
+              <span class="tpill t-regular"><span class="pdot"></span>一般課程</span>
+            </div>
+          </div>
+          <div class="tcard-title">高三物理</div>
+          <div class="tcard-meta">
+            <span><span class="lbl">授課</span><b>陳老師</b></span>
+            <span><span class="lbl">教室</span><b>303教室</b></span>
+            <span><span class="lbl">學生</span><b>3 人</b></span>
+          </div>
+          <div class="tcard-extras">
+            <div class="tcard-abs"><span class="l">調課</span>學生家族旅遊</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

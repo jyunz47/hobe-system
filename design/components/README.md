@@ -31,4 +31,7 @@ preview，第一行 `<!-- @dsCard group="…" -->` 讓 claude.ai/design 的 Desi
 - `student-card.html` — 學生卡與面板（在學/歷屆分頁、年級分區）
 - `student-modal.html` — 學生詳情四格統計 + 出缺勤列
 
-待補（P2/P3）：週檢視、時間軸、補課時段選擇器、補課清單卡、Topbar、手機底欄、表單元素、Typography、請假面板、學生編輯、行政小工具 modal…（逐顆加）。
+**P2 中頻元件**
+- `week-view.html` — 週檢視（七日摘要 chips + 焦點日課程卡，含請假/調課態）
+
+待補（P2/P3）：時間軸、補課時段選擇器、補課清單卡、Topbar、手機底欄、表單元素、Typography、請假面板、學生編輯、行政小工具 modal…（逐顆加）。
