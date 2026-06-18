@@ -27,13 +27,27 @@ function redirectSignIn(){
     include_granted_scopes:'true',
     state
   });
+  const hint=getLoginHint();if(hint)p.set('login_hint',hint); // 預選帳號，少跳一層帳戶選擇器
   location.href='https://accounts.google.com/o/oauth2/v2/auth?'+p;
+}
+
+// 登入過的 email：給 GIS / redirect 當 login_hint，避免多帳號時跳「選擇帳戶」
+function getLoginHint(){
+  try{const e=firebase.auth().currentUser&&firebase.auth().currentUser.email;if(e)return e;}catch(_){}
+  return localStorage.getItem('ghint')||'';
+}
+
+// 靜默續授權：帶 login_hint 讓 Google 固定用同一帳號悄悄換新 token（多帳號時才不會跳選擇器）
+function silentReauth(){
+  if(!tokenClient)return;
+  const hint=getLoginHint();
+  tokenClient.requestAccessToken(hint?{prompt:'',hint}:{prompt:''});
 }
 
 // 重新授權：桌面走 GIS 靜默 popup，App 模式走 redirect
 function requestReauth(){
   if(isStandalone()){redirectSignIn();return;}
-  if(tokenClient)tokenClient.requestAccessToken({prompt:''});
+  silentReauth();
 }
 
 // 解析 redirect 回來的 #access_token（沒有就回 null）
@@ -76,7 +90,7 @@ async function initAPIs(){
   if(rtok){
     showL('登入中...');
     gapi.client.setToken({access_token:rtok.access_token});
-    sessionStorage.setItem('gtoken',JSON.stringify({access_token:rtok.access_token,expires_at:Date.now()+rtok.expires_in*1000-60000}));
+    localStorage.setItem('gtoken',JSON.stringify({access_token:rtok.access_token,expires_at:Date.now()+rtok.expires_in*1000-60000}));
     scheduleTokenRefresh();
     try{
       const cred=firebase.auth.GoogleAuthProvider.credential(null,rtok.access_token);
@@ -85,7 +99,8 @@ async function initAPIs(){
     await onSignedIn();
     return;
   }
-  const saved=sessionStorage.getItem('gtoken');
+  // localStorage 的 token 撐得過重開瀏覽器；還在有效期就直接還原登入
+  const saved=localStorage.getItem('gtoken');
   if(saved){
     try{
       const t=JSON.parse(saved);
@@ -96,8 +111,17 @@ async function initAPIs(){
         return;
       }
     }catch(e){}
-    sessionStorage.removeItem('gtoken');
-    requestReauth();
+    localStorage.removeItem('gtoken');
+  }
+  // 沒有有效 token，但 Firebase（localStorage）還記得登入 → 自動靜默續授權，省掉手動點登入
+  // App 模式靜默 popup 不可用，留給使用者手動點（避免 reload 就被整頁跳走）
+  if(isStandalone())return;
+  const user=await new Promise(resolve=>{
+    const unsub=firebase.auth().onAuthStateChanged(u=>{unsub();resolve(u);});
+  });
+  if(user&&tokenClient){
+    showL('登入中...');
+    silentReauth(); // 帶 login_hint 靜默續授權；失敗（需互動）時 callback 會 hideL 並停在登入頁
   }
 }
 
@@ -120,7 +144,7 @@ async function doSignIn(){
   // Case 1：Firebase 已登入（localStorage 還原），只需 Calendar token
   // 走 GIS silent refresh，已授權過的話不會跳 popup
   if(firebase.auth().currentUser){
-    tokenClient.requestAccessToken({prompt:''});
+    silentReauth();
     return;
   }
   // Case 2：全新登入，combined popup 一次拿 Firebase auth + Calendar OAuth token
@@ -135,11 +159,11 @@ async function doSignIn(){
   await onSignedIn();
 }
 
-function saveToken(){const t=gapi.client.getToken();if(t)sessionStorage.setItem('gtoken',JSON.stringify({access_token:t.access_token,expires_at:Date.now()+3500000}));}
+function saveToken(){const t=gapi.client.getToken();if(t)localStorage.setItem('gtoken',JSON.stringify({access_token:t.access_token,expires_at:Date.now()+3500000}));}
 
 function scheduleTokenRefresh(){
   if(tokenRefreshTimer)clearTimeout(tokenRefreshTimer);
-  const stored=sessionStorage.getItem('gtoken');
+  const stored=localStorage.getItem('gtoken');
   if(!stored)return;
   try{
     const t=JSON.parse(stored);
@@ -148,7 +172,7 @@ function scheduleTokenRefresh(){
       if(currentPanel==='login')return;
       // App 模式不能在使用中整頁跳走（會打斷操作），改提示讓使用者挑時機
       if(isStandalone()){toast('授權即將過期','inf',true);return;}
-      if(tokenClient)tokenClient.requestAccessToken({prompt:''});
+      silentReauth();
     },delay);
   }catch(e){}
 }
@@ -156,7 +180,7 @@ function scheduleTokenRefresh(){
 // 切回分頁時若 token 快過期就重新請求
 document.addEventListener('visibilitychange',()=>{
   if(document.visibilityState!=='visible'||!gisReady||currentPanel==='login')return;
-  const stored=sessionStorage.getItem('gtoken');
+  const stored=localStorage.getItem('gtoken');
   if(!stored){requestReauth();return;}
   try{
     const t=JSON.parse(stored);
@@ -170,7 +194,7 @@ function signOut(){
   calendarIds={};dayEvents=[];weekEvents=[];makeupList=[];
   driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[]};
   firebase.auth().signOut();
-  sessionStorage.removeItem('gtoken');
+  localStorage.removeItem('gtoken');
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='none');
   setUSt('','未登入','請登入 Google 帳號');
   showPanel('login');
@@ -180,7 +204,7 @@ async function onSignedIn(){
   hideL();
   scheduleTokenRefresh();
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='inline-block');
-  try{const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+gapi.client.getToken().access_token}}).then(r=>r.json());setUSt('ok',info.email||'已登入','Google 帳號');}catch(e){setUSt('ok','已登入','Google 帳號');}
+  try{const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+gapi.client.getToken().access_token}}).then(r=>r.json());setUSt('ok',info.email||'已登入','Google 帳號');if(info.email)localStorage.setItem('ghint',info.email);}catch(e){setUSt('ok','已登入','Google 帳號');}
   await loadFromFirestore();
   migrateCoursesToEnrollments();
   await fetchCalIds();
@@ -264,11 +288,11 @@ function showPanel(id){
   document.getElementById('tbs').textContent=s;
 }
 
-// token 是否已過期（gapi 沒 token、或 sessionStorage 記錄的 expires_at 已到）
+// token 是否已過期（gapi 沒 token、或 localStorage 記錄的 expires_at 已到）
 function isTokenExpired(){
   if(!gapi.client.getToken())return true;
   try{
-    const t=JSON.parse(sessionStorage.getItem('gtoken')||'null');
+    const t=JSON.parse(localStorage.getItem('gtoken')||'null');
     return !t||t.expires_at<=Date.now();
   }catch(e){return true;}
 }

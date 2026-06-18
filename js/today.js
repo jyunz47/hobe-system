@@ -264,7 +264,7 @@ function tcardHtml(e){
     <div class="tcard2-head" onclick="toggleTcard('${id}')">
       <div class="tcard2-av${avCls}">${esc(letter)}</div>
       <div class="tcard2-info">
-        <div class="tcard2-name${e.isFullAbsent?' struck':''}">${esc(e.origTitle)}${badge}${mkBadge}${stat}${typeMismatchChip(e)}</div>
+        <div class="tcard2-name"><span class="tcard2-title${e.isFullAbsent?' struck':''}">${esc(e.origTitle)}</span>${badge}${mkBadge}${stat}${typeMismatchChip(e)}</div>
         <div class="tcard2-sub">${e.classroom?esc(e.classroom)+' · ':''}${e.teacher?esc(e.teacher)+' · ':''}${roster.length} 人${e.type==='practice'?' · 自習':''}</div>
       </div>
       <div class="tcard2-time"><b>${fmtT(e.startDt)}</b><span>${fmtT(e.endDt)}</span></div>

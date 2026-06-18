@@ -796,13 +796,13 @@ body:has(#panel-login.active) .content{padding:0}
 .tcard2-av.av-resched{background:#F1D6D0;color:#C0504A}
 .tcard2-info{flex:1;min-width:0}
 .tcard2-name{font-size:15px;font-weight:700;color:var(--tx);margin-bottom:4px;display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.tcard2-name.struck{text-decoration:line-through;text-decoration-color:#C0504A;color:var(--tx2)}
+.tcard2-title.struck{text-decoration:line-through;text-decoration-color:#C0504A;color:var(--tx2)}
 .tcard2-sub{font-size:12.5px;color:var(--tx2)}
 .tcard2-time{text-align:right;flex-shrink:0;font-family:'DM Mono',monospace}
 .tcard2-time b{display:block;font-size:14px;font-weight:600;color:var(--tx)}
 .tcard2-time span{font-size:11.5px;color:var(--tx3)}
-.tcard2-chev{flex-shrink:0;color:var(--tx3);font-size:13px;transition:transform .18s;margin-left:2px}
-.tcard2.tc-open .tcard2-chev{transform:rotate(180deg)}
+.tcard2-chev{flex-shrink:0;color:var(--tx3);font-size:13px;transition:transform .18s;margin-left:2px;transform:rotate(180deg)}
+.tcard2.tc-open .tcard2-chev{transform:rotate(0deg)}
 .tc-badge{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
 .tc-badge-resched{background:#C0504A;color:#fff}
 .tc-badge-abs{background:#FBF4EA;color:#C16B36}

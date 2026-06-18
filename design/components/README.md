@@ -19,8 +19,16 @@ preview，第一行 `<!-- @dsCard group="…" -->` 讓 claude.ai/design 的 Desi
 
 ## 目前涵蓋
 
+**Foundations / 框架**
 - `foundations.html` — 色彩、圓角 tokens
-- `buttons.html` — 按鈕全系列
 - `sidebar.html` — 側欄導覽
 
-待補：課程卡、登入頁、統計卡、時段選擇器…（逐顆加）。
+**P1 高頻元件**
+- `buttons.html` — 按鈕全系列
+- `course-card.html` — 課程卡（進行中／展開／請假／調課）
+- `login.html` — 登入頁（雙欄品牌牆 + 登入卡）
+- `makeup-stats.html` — 待補課統計卡（待安排／已安排／已完成）
+- `student-card.html` — 學生卡與面板（在學/歷屆分頁、年級分區）
+- `student-modal.html` — 學生詳情四格統計 + 出缺勤列
+
+待補（P2/P3）：週檢視、時間軸、補課時段選擇器、補課清單卡、Topbar、手機底欄、表單元素、Typography、請假面板、學生編輯、行政小工具 modal…（逐顆加）。

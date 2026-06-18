@@ -1,0 +1,87 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Course Card · 課程卡</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  body{background:var(--bg);padding:24px;font-family:'Noto Sans TC',sans-serif}
+  .wrap{max-width:560px;display:flex;flex-direction:column;gap:12px}
+  h3{font-size:12px;color:var(--tx3);text-transform:uppercase;letter-spacing:.08em;margin:8px 0 0}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <h3>進行中</h3>
+    <div class="tcard2 t-regular t-now" style="--tcv:#6B8F7A">
+      <div class="tcard2-head">
+        <div class="tcard2-av">數</div>
+        <div class="tcard2-info">
+          <div class="tcard2-name">國一數學 A班<span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+          <div class="tcard2-sub">301教室 · 王老師 · 8 人</div>
+        </div>
+        <div class="tcard2-time"><b>18:00</b><span>20:00</span></div>
+        <span class="tcard2-chev">▾</span>
+      </div>
+    </div>
+
+    <h3>展開（顯示動作列）</h3>
+    <div class="tcard2 t-regular tc-open" style="--tcv:#9A8552">
+      <div class="tcard2-head">
+        <div class="tcard2-av">英</div>
+        <div class="tcard2-info">
+          <div class="tcard2-name">國二英文 B班</div>
+          <div class="tcard2-sub">302教室 · 林老師 · 6 人</div>
+        </div>
+        <div class="tcard2-time"><b>19:00</b><span>21:00</span></div>
+        <span class="tcard2-chev">▾</span>
+      </div>
+      <div class="tcard2-actions">
+        <button class="tc-act">🗓 標記請假</button>
+        <button class="tc-act">↔ 調課</button>
+        <button class="tc-act roster">名單 <b>6</b></button>
+      </div>
+      <div class="tcard2-roster">王小明、陳大華、李小美、張志強、黃淑芬、吳建宏</div>
+    </div>
+
+    <h3>請假</h3>
+    <div class="tcard2 t-regular t-absent" style="--tcv:#C16B36">
+      <div class="tcard2-head">
+        <div class="tcard2-av av-practice">理</div>
+        <div class="tcard2-info">
+          <div class="tcard2-name"><span class="tcard2-title struck">國三理化 C班</span><span class="tc-badge tc-badge-abs">請假</span><span class="tc-badge tc-badge-un">未安排</span></div>
+          <div class="tcard2-sub">303教室 · 陳老師 · 4 人</div>
+        </div>
+        <div class="tcard2-time"><b>17:00</b><span>19:00</span></div>
+        <span class="tcard2-chev">▾</span>
+      </div>
+      <div class="tcard2-actions">
+        <button class="tc-act danger">取消請假</button>
+        <button class="tc-act roster">名單 <b>4</b></button>
+      </div>
+    </div>
+
+    <h3>調課（已安排）</h3>
+    <div class="tcard2 t-resched" style="--tcv:#6B8F7A">
+      <div class="tcard2-head">
+        <div class="tcard2-av av-resched">數</div>
+        <div class="tcard2-info">
+          <div class="tcard2-name">國一數學 A班<span class="tc-badge tc-badge-resched">調課</span><span class="tc-badge tc-badge-arr">✓ 已安排</span></div>
+          <div class="tcard2-sub">301教室 · 王老師 · 8 人</div>
+        </div>
+        <div class="tcard2-time"><b>18:00</b><span>20:00</span></div>
+        <span class="tcard2-chev">▾</span>
+      </div>
+      <div class="tcard2-actions">
+        <button class="tc-act">看調課安排</button>
+        <button class="tc-act danger">取消調課</button>
+        <button class="tc-act roster">名單 <b>8</b></button>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

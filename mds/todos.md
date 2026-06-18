@@ -34,6 +34,39 @@
 
 ---
 
+## Claude Design 元件 gallery（接續補元件 · 開新框說「嗨，接 Claude Design gallery」從這裡開始）
+
+> **這是什麼**：Claude Design 橋樑的本機端。每顆 UI 元件一個 preview 檔放 [`design/components/`](../design/components/)，第一行 `<!-- @dsCard group="…" -->` 讓 claude.ai/design 自動建卡片。詳細背景見 [`進展紀錄.md`](進展紀錄.md) 2026-06-18「搭起 Claude Design 橋樑」。
+> **雲端專案**：claude.ai/design 的「HOBE 設計系統」，projectId `a7832be0-d223-4060-8449-f85457458db6`。
+
+### 補一顆元件的標準流程
+1. 從來源撈**真實 markup**（不要自己編結構）：動態卡片在 `js/*.js` 的 render 函式（找 `class="…"` 反引號模板），靜態畫面在 `補習班排程系統.html`。對應的 CSS class 在 `style.css`（用區塊註解找）。
+2. 寫 `design/components/<name>.html`：第一行 `<!-- @dsCard group="Components" -->`（基礎類用 `Foundations`），`<head>` link `../../tokens.css` + `../../style.css`（這樣長相跟線上一致），body 放範例假資料的 markup，移除 onclick。
+3. 更新 `design/components/README.md` 的「目前涵蓋」清單。
+4. 推上雲端：DesignSync 工具 `list_projects`（拿 projectId）→ `finalize_plan`（writes 填新檔路徑、deletes 給 `[]`）→ `write_files`（用 localPath）。
+5. ⚠️ 若過程順手改了 `style.css`/`tokens.css`，記得也 `write_files` 推一份上雲端，否則雲端 gallery 渲染會跟本機不一致；改 `style.css` 還要把 HTML 的 `style.css?v=N` 加一。
+
+### 已完成（8 顆，完成即從下面刪）
+foundations、sidebar、buttons、course-card、login、makeup-stats、student-card、student-modal。
+
+### 待補 P2（中頻）
+- [ ] ⏳ **週檢視** day cards — 來源 `js/week.js`（`tcard-title` 等）、CSS「Weekly view」「W4 Week」
+- [ ] **時間軸（教室時段）** — `js/today.js` renderTimeline（`tl-*` class）、CSS「Timeline」；含「A+B timeline+hero box」hero
+- [ ] **補課時段選擇器** — `js/makeup.js` slot picker（stepper + segmented + 練習課 highlight）、CSS「Slot Picker」「B4」
+- [ ] **補課清單卡** — `js/makeup.js` makeup list、CSS「Makeup grid cards」「Makeup list redesign」
+- [ ] **Topbar** — 靜態 HTML `.topbar`（`.tbt .tbs .tba`）
+- [ ] **手機底欄分頁** — CSS「手機版骨架（≤768px）」側欄變底部分頁列那段
+
+### 待補 P3（低頻 / 表單與小元素）
+- [ ] **表單元素** — `input[type=date]`、搜尋框、修課登記列（`stu-edit-price-input`，CSS「修課登記列」）
+- [ ] **小元素** — Section heading（`.sec-hd`）、Legend（`.legend`）、Date nav（`.date-nav`）、badge/pill（`.nbadge`、`.tc-badge*`）
+- [ ] **Typography** — 字體階層（Noto Sans TC / DM Sans / DM Mono / Newsreader）
+- [ ] **請假／缺課面板** — `js/absence.js` `buildAbsPanel`、CSS「Absence panel」
+- [ ] **學生編輯 + 危險區** — `js/students.js` `renderStudentEditPanel`、CSS「Student edit」「危險區（徹底刪除）」、Student scan
+- [ ] **行政小工具 modal** — 課表對帳、課程價目表、Add Course Inline Panel、狀態變更 modal
+
+---
+
 ## 開發路線
 
 > 下次回來從第一個 ⏳ 開始。

@@ -1,0 +1,50 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Modal · 學生詳情四格統計</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  body{background:var(--bg);padding:24px;font-family:'Noto Sans TC',sans-serif}
+  /* 模擬 modal 內容容器 */
+  .modal-mock{max-width:460px;background:var(--sf);border:1px solid var(--brd);border-radius:var(--r);padding:22px}
+  .modal-mock-title{font-size:18px;font-weight:700;color:var(--tx);margin-bottom:4px}
+  .modal-mock-sub{font-size:13px;color:var(--tx3);margin-bottom:18px}
+</style>
+</head>
+<body>
+  <div class="modal-mock">
+    <div class="modal-mock-title">陳大華</div>
+    <div class="modal-mock-sub">國一 · 私立明德國中</div>
+
+    <div class="stu-modal-grid">
+      <div class="smg"><div class="smg-n">2</div><div class="smg-l">請假</div></div>
+      <div class="smg"><div class="smg-n">1</div><div class="smg-l">調課</div></div>
+      <div class="smg smg-owed"><div class="smg-n">2</div><div class="smg-l">欠課</div></div>
+      <div class="smg"><div class="smg-n">1</div><div class="smg-l">加收半堂</div></div>
+    </div>
+
+    <div class="stu-modal-sec-lbl">出缺勤（本月）</div>
+    <div class="stu-pair">
+      <div class="stu-pair-icon">📘</div>
+      <div class="stu-pair-body">
+        <div class="stu-pair-course">國一數學 A班</div>
+        <div class="stu-pair-abs">3/12 請假</div>
+      </div>
+      <div class="stu-pair-makeup done">✓ 已補</div>
+    </div>
+    <div class="stu-pair">
+      <div class="stu-pair-icon">📗</div>
+      <div class="stu-pair-body">
+        <div class="stu-pair-course">國一數學 A班</div>
+        <div class="stu-pair-abs">3/26 請假</div>
+      </div>
+      <div class="stu-pair-makeup pending">待補</div>
+    </div>
+  </div>
+</body>
+</html>
