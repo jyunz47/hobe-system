@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HOBE">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=22">
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -39,6 +39,11 @@ if ('serviceWorker' in navigator) {
     <button class="ni" id="nav-students" data-m="學生" onclick="switchPanel('students')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
       <span class="ni-txt">學生管理</span>
+    </button>
+    <div class="nav-sec">系統</div>
+    <button class="ni" id="nav-settings" data-m="設定" onclick="switchPanel('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span class="ni-txt">設定</span>
     </button>
   </nav>
   <div class="sf">
@@ -129,12 +134,12 @@ if ('serviceWorker' in navigator) {
           </div>
           <div class="today-panel-body">
             <div class="legend">
-              <div class="lgi"><div class="lgd" style="background:#3B82F6"></div>一般課程</div>
-              <div class="lgi"><div class="lgd" style="background:#EF4444"></div>調課</div>
-              <div class="lgi"><div class="lgd" style="background:#F97316"></div>補課</div>
-              <div class="lgi"><div class="lgd" style="background:#EAB308"></div>加課</div>
-              <div class="lgi"><div class="lgd" style="background:#22C55E"></div>試聽</div>
-              <div class="lgi"><div class="lgd" style="background:#A855F7"></div>練習課</div>
+              <div class="lgi"><div class="lgd" style="background:var(--cal-general)"></div>一般課程</div>
+              <div class="lgi"><div class="lgd" style="background:var(--cal-resched)"></div>調課</div>
+              <div class="lgi"><div class="lgd" style="background:var(--cal-makeup)"></div>補課</div>
+              <div class="lgi"><div class="lgd" style="background:var(--cal-extra)"></div>加課</div>
+              <div class="lgi"><div class="lgd" style="background:var(--cal-trial)"></div>試聽</div>
+              <div class="lgi"><div class="lgd" style="background:var(--cal-practice)"></div>練習課</div>
             </div>
             <div class="tsum" id="today-summary"></div>
             <div class="tgrid" id="clist-today"><div class="empty" style="grid-column:1/-1">載入中...</div></div>
@@ -277,6 +282,15 @@ if ('serviceWorker' in navigator) {
       <div class="clist" id="clist-makeup"><div class="empty">按「更新」載入資料</div></div>
     </div>
 
+    <!-- Settings -->
+    <div id="panel-settings" class="panel" style="display:none">
+      <div class="set-card">
+        <div class="sec-hd">課程總覽<span class="sec-hd-line"></span></div>
+        <p class="set-card-sub">系統目前認得的每一門課：類型、老師、單價、是否需登記成績。點一門課展開看登記名單（練習課顯示每堂名單與科目）。單價在「學生管理 → 價目表」調整。</p>
+        <div id="co-list"></div>
+      </div>
+    </div>
+
   </div>
 </div>
 </div>
@@ -315,17 +329,18 @@ if ('serviceWorker' in navigator) {
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://apis.google.com/js/api.js" async defer></script>
 <!-- 應用程式分模組（順序：state → utils → 解析 → 各 panel → init 最後）-->
-<script src="js/state.js?v=5"></script>
+<script src="js/state.js?v=7"></script>
 <script src="js/utils.js?v=5"></script>
 <script src="js/parse.js?v=5"></script>
-<script src="js/today.js?v=11"></script>
+<script src="js/today.js?v=17"></script>
 <script src="js/week.js?v=8"></script>
 <script src="js/absence.js?v=6"></script>
 <script src="js/makeup.js?v=5"></script>
-<script src="js/enrollment.js?v=6"></script>
+<script src="js/enrollment.js?v=8"></script>
 <script src="js/students.js?v=5"></script>
-<script src="js/attendance.js?v=1"></script>
-<script src="js/init.js?v=6"></script>
+<script src="js/attendance.js?v=2"></script>
+<script src="js/settings.js?v=11"></script>
+<script src="js/init.js?v=7"></script>
 
 <div class="stu-modal-wrap" id="stu-modal-wrap">
   <div class="stu-modal-overlay" onclick="closeStudentModal()"></div>

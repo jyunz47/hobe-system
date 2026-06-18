@@ -84,6 +84,19 @@ function getCourseDefaultPrice(title){
 // 實際單價：個人覆蓋優先，否則用價目表預設；都沒有回 null（未定價）
 function effectivePrice(en){return en.price??getCourseDefaultPrice(en.courseTitle);}
 
+// ── 課程設定（courseSettings，2026-06-19 起）──
+// 每門課一筆 {title, needsGrade}；未設定的課一律 fallback 成「只點名」(needsGrade=false)
+// 欄位刻意留可擴充（之後加 isMath 給高中數學作業清單，不必改結構）
+function getCourseSettings(){return driveData.courseSettings||[];}
+function saveCourseSettings(list){driveData.courseSettings=list;scheduleDriveSave();}
+// 這門課要不要登記成績；查無設定 = 只點名
+// 比對前去前後空白：parse.js 的 origTitle 無【】標記時不 trim，避免尾端空白導致對不上
+function courseNeedsGrade(title){
+  const t=(title||'').trim();
+  const row=getCourseSettings().find(c=>(c.title||'').trim()===t);
+  return !!(row&&row.needsGrade);
+}
+
 // ── 一次性轉換：student.courses → 本期 enrollments ──
 // 安全閥：已轉換過（有 marker）不重跑；學生清單是空的（可能雲端讀取失敗）也不跑，
 // 避免在沒讀到資料的狀態下寫入 marker 導致永遠不轉換

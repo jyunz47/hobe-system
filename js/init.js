@@ -192,7 +192,7 @@ function signOut(){
   const t=gapi.client.getToken();
   if(t){google.accounts.oauth2.revoke(t.access_token);gapi.client.setToken(null);}
   calendarIds={};dayEvents=[];weekEvents=[];makeupList=[];
-  driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[]};
+  driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[]};
   firebase.auth().signOut();
   localStorage.removeItem('gtoken');
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='none');
@@ -221,7 +221,7 @@ var db=firebase.firestore();
 var SHARED_DOC=db.collection('sharedData').doc('main');
 
 async function loadFromFirestore(){
-  driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[]};
+  driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[]};
   try{
     // 等 Firebase 從 localStorage 還原登入狀態（cmd+R 後 currentUser 起初是 null）
     if(!firebase.auth().currentUser){
@@ -241,6 +241,7 @@ async function loadFromFirestore(){
         makeupScheduled:d.makeupScheduled||[],
         enrollments:d.enrollments||[],
         coursePrices:d.coursePrices||[],
+        courseSettings:d.courseSettings||[],
         enrollmentsMigratedAt:d.enrollmentsMigratedAt||null,
       };
     }
@@ -271,18 +272,19 @@ function switchPanel(id){
   if(id==='courses')Promise.all([loadToday(),loadWeek()]);
   if(id==='makeup')loadMakeup();
   if(id==='students')renderStudents();
+  if(id==='settings')renderSettings();
 }
 
 function showPanel(id){
   currentPanel=id;
-  ['courses','makeup','students','login'].forEach(p=>{
+  ['courses','makeup','students','settings','login'].forEach(p=>{
     const el=document.getElementById('panel-'+p);
     if(p==='login')el.classList.toggle('active',p===id);
     else el.style.display=p===id?'block':'none';
   });
   document.querySelectorAll('.ni').forEach(el=>el.classList.remove('active'));
   const nav=document.getElementById('nav-'+id);if(nav)nav.classList.add('active');
-  const meta={courses:['課程','今日與本週課程'],makeup:['待補課/調課清單','找出需要安排補課或調課的課程'],students:['學生管理','請假、補課、欠課紀錄']};
+  const meta={courses:['課程','今日與本週課程'],makeup:['待補課/調課清單','找出需要安排補課或調課的課程'],students:['學生管理','請假、補課、欠課紀錄'],settings:['設定','課程與系統設定']};
   const[t,s]=meta[id]||['',''];
   document.getElementById('tbt').textContent=t;
   document.getElementById('tbs').textContent=s;

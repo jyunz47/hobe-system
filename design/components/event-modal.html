@@ -1,0 +1,130 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>課程詳情 Modal</title>
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* gallery 專用：把固定定位的 modal 攤平方便預覽。
+     真實 app 請假面板與調課面板「二選一」（互斥），
+     下面用兩個獨立 screen 各自呈現一個真實狀態，不是同一畫面同時展開。 */
+  body{margin:0;padding:32px;background:rgba(0,0,0,.06);font-family:'Noto Sans TC',sans-serif}
+  .screens{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+  .screen{display:flex;flex-direction:column;gap:8px}
+  .screen-lbl{font-size:12px;font-weight:700;color:var(--tx2)}
+</style>
+</head>
+<body>
+
+<!-- 課程詳情 modal（來源：js/week.js selectWeekEvent + absence.js buildAbsPanel）。
+     靜態快照、假資料、已移除 onclick。兩個 screen = 兩種真實狀態（互斥）。 -->
+<div class="screens">
+
+  <!-- Screen 1：按「標記請假」展開請假面板 -->
+  <div class="screen">
+    <div class="screen-lbl">狀態 A · 標記請假</div>
+    <div class="week-modal-box">
+      <div class="week-modal-hd">
+        <span>6/19（五）17:30–19:30</span>
+        <span style="cursor:pointer;font-size:16px;color:var(--tx3)">✕</span>
+      </div>
+      <div>
+        <div class="cc" style="border:none;border-radius:0">
+          <div class="cc-main">
+            <div class="cc-bar" style="background:#7C5A8C"></div>
+            <div class="cc-body">
+              <div class="cc-name"><span>新力、晨宇理化班</span></div>
+              <div class="cc-meta">
+                <span>🕐 17:30–19:30</span>
+                <span>⏱ 2小時</span>
+                <span>👤 郁庭</span>
+                <span style="color:#7C5A8C;font-weight:500">一對二・小教室</span>
+              </div>
+            </div>
+            <div class="cc-actions">
+              <button class="btn btns">標記請假</button>
+              <button class="btn btns">調課</button>
+            </div>
+          </div>
+          <div class="abs-panel open">
+            <div class="abs-opts" style="margin-bottom:12px">
+              <div class="abs-opt">👨‍🏫 老師請假</div>
+              <div class="abs-opt ss">🧑‍🎓 學生請假</div>
+            </div>
+            <div class="stu-wrap" style="display:block">
+              <div class="stu-label">選擇請假學生（可多選）</div>
+              <div class="stu-chips">
+                <div class="stu-chip checked">新力</div>
+                <div class="stu-chip">晨宇</div>
+              </div>
+            </div>
+            <div class="stu-wrap" style="display:block">
+              <div class="stu-label">請假時機（系統已預選，可改）</div>
+              <div class="abs-opts" style="margin-bottom:0">
+                <div class="abs-opt ss">課前 1hr 以上</div>
+                <div class="abs-opt">課前 1hr 內</div>
+                <div class="abs-opt">已開始·曠課</div>
+              </div>
+            </div>
+            <div style="margin:4px 0 10px;font-size:12px;color:var(--tx2)">
+              一對二也可改為 <button class="btn btns" style="font-size:12px;padding:3px 10px">🔄 整堂一起調課</button>（兩人都不缺課、不個別補課、維持原時長）
+            </div>
+            <div class="abs-confirm">
+              <div class="abs-preview" style="flex:1;font-size:12px;color:var(--tx2)">新力 課前 1hr 以上請假 → 需補課</div>
+              <button class="btn btns">取消</button>
+              <button class="btn btns btnp">確認標記</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Screen 2：按「調課」展開調課原因面板 -->
+  <div class="screen">
+    <div class="screen-lbl">狀態 B · 調課</div>
+    <div class="week-modal-box">
+      <div class="week-modal-hd">
+        <span>6/19（五）17:30–19:30</span>
+        <span style="cursor:pointer;font-size:16px;color:var(--tx3)">✕</span>
+      </div>
+      <div>
+        <div class="cc" style="border:none;border-radius:0">
+          <div class="cc-main">
+            <div class="cc-bar" style="background:#7C5A8C"></div>
+            <div class="cc-body">
+              <div class="cc-name"><span>新力、晨宇理化班</span></div>
+              <div class="cc-meta">
+                <span>🕐 17:30–19:30</span>
+                <span>⏱ 2小時</span>
+                <span>👤 郁庭</span>
+                <span style="color:#7C5A8C;font-weight:500">一對二・小教室</span>
+              </div>
+            </div>
+            <div class="cc-actions">
+              <button class="btn btns">標記請假</button>
+              <button class="btn btns">調課</button>
+            </div>
+          </div>
+          <div class="reschedule-panel" style="display:block">
+            <div style="padding:12px 14px;border-top:1px solid var(--br);display:flex;flex-direction:column;gap:8px">
+              <label style="font-size:12px;color:var(--tx3)">調課原因（選填，建議填寫）</label>
+              <input type="text" placeholder="例：學生家族旅遊" style="border:1px solid var(--br);border-radius:var(--rs);padding:6px 10px;font-size:13px;width:100%">
+              <div style="display:flex;gap:6px">
+                <button class="btn btns btnp" style="font-size:12px">確認調課</button>
+                <button class="btn btns" style="font-size:12px">取消</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

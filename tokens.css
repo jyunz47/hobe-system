@@ -47,4 +47,14 @@
   --c2:#9A8552;
   --c3:#6B8F7A;
   --c4:#C16B36;
+
+  /* ── 行事曆六類色（圖例 + 課程卡 + 時間軸 + hero + 週檢視共用）──
+     唯一真相來源：改這六個值，全站課程顏色一起變。
+     state.js CAL_COLORS 開機時讀這裡；圖例 HTML 用 var() 直接吃。 */
+  --cal-general:#6B8F7A;   /* 一般課程 */
+  --cal-resched:#C0504A;   /* 調課 */
+  --cal-makeup:#C16B36;    /* 補課 */
+  --cal-extra:#B98A4A;     /* 加課 */
+  --cal-trial:#7E8B83;     /* 試聽 */
+  --cal-practice:#9A8552;  /* 練習課 */
 }

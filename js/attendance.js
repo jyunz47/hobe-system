@@ -45,13 +45,14 @@ function attBucket(){return attCache[attCurrentYpid]||{records:[],idx:new Map()}
 // 某堂某生的點名紀錄（無則 undefined）
 function getAtt(eventId,studentId){return attBucket().idx.get(eventId)?.get(studentId);}
 
-// 標記到/未到（upsert）
-function markAtt(eventId,date,studentId,status){
+// 標記出席（upsert）。status 一律 '到'（有來＝出席＝算一堂）；
+// lateMin>0 表示遲到 N 分（仍算出席）。沒來＝曠課，不在此記，走 Calendar 流程。
+function markAtt(eventId,date,studentId,status,lateMin=0){
   const b=attBucket();
   let rec=b.idx.get(eventId)?.get(studentId);
-  if(rec){rec.status=status;rec.markedAt=new Date().toISOString();}
+  if(rec){rec.status=status;rec.lateMin=lateMin;rec.markedAt=new Date().toISOString();}
   else{
-    rec={eventId,date,studentId,status,markedAt:new Date().toISOString()};
+    rec={eventId,date,studentId,status,lateMin,markedAt:new Date().toISOString()};
     b.records.push(rec);
     if(!b.idx.has(eventId))b.idx.set(eventId,new Map());
     b.idx.get(eventId).set(studentId,rec);

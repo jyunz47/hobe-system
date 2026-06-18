@@ -20,7 +20,7 @@ var dayEvents=[];
 var weekEvents=[];
 var absState={};
 var makeupList=[];
-var driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[]};
+var driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[]};
 var driveSaveTimer=null;
 var drivePendingSave=false; // 本機是否有尚未寫入 Firestore 的改動（refreshCurrent 重讀前用來決定要不要先 flush）
 var makeupMatchMap=new Map(); // absenceEventId → {calEventId,scheduledDate,scheduledEnd,room,origTitle,absentStudents}
@@ -76,7 +76,20 @@ function invalidateEventCache(){_eventListCache.clear();}
 
 // ── 顏色與教室常數 ──
 var COLORS={one:'#4A7C8C',pair:'#7C5A8C',group:'#2D5A3D',practice:'#8C6A2D'};
-var CAL_COLORS={'一般課程':'#6B8F7A','調課':'#C0504A','補課':'#C16B36','加課':'#B98A4A','試聽':'#7E8B83','練習課':'#9A8552'};
+// 行事曆六色從 tokens.css 讀（唯一真相來源）；讀不到時用 fallback 暖化色
+function readCalColors(){
+  const cs=getComputedStyle(document.documentElement);
+  const g=(n,f)=>cs.getPropertyValue(n).trim()||f;
+  return{
+    '一般課程':g('--cal-general','#6B8F7A'),
+    '調課':g('--cal-resched','#C0504A'),
+    '補課':g('--cal-makeup','#C16B36'),
+    '加課':g('--cal-extra','#B98A4A'),
+    '試聽':g('--cal-trial','#7E8B83'),
+    '練習課':g('--cal-practice','#9A8552'),
+  };
+}
+var CAL_COLORS=readCalColors();
 function calColor(calName){return CAL_COLORS[calName]||'#8A8276';}
 var WD=['日','一','二','三','四','五','六'];
 var ROOM_CAP={'小教室':5,'108':6,'208':6,'309':6};

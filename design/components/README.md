@@ -21,6 +21,7 @@ preview，第一行 `<!-- @dsCard group="…" -->` 讓 claude.ai/design 的 Desi
 
 **Foundations / 框架**
 - `foundations.html` — 色彩、圓角 tokens
+- `calendar-colors.html` — 行事曆六類色（--cal-* token，全站課程色唯一真相來源）
 - `sidebar.html` — 側欄導覽
 
 **P1 高頻元件**
@@ -33,5 +34,7 @@ preview，第一行 `<!-- @dsCard group="…" -->` 讓 claude.ai/design 的 Desi
 
 **P2 中頻元件**
 - `week-view.html` — 週檢視（七日摘要 chips + 焦點日課程卡，含請假/調課態）
+- `event-modal.html` — 課程詳情 modal（兩 screen：請假展開態 / 調課展開態，互斥）
+- `attendance-panel.html` — 點名面板（全部到 + 到主鈕 + 未到弱化 + 請假鎖定 + 需對帳）
 
-待補（P2/P3）：時間軸、補課時段選擇器、補課清單卡、Topbar、手機底欄、表單元素、Typography、請假面板、學生編輯、行政小工具 modal…（逐顆加）。
+待補（P2/P3）：時間軸、補課時段選擇器、補課清單卡、Topbar、手機底欄、表單元素、Typography、學生編輯、行政小工具 modal…（逐顆加）。

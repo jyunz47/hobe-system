@@ -1,0 +1,79 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>點名面板</title>
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  body{margin:0;padding:28px;background:rgba(0,0,0,.06);font-family:'Noto Sans TC',sans-serif}
+  .wrap{max-width:420px}
+  /* 卡片外殼模擬（點名面板平時嵌在課程卡內，這裡給個白底框預覽）*/
+  .demo-card{background:var(--sf);border:1px solid var(--br);border-radius:var(--r);overflow:hidden}
+  .demo-hd{padding:12px 14px;display:flex;align-items:center;justify-content:space-between;font-size:14px;font-weight:600;color:var(--tx)}
+  .demo-hd .att-badge{font-size:10.5px;font-weight:700;padding:2px 8px;border-radius:7px;display:inline-flex;align-items:center;gap:5px}
+</style>
+</head>
+<body>
+
+<!-- 點名面板（來源：js/today.js buildAttPanel）。靜態快照、假資料、已移除 onclick。 -->
+<div class="wrap">
+  <div class="demo-card">
+    <div class="demo-hd">
+      <span>新力、晨宇理化班</span>
+      <span class="att-badge">點名 3/4</span>
+    </div>
+    <div class="att-panel" style="display:block">
+      <div class="att-hd">
+        <button class="att-allbtn">全部到</button>
+        <span class="att-hd-prog">3/4 到</span>
+      </div>
+      <div class="att-list">
+        <div class="att-row">
+          <span class="att-nm">新力</span>
+          <span class="att-seg">
+            <button class="att-here on">✓ 到</button>
+            <button class="att-late">遲到</button>
+            <button class="att-skip" title="沒來 → 標曠課">曠</button>
+          </span>
+        </div>
+        <div class="att-row">
+          <span class="att-nm">晨宇</span>
+          <span class="att-seg">
+            <button class="att-here on">✓ 到</button>
+            <button class="att-late">遲到</button>
+            <button class="att-skip" title="沒來 → 標曠課">曠</button>
+          </span>
+        </div>
+        <div class="att-row">
+          <span class="att-nm">子瑜</span>
+          <span class="att-seg">
+            <button class="att-here">到</button>
+            <button class="att-late on">遲 15 分</button>
+            <button class="att-skip" title="沒來 → 標曠課">曠</button>
+          </span>
+        </div>
+        <!-- 遲到分鐘行內輸入態 -->
+        <div class="att-row att-picking">
+          <span class="att-nm">柏宇</span>
+          <span class="att-lateedit">遲到 <input type="number" class="att-mininput" value="10"> 分
+            <button class="att-min ok">✓</button>
+            <button class="att-min cancel">✕</button></span>
+        </div>
+        <div class="att-row att-locked">
+          <span class="att-nm struck">宥廷</span>
+          <span class="att-lock">請假</span>
+        </div>
+        <div class="att-row att-noid">
+          <span class="att-nm">怡君</span>
+          <span class="att-hint">需對帳</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

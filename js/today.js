@@ -257,39 +257,112 @@ function attBadgeHtml(e){
   const done=s.here>=s.total;
   return`<span class="tc-badge att-badge${done?' att-done':''}" id="attbadge-${esc(e.id)}">${done?'✓ 點名完成':'點名 '+s.here+'/'+s.total}</span>`;
 }
+// 哪一列正在輸入遲到分鐘 {eid,sid}（transient UI 狀態）
+var attLatePick=null;
+
 function buildAttPanel(e){
   const roster=eventRosterWithId(e);
   if(!roster.length)return'<div class="att-empty">這堂沒有名單</div>';
   const absSet=new Set(e.absentStudents||[]);
   const noShowSet=new Set(e.noShowStudents||[]);
+  const s=attSummary(e);
+  // 常態整班都到 → 給「全部到」一鍵；沒到的再個別改
+  const head=s.total?`<div class="att-hd">
+    <button class="att-allbtn" onclick="event.stopPropagation();markAllHere('${esc(e.id)}')">全部到</button>
+    <span class="att-hd-prog">${s.here}/${s.total} 到</span>
+  </div>`:'';
   const rows=roster.map(r=>{
     const lock=absSet.has(r.name)?'請假':noShowSet.has(r.name)?'曠課':null;
     if(lock)return`<div class="att-row att-locked"><span class="att-nm struck">${esc(r.name)}</span><span class="att-lock">${lock}</span></div>`;
     if(r.studentId==null)return`<div class="att-row att-noid"><span class="att-nm">${esc(r.name)}</span><span class="att-hint">需對帳</span></div>`;
-    const rec=getAtt(e.id,r.studentId);
-    const here=rec&&rec.status==='到',miss=rec&&rec.status==='未到';
+    const eid=esc(e.id),sid=r.studentId;
+    // 正在輸入遲到分鐘 → 該列換成行內數字輸入
+    if(attLatePick&&attLatePick.eid===e.id&&attLatePick.sid===sid){
+      const cur=getAtt(e.id,sid)?.lateMin||'';
+      return`<div class="att-row att-picking">
+        <span class="att-nm">${esc(r.name)}</span>
+        <span class="att-lateedit">遲到 <input type="number" min="1" inputmode="numeric" class="att-mininput" id="lateinp-${eid}-${sid}" value="${cur}" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')saveLate('${eid}',${sid});if(event.key==='Escape')cancelLate('${eid}')"> 分
+        <button class="att-min ok" onclick="event.stopPropagation();saveLate('${eid}',${sid})">✓</button>
+        <button class="att-min cancel" onclick="event.stopPropagation();cancelLate('${eid}')">✕</button></span>
+      </div>`;
+    }
+    const rec=getAtt(e.id,sid);
+    const lateMin=rec&&rec.status==='到'?(rec.lateMin||0):0;
+    const onTime=rec&&rec.status==='到'&&!lateMin;
+    // 到 = 主要 toggle（高頻）；遲到 = 直接輸入分鐘（次高頻）；曠 = 沒來，跳既有曠課流程（罕見）
     return`<div class="att-row"><span class="att-nm">${esc(r.name)}</span>
       <span class="att-seg">
-        <button class="att-btn${here?' on-here':''}" onclick="event.stopPropagation();onAtt('${esc(e.id)}',${r.studentId},'到')">到</button>
-        <button class="att-btn att-miss${miss?' on-miss':''}" onclick="event.stopPropagation();onAtt('${esc(e.id)}',${r.studentId},'未到')">未到</button>
+        <button class="att-here${onTime?' on':''}" onclick="event.stopPropagation();onHere('${eid}',${sid})">${onTime?'✓ 到':'到'}</button>
+        <button class="att-late${lateMin?' on':''}" onclick="event.stopPropagation();onLate('${eid}',${sid})">${lateMin?'遲 '+lateMin+' 分':'遲到'}</button>
+        <button class="att-skip" title="沒來 → 標曠課" onclick="event.stopPropagation();onSkip('${eid}',${sid})">曠</button>
       </span></div>`;
   }).join('');
-  return`<div class="att-list">${rows}</div>`;
+  return`${head}<div class="att-list">${rows}</div>`;
+}
+function refreshAttPanel(e){const p=document.getElementById('attp-'+e.id);if(p)p.innerHTML=buildAttPanel(e);}
+function refreshAttUI(e){refreshAttPanel(e);const b=document.getElementById('attbadge-'+e.id);if(b)b.outerHTML=attBadgeHtml(e);}
+
+// 全部到：把所有可點學生標「準時到」（排除請假/曠課/無 id）
+function markAllHere(eventId){
+  const e=findEventById(eventId);if(!e)return;
+  const absSet=new Set(e.absentStudents||[]);
+  const noShowSet=new Set(e.noShowStudents||[]);
+  eventRosterWithId(e).forEach(r=>{
+    if(r.studentId==null||absSet.has(r.name)||noShowSet.has(r.name))return;
+    markAtt(e.id,e.startDt.toISOString(),r.studentId,'到',0);
+  });
+  attLatePick=null;
+  refreshAttUI(e);
 }
 function toggleAttPanel(id){
   const p=document.getElementById('attp-'+id);if(!p)return;
   if(p.style.display!=='none'){p.style.display='none';return;}
   const e=findEventById(id);if(!e)return;
+  attLatePick=null;
   p.innerHTML=buildAttPanel(e);
   p.style.display='block';
 }
-function onAtt(eventId,studentId,status){
+// 到：toggle 準時到（再點一次取消）
+function onHere(eventId,studentId){
   const e=findEventById(eventId);if(!e)return;
   const rec=getAtt(eventId,studentId);
-  if(rec&&rec.status===status)unmarkAtt(eventId,studentId);
-  else markAtt(eventId,e.startDt.toISOString(),studentId,status);
-  const p=document.getElementById('attp-'+eventId);if(p)p.innerHTML=buildAttPanel(e);
-  const b=document.getElementById('attbadge-'+eventId);if(b)b.outerHTML=attBadgeHtml(e);
+  if(rec&&rec.status==='到'&&!(rec.lateMin>0))unmarkAtt(eventId,studentId);
+  else markAtt(eventId,e.startDt.toISOString(),studentId,'到',0);
+  attLatePick=null;
+  refreshAttUI(e);
+}
+// 遲到：就地展開行內數字輸入框（無系統跳窗、無快捷）
+function onLate(eventId,studentId){
+  attLatePick={eid:eventId,sid:studentId};
+  const e=findEventById(eventId);if(e)refreshAttPanel(e);
+  const inp=document.getElementById('lateinp-'+eventId+'-'+studentId);
+  if(inp){inp.focus();inp.select();}
+}
+function saveLate(eventId,studentId){
+  const e=findEventById(eventId);if(!e)return;
+  const inp=document.getElementById('lateinp-'+eventId+'-'+studentId);
+  const v=parseInt(inp?.value,10);
+  if(!(v>0)){toast('請輸入大於 0 的分鐘數','inf');inp?.focus();return;}
+  markAtt(eventId,e.startDt.toISOString(),studentId,'到',v);
+  attLatePick=null;
+  refreshAttUI(e);
+}
+function cancelLate(eventId){attLatePick=null;const e=findEventById(eventId);if(e)refreshAttPanel(e);}
+// 沒來＝曠課：開 modal、預選該生 + 時機 C(已開始·曠課)，只待按「確認標記」
+function onSkip(eventId,studentId){
+  const e=findEventById(eventId);if(!e)return;
+  const r=eventRosterWithId(e).find(x=>x.studentId===studentId);
+  const name=r?r.name:null;if(!name)return;
+  selectWeekEvent(eventId);
+  setTimeout(()=>{
+    const sfx='-w';
+    toggleAbsPanelWeek(eventId);              // 展開請假/曠課面板
+    selAbsType(eventId,sfx,'student');        // 學生請假（含 timing 預選，下面覆蓋）
+    absState[eventId].students=[name];        // 指定該生
+    const sc=document.getElementById('sc-'+eventId+sfx);
+    if(sc)sc.querySelectorAll('.stu-chip').forEach(c=>c.classList.toggle('checked',c.dataset.name===name));
+    selAbsTiming(eventId,sfx,'C');            // 時機 C＝已開始·曠課（含 updatePreview）
+  },60);
 }
 
 function tcardHtml(e){
@@ -303,8 +376,16 @@ function tcardHtml(e){
     e.status==='past'?'<span class="tc-badge tc-badge-past">已結束</span>':'';
   let badge='';
   if(e.isRescheduled)badge=`<span class="tc-badge tc-badge-resched">調課</span>`;
-  else if(e.isAbsent)badge=`<span class="tc-badge tc-badge-abs">${e.absType==='老師請假'?'老師請假':'請假'}</span>`;
-  else if(e.isNoShow)badge=`<span class="tc-badge tc-badge-abs">曠課</span>`;
+  else if(e.isAbsent){
+    // 老師請假固定字樣；學生請假比照曠課：多人顯示誰請假、一對一只顯示「請假」
+    const as=e.absentStudents||[];
+    badge=`<span class="tc-badge tc-badge-abs">${e.absType==='老師請假'?'老師請假':(e.type==='one'||!as.length?'請假':esc(as.join('、'))+' 請假')}</span>`;
+  }
+  else if(e.isNoShow){
+    // 多人課顯示誰曠課；一對一（單人）名字多餘 → 只顯示「曠課」
+    const ns=e.noShowStudents||[];
+    badge=`<span class="tc-badge tc-badge-abs">${e.type==='one'||!ns.length?'曠課':esc(ns.join('、'))+' 曠課'}</span>`;
+  }
   const mkBadge=(()=>{if(!e.isFullAbsent&&!e.isRescheduled)return'';const rec=findMakeupScheduledById(e.id);return rec?`<span class="tc-badge tc-badge-arr">✓ 已安排</span>`:`<span class="tc-badge tc-badge-un">未安排</span>`;})();
   // 動作列：請假內嵌（今日情境面板），調課走 week-modal 避免 rp-${id} 撞車
   let acts='';
