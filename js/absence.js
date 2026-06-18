@@ -66,14 +66,14 @@ function startWholeReschedule(id){
 }
 
 function toggleAbsPanelWeek(id){
-  // Close all panels
+  const panel=document.getElementById('absp-w-'+id);if(!panel)return;
+  const isOpen=panel.classList.contains('open'); // 先判斷再清，否則永遠收不起來
+  // 收掉所有面板（含調課面板），確保請假/調課不同時展開
   document.querySelectorAll('.abs-panel.open').forEach(p=>p.classList.remove('open'));
   document.querySelectorAll('[id^="cancel-picker-"]').forEach(p=>p.remove());
-  const panel=document.getElementById('absp-w-'+id);if(!panel)return;
-  const isOpen=panel.classList.contains('open');
-  if(isOpen){panel.classList.remove('open');return;}
+  const rp=document.getElementById('rp-'+id);if(rp)rp.style.display='none';
+  if(isOpen)return; // 本來開著 → 收合即可
   absState[id]={type:null,students:[]};
-  const cpw=document.getElementById('cancel-picker-'+id);if(cpw)cpw.remove();
   panel.classList.add('open');
   updatePreview(id,'');
 }

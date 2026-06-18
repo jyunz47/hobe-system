@@ -190,6 +190,18 @@ function selectWeekEventAndCancel(id){
   setTimeout(()=>cancelAbs(id), 50);
 }
 
+// 今日卡「標記請假」改走 week-modal：開 modal 後自動展開請假面板
+function selectWeekEventAndAbs(id){
+  selectWeekEvent(id);
+  setTimeout(()=>toggleAbsPanelWeek(id),50);
+}
+
+// 今日卡「調課」：開 modal 後自動展開調課面板，免得 modal 裡還要再按一次調課
+function selectWeekEventAndReschedule(id){
+  selectWeekEvent(id);
+  setTimeout(()=>toggleReschedulePanel(id),50);
+}
+
 function selectWeekEvent(id){
   const ev=findEventById(id);if(!ev)return;
   // Deselect previous
@@ -243,6 +255,10 @@ function selectWeekEvent(id){
 function toggleReschedulePanel(id){
   const p=document.getElementById('rp-'+id);if(!p)return;
   const show=p.style.display==='none';
+  if(show){ // 展開調課時收掉請假面板，避免兩塊同時展開
+    document.getElementById('absp-w-'+id)?.classList.remove('open');
+    document.getElementById('absp-'+id)?.classList.remove('open');
+  }
   p.style.display=show?'block':'none';
   if(show)document.getElementById('rp-reason-'+id)?.focus();
 }

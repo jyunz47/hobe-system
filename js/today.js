@@ -311,7 +311,7 @@ function tcardHtml(e){
   if(e.isRescheduled)acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEvent('${id}')">看調課安排</button><button class="tc-act danger" onclick="event.stopPropagation();cancelReschedule('${id}')">取消調課</button>`;
   else if(e.isAbsent)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelAbs('${id}')">取消請假</button>`;
   else if(e.isNoShow)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelNoShow('${id}')">取消曠課</button>`;
-  else acts=`<button class="tc-act" onclick="event.stopPropagation();toggleAbsPanel('${id}')">🗓 標記請假</button><button class="tc-act" onclick="event.stopPropagation();selectWeekEvent('${id}')">↔ 調課</button>`;
+  else acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndAbs('${id}')">🗓 標記請假</button><button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndReschedule('${id}')">↔ 調課</button>`;
   // 能點名的課：點名面板已列出名冊，不再放「名單」鈕（避免重複）；
   // 不能點名的課（試聽/整堂請假/調課原課）沒有點名面板 → 保留「名單」鈕當唯一名冊入口
   const attBtn=canAttend(e)?`<button class="tc-act" onclick="event.stopPropagation();toggleAttPanel('${id}')">✓ 點名</button>`:'';
@@ -330,6 +330,5 @@ function tcardHtml(e){
     <div class="tcard2-actions">${acts}${attBtn}${rosterBtn}</div>
     <div class="tcard2-roster" id="rost-${id}" style="display:none">${roster.length?esc(roster.join('、')):'（無名單）'}</div>
     <div class="att-panel" id="attp-${id}" style="display:none"></div>
-    <div class="abs-panel" id="absp-${id}">${buildAbsPanel(e,'')}</div>
   </div>`;
 }
