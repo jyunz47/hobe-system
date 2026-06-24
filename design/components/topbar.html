@@ -1,0 +1,44 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Topbar · 頂列</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* 來源：補習班排程系統.html .topbar（.tbt 標題 / .tbs 副標 / .tba 動作鈕）。
+     靜態快照、假資料、已移除 onclick。
+     每個分頁頂部的標題列；右側放「更新／登出」動作鈕（登入後才顯示）。 */
+  body{background:var(--bg);padding:24px;font-family:'Noto Sans TC',sans-serif}
+  .stack{display:flex;flex-direction:column;gap:16px;max-width:760px}
+  .stack > .topbar{border:1px solid var(--br);border-radius:var(--r)}
+  h3{font-size:12px;color:var(--tx3);text-transform:uppercase;letter-spacing:.08em;margin:8px 0 0}
+</style>
+</head>
+<body>
+  <div class="stack">
+
+    <h3>課程頁</h3>
+    <div class="topbar">
+      <div><div class="tbt">課程</div><div class="tbs">今日與本週課程</div></div>
+      <div class="tba">
+        <button class="btn btns">↻ 更新</button>
+        <button class="btn btns">登出</button>
+      </div>
+    </div>
+
+    <h3>學生管理頁</h3>
+    <div class="topbar">
+      <div><div class="tbt">學生管理</div><div class="tbs">在學與歷屆學生</div></div>
+      <div class="tba">
+        <button class="btn btns">↻ 更新</button>
+        <button class="btn btns">登出</button>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

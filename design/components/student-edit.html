@@ -1,0 +1,67 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Student Edit · 學生編輯面板</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* 來源：js/students.js renderStudentEditPanel + buildEditCoursesHtml。
+     靜態快照、假資料、已移除 onclick。
+     學生編輯面板＝姓名/年級 + 學校/出生年/家長電話 + 修課登記（含個人覆蓋價）+ 危險區（徹底刪除）。 */
+  body{background:var(--bg);padding:24px;font-family:'Noto Sans TC',sans-serif}
+  .wrap{max-width:560px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="stu-edit-panel"><div class="stu-edit-form">
+      <div class="stu-edit-top">
+        <input class="stu-edit-input" value="王小明" placeholder="姓名" maxlength="20">
+        <select class="stu-edit-select">
+          <option>國一</option><option selected>國二</option><option>國三</option><option>高一</option>
+        </select>
+        <button class="stu-edit-save">儲存</button>
+        <button class="stu-edit-cancel">取消</button>
+      </div>
+      <div class="stu-edit-info-row">
+        <label>學校
+          <input value="松山國中" placeholder="例：松山國中" maxlength="30">
+        </label>
+        <label>出生年（西元）
+          <input type="number" value="2011" placeholder="例：2010" min="1990" max="2030">
+        </label>
+        <label>家長電話
+          <input value="0912345678" placeholder="例：0912xxxxxx" maxlength="15">
+        </label>
+      </div>
+      <div class="stu-edit-courses-row">
+        <span class="stu-edit-courses-lbl">修課（114 學年下學期）</span>
+        <div class="stu-edit-courses-body">
+          <div class="stu-edit-enroll-row">
+            <span class="stu-edit-course-tag">國二數學班<button class="rm-course-btn">✕</button></span>
+            <input type="number" class="stu-edit-price-input" value="400" placeholder="預設 450" min="0" inputmode="numeric">
+            <span class="stu-edit-price-unit">元/堂</span>
+          </div>
+          <div class="stu-edit-enroll-row">
+            <span class="stu-edit-course-tag">國二英文班<button class="rm-course-btn">✕</button></span>
+            <input type="number" class="stu-edit-price-input" value="" placeholder="未定價" min="0" inputmode="numeric">
+            <span class="stu-edit-price-unit">元/堂</span>
+          </div>
+          <div class="stu-edit-add-wrap">
+            <input class="stu-edit-new-course" placeholder="新增修課…">
+            <button class="stu-edit-add-btn">＋</button>
+          </div>
+        </div>
+      </div>
+      <div class="stu-edit-danger">
+        <button class="stu-edit-del-btn">🗑️ 徹底刪除此學生</button>
+        <span class="stu-edit-danger-hint">永久移除（含所有學期的修課登記），不可復原。給清測試帳號／重複資料用。</span>
+      </div>
+    </div></div>
+  </div>
+</body>
+</html>

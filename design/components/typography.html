@@ -1,0 +1,54 @@
+<!-- @dsCard group="Foundations" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Typography · 字體階層</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* 來源：style.css 字體設定（方向C 換皮）。
+     四種字族各司其職：Noto Sans TC（內文中文）、DM Sans（標題/英數）、
+     DM Mono（時間/數字）、Newsreader（襯線點綴）。 */
+  body{background:var(--bg);padding:32px;font-family:'Noto Sans TC',sans-serif;color:var(--tx)}
+  .wrap{max-width:640px;display:flex;flex-direction:column;gap:28px}
+  .ty-row{display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--br);padding-bottom:20px}
+  .ty-tag{font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:.08em;font-family:'DM Mono',monospace}
+  .ty-sans{font-family:'Noto Sans TC',sans-serif}
+  .ty-dmsans{font-family:'DM Sans','Noto Sans TC',sans-serif}
+  .ty-mono{font-family:'DM Mono',monospace}
+  .ty-serif{font-family:'Newsreader',serif}
+</style>
+</head>
+<body>
+  <div class="wrap">
+
+    <div class="ty-row">
+      <div class="ty-tag">DM Sans · 標題 / 品牌 700</div>
+      <div class="ty-dmsans" style="font-size:30px;font-weight:700;letter-spacing:-.01em">HOBE 排程系統</div>
+      <div class="ty-dmsans" style="font-size:20px;font-weight:600">今日與本週課程</div>
+    </div>
+
+    <div class="ty-row">
+      <div class="ty-tag">Noto Sans TC · 內文 400 / 500 / 700</div>
+      <div class="ty-sans" style="font-size:16px;font-weight:400">把請假、補課、調課一次排好。國二數學班，今日 19:00 進行中。</div>
+      <div class="ty-sans" style="font-size:14px;font-weight:500;color:var(--tx2)">王小明、陳大華、李小美、張志強</div>
+      <div class="ty-sans" style="font-size:13px;font-weight:700">需登記成績</div>
+    </div>
+
+    <div class="ty-row">
+      <div class="ty-tag">DM Mono · 時間 / 數字</div>
+      <div class="ty-mono" style="font-size:24px;font-weight:500">18:00 – 20:00</div>
+      <div class="ty-mono" style="font-size:14px;color:var(--tx2)">100+ 在學學生　·　5 教室　·　2 分校</div>
+    </div>
+
+    <div class="ty-row" style="border-bottom:none">
+      <div class="ty-tag">Newsreader · 襯線點綴</div>
+      <div class="ty-serif" style="font-size:26px">把每一堂課，排得剛剛好</div>
+    </div>
+
+  </div>
+</body>
+</html>

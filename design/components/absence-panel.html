@@ -1,0 +1,86 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Absence Panel · 請假／缺課面板</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* 來源：js/absence.js buildAbsPanel。
+     靜態快照、假資料、已移除 onclick。
+     請假面板＝老師請假 / 學生請假二選一；學生請假再選誰（chips）＋請假時機；
+     event-modal 卡呈現「一對二」情境，這裡補「老師請假」與「團班多生」兩種狀態。 */
+  body{margin:0;padding:32px;background:rgba(0,0,0,.04);font-family:'Noto Sans TC',sans-serif}
+  .screens{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+  .screen{display:flex;flex-direction:column;gap:8px;max-width:380px}
+  .screen-lbl{font-size:12px;font-weight:700;color:var(--tx2)}
+  .abs-host{background:var(--card);border:1px solid var(--br);border-radius:var(--r);overflow:hidden}
+</style>
+</head>
+<body>
+
+<div class="screens">
+
+  <!-- 狀態 A：老師請假（整堂） -->
+  <div class="screen">
+    <div class="screen-lbl">狀態 A · 老師請假</div>
+    <div class="abs-host">
+      <div class="abs-panel open">
+        <div class="abs-opts" style="margin-bottom:12px">
+          <div class="abs-opt ss">👨‍🏫 老師請假</div>
+          <div class="abs-opt">🧑‍🎓 學生請假</div>
+        </div>
+        <div style="margin:4px 0 10px;font-size:12px;color:var(--tx2)">老師請假＝整堂課需補課，全班一起改期。</div>
+        <div class="abs-confirm">
+          <div class="abs-preview" style="flex:1;font-size:12px;color:var(--tx2)">老師請假 → 整堂補課</div>
+          <button class="btn btns">取消</button>
+          <button class="btn btns btnp">確認標記</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 狀態 B：團班學生請假（多生 chips） -->
+  <div class="screen">
+    <div class="screen-lbl">狀態 B · 團班學生請假</div>
+    <div class="abs-host">
+      <div class="abs-panel open">
+        <div class="abs-opts" style="margin-bottom:12px">
+          <div class="abs-opt">👨‍🏫 老師請假</div>
+          <div class="abs-opt ss">🧑‍🎓 學生請假</div>
+        </div>
+        <div class="stu-wrap" style="display:block">
+          <div class="stu-label">選擇請假學生（可多選）</div>
+          <div class="stu-chips">
+            <div class="stu-chip checked">王小明</div>
+            <div class="stu-chip">陳大華</div>
+            <div class="stu-chip checked">李小美</div>
+            <div class="stu-chip">張志強</div>
+            <div class="stu-chip">黃淑芬</div>
+            <div class="stu-chip">吳建宏</div>
+          </div>
+        </div>
+        <div class="stu-wrap" style="display:block">
+          <div class="stu-label">請假時機（系統已預選，可改）</div>
+          <div class="abs-opts" style="margin-bottom:0">
+            <div class="abs-opt ss">課前 1hr 以上</div>
+            <div class="abs-opt">課前 1hr 內</div>
+            <div class="abs-opt">已開始·曠課</div>
+          </div>
+        </div>
+        <div class="abs-confirm">
+          <div class="abs-preview" style="flex:1;font-size:12px;color:var(--tx2)">王小明、李小美 課前 1hr 以上請假 → 需補課</div>
+          <button class="btn btns">取消</button>
+          <button class="btn btns btnp">確認標記</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

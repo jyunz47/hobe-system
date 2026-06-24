@@ -1,0 +1,73 @@
+<!-- @dsCard group="Foundations" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Small Elements · 小元素</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* 來源：補習班排程系統.html（sec-hd / legend / date-nav）、style.css（nbadge / tc-badge*）。
+     靜態快照、假資料、已移除 onclick。
+     散落各頁的小元件：區段標題、行事曆圖例、日期導覽、徽章。 */
+  body{background:var(--bg);padding:24px;font-family:'Noto Sans TC',sans-serif}
+  .wrap{max-width:600px;display:flex;flex-direction:column;gap:24px}
+  h3{font-size:12px;color:var(--tx3);text-transform:uppercase;letter-spacing:.08em;margin:0 0 8px}
+  .badges{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+</style>
+</head>
+<body>
+  <div class="wrap">
+
+    <div>
+      <h3>區段標題 .sec-hd</h3>
+      <div class="sec-hd">課程總覽<span class="sec-hd-line"></span></div>
+    </div>
+
+    <div>
+      <h3>行事曆圖例 .legend（接 --cal-* token）</h3>
+      <div class="legend">
+        <div class="lgi"><div class="lgd" style="background:var(--cal-general)"></div>一般課程</div>
+        <div class="lgi"><div class="lgd" style="background:var(--cal-resched)"></div>調課</div>
+        <div class="lgi"><div class="lgd" style="background:var(--cal-makeup)"></div>補課</div>
+        <div class="lgi"><div class="lgd" style="background:var(--cal-extra)"></div>加課</div>
+        <div class="lgi"><div class="lgd" style="background:var(--cal-trial)"></div>試聽</div>
+        <div class="lgi"><div class="lgd" style="background:var(--cal-practice)"></div>練習課</div>
+      </div>
+    </div>
+
+    <div>
+      <h3>日期導覽 .date-nav</h3>
+      <div class="date-nav">
+        <div class="date-title">6/24（二）</div>
+        <button class="dbtn">‹ 前一天</button>
+        <button class="dbtn">今天</button>
+        <button class="dbtn">後一天 ›</button>
+        <input type="date" value="2026-06-24">
+      </div>
+    </div>
+
+    <div>
+      <h3>側欄通知徽章 .nbadge（貼在 nav 項目右側，margin-left:auto）</h3>
+      <div style="display:flex;align-items:center;gap:10px;max-width:240px;padding:8px 12px;background:var(--card);border:1px solid var(--br);border-radius:var(--rs)">
+        <span style="font-size:13px;color:var(--tx)">待補課/調課清單</span>
+        <span class="nbadge">3</span>
+      </div>
+    </div>
+
+    <div>
+      <h3>課程卡狀態徽章 .tc-badge*</h3>
+      <div class="badges">
+        <span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span>
+        <span class="tc-badge tc-badge-abs">請假</span>
+        <span class="tc-badge tc-badge-un">未安排</span>
+        <span class="tc-badge tc-badge-resched">調課</span>
+        <span class="tc-badge tc-badge-arr">✓ 已安排</span>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

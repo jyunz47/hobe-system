@@ -1,0 +1,121 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Makeup List · 待補課清單卡</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* 來源：js/makeup.js pendingCard/scheduledCard/skippedCard + mk-sec 區塊。
+     靜態快照、假資料、已移除 onclick。
+     待補課清單＝分區（待安排／已安排／不補課）的清單卡；
+     卡左色條接行事曆色、右側動作鈕，badge 標請假類型與狀態。 */
+  body{background:var(--bg);padding:24px;font-family:'Noto Sans TC',sans-serif}
+  .wrap{max-width:620px;display:flex;flex-direction:column;gap:8px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+
+    <!-- 待安排 -->
+    <div class="mk-sec">
+      <div class="mk-sec-head"><span class="mk-sec-dot" style="background:#EE9F3C"></span>待安排<span class="mk-sec-pill">2</span></div>
+
+      <div class="mk-list-card">
+        <div class="mk-list-bar" style="background:var(--cal-general)"></div>
+        <div class="mk-list-body">
+          <div class="mk-list-top">
+            <span class="mk-list-title">國二數學班</span>
+            <span class="mk-badge mk-badge-student">學生請假</span><span class="mk-badge mk-badge-un">未安排</span>
+          </div>
+          <div class="mk-list-meta">
+            <span>📅 6/20（五）</span>
+            <span>🕐 19:00–21:00</span>
+            <span>📍 大教室</span>
+            <span>👤 王老師</span>
+          </div>
+        </div>
+        <div class="mk-list-actions">
+          <button class="mk-btn-arrange">安排</button>
+        </div>
+      </div>
+
+      <div class="mk-list-card mk-confirm">
+        <div class="mk-list-bar" style="background:var(--cal-general)"></div>
+        <div class="mk-list-body">
+          <div class="mk-list-top">
+            <span class="mk-list-title">柏睿 — 柏睿數學家教</span>
+            <span class="mk-badge mk-badge-student">學生請假</span><span class="mk-badge mk-badge-un">未安排</span><span class="mk-badge" style="background:#F8EDEA;color:#C0504A;border:1px solid #E8C5BF" title="課前1小時內請假，補課要與家長確認">⚠ 待確認補課</span>
+          </div>
+          <div class="mk-list-meta">
+            <span>📅 6/21（六）</span>
+            <span>🕐 20:00–21:00</span>
+            <span>📍 小教室</span>
+            <span>👤 王老師</span>
+          </div>
+        </div>
+        <div class="mk-list-actions">
+          <button class="mk-btn-cancel" style="font-size:12px;padding:5px 10px;margin-left:0">不補課</button>
+          <button class="mk-btn-arrange">安排</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 已安排 -->
+    <div class="mk-sec">
+      <div class="mk-sec-head"><span class="mk-sec-dot" style="background:#6B8F7A"></span>已安排<span class="mk-sec-pill">1</span></div>
+
+      <div class="mk-list-card mk-arr">
+        <div class="mk-list-bar" style="background:var(--cal-general)"></div>
+        <div class="mk-list-body">
+          <div class="mk-list-top">
+            <span class="mk-list-title">新力、晨宇理化</span>
+            <span class="mk-badge mk-badge-reschedule">調課</span><span class="mk-badge mk-badge-arr">✓ 已安排</span>
+          </div>
+          <div class="mk-list-meta">
+            <span>📅 6/19（五）</span>
+            <span>🕐 17:30–19:30</span>
+            <span>📍 小教室</span>
+            <span>👤 郁庭</span>
+          </div>
+          <div class="mk-list-makeup">
+            <span class="mk-list-makeup-lbl">調課：</span>
+            <span>6/26（四）</span>
+            <span class="mk-dot">•</span>
+            <span>17:30–19:30</span>
+            <span class="mk-dot">•</span><span>📍 小教室</span>
+            <button class="mk-btn-cancel">取消安排</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 不補課・退半堂 -->
+    <div class="mk-sec">
+      <div class="mk-sec-head"><span class="mk-sec-dot" style="background:var(--tx3)"></span>不補課・退半堂<span class="mk-sec-pill">1</span></div>
+
+      <div class="mk-list-card mk-completed">
+        <div class="mk-list-bar" style="background:var(--cal-general)"></div>
+        <div class="mk-list-body">
+          <div class="mk-list-top">
+            <span class="mk-list-title">小華 — 國一英文班</span>
+            <span class="mk-badge" style="background:var(--sf2);color:var(--tx2);border:1px solid var(--br)">不補課・退半堂</span>
+          </div>
+          <div class="mk-list-meta">
+            <span>📅 6/18（三）</span>
+            <span>🕐 18:00–20:00</span>
+            <span>👤 林老師</span>
+          </div>
+        </div>
+        <div class="mk-list-actions">
+          <button class="mk-btn-cancel">改為補課</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

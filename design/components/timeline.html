@@ -1,0 +1,75 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Timeline · 教室時段時間軸</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* 來源：js/today.js renderTimeline（tl-* class）、CSS「Timeline」。
+     靜態快照、假資料、已移除 onclick。
+     教室時段時間軸＝每間教室一列，課程依起訖時間排進去；
+     軸 13:00–21:00（480 分），block 的 left/width% 即真實算法的結果；
+     紅線＝目前時間，block 底色接 --cal-* token。 */
+  body{background:var(--bg);padding:24px;font-family:'Noto Sans TC',sans-serif}
+  .box{max-width:680px;background:var(--card);border:1px solid var(--br);border-radius:var(--r);padding:14px}
+</style>
+</head>
+<body>
+  <div class="box">
+    <div class="tl-wrap">
+      <div class="tl-corner"></div>
+      <div class="tl-hdr">
+        <span class="tl-tick" style="left:0%">13:00</span>
+        <span class="tl-tick" style="left:12.5%">14:00</span>
+        <span class="tl-tick" style="left:25%">15:00</span>
+        <span class="tl-tick" style="left:37.5%">16:00</span>
+        <span class="tl-tick" style="left:50%">17:00</span>
+        <span class="tl-tick" style="left:62.5%">18:00</span>
+        <span class="tl-tick" style="left:75%">19:00</span>
+        <span class="tl-tick" style="left:87.5%">20:00</span>
+        <span class="tl-tick" style="left:100%">21:00</span>
+        <span class="tl-now-hdr-lbl" style="left:66.7%">▾</span>
+      </div>
+
+      <div class="tl-room-lbl">大教室</div>
+      <div class="tl-track">
+        <div class="tl-now-line" style="left:66.7%"></div>
+        <div class="tl-block" style="left:12.5%;width:25%;background:var(--cal-general)">
+          <div class="tl-block-nm">高一數學班</div>
+          <div class="tl-block-t">14:00</div>
+        </div>
+        <div class="tl-block" style="left:50%;width:25%;background:var(--cal-general)">
+          <div class="tl-block-nm">國二數學班</div>
+          <div class="tl-block-t">17:00</div>
+        </div>
+      </div>
+
+      <div class="tl-room-lbl">小教室</div>
+      <div class="tl-track">
+        <div class="tl-now-line" style="left:66.7%"></div>
+        <div class="tl-block" style="left:56.25%;width:25%;background:var(--cal-general)">
+          <div class="tl-block-nm">新力、晨宇理化</div>
+          <div class="tl-block-t">17:30</div>
+        </div>
+      </div>
+
+      <div class="tl-room-lbl">301教室</div>
+      <div class="tl-track">
+        <div class="tl-now-line" style="left:66.7%"></div>
+        <div class="tl-block" style="left:25%;width:25%;background:var(--cal-practice)">
+          <div class="tl-block-nm">週末練習課</div>
+          <div class="tl-block-t">15:00</div>
+        </div>
+        <div class="tl-block" style="left:75%;width:25%;background:var(--cal-general)">
+          <div class="tl-block-nm">國一英文班</div>
+          <div class="tl-block-t">19:00</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

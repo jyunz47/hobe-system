@@ -1,0 +1,53 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mobile Nav · 手機底欄分頁</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* 來源：補習班排程系統.html <aside class="sidebar"> + style.css「手機版骨架（≤768px）」。
+     靜態快照、假資料、已移除 onclick。
+     ⚠ 這是同一份 .sidebar markup 在 ≤768px 視窗下「變底部分頁列」的狀態——
+     靠 style.css 的 viewport media query 觸發，所以這張卡請以「手機寬度」檢視
+     （桌機寬視窗下會回到左側欄＝見 sidebar 卡）。logo/系統分區/使用者框在手機底欄會被藏起，只留分頁圖示。 */
+  html,body{margin:0;background:var(--bg);font-family:'Noto Sans TC',sans-serif}
+  body{min-height:100vh}
+</style>
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="logo"><h1>HOBE</h1><p>排程系統</p></div>
+    <nav class="nav">
+      <div class="nav-sec">課程管理</div>
+      <button class="ni active" data-m="課程">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg>
+        <span class="ni-txt">課程</span>
+      </button>
+      <button class="ni" data-m="補課">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/><path d="M9 12h6M9 16h4"/></svg>
+        <span class="ni-txt">待補課/調課清單</span>
+        <span class="nbadge">3</span>
+      </button>
+      <button class="ni" data-m="學生">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        <span class="ni-txt">學生管理</span>
+      </button>
+      <div class="nav-sec">系統</div>
+      <button class="ni" data-m="設定">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <span class="ni-txt">設定</span>
+      </button>
+    </nav>
+    <div class="sf">
+      <div class="ubox">
+        <div class="udot"></div>
+        <div class="uinfo"><strong>王小明</strong><span>jyunz0447@gmail.com</span></div>
+      </div>
+    </div>
+  </aside>
+</body>
+</html>

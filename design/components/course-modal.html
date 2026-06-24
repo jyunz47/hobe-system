@@ -1,0 +1,117 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Course Modal · 課程詳情（改單價＋加退學生）</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* 來源：js/settings.js openCourseModal/renderCourseModal + HTML #course-modal-wrap。
+     靜態快照、假資料、已移除 onclick。
+     真實 app 是點課卡跳出的置中 modal（.stu-modal-wrap 全螢幕遮罩）；
+     gallery 把固定定位攤平、用兩個 screen 各呈現一種真實狀態：
+       狀態 A＝一般課程（可改每堂單價、加退學生）
+       狀態 B＝練習課（名單來自行事曆備註、每堂不同，唯讀）。 */
+  body{margin:0;padding:32px;background:rgba(0,0,0,.06);font-family:'Noto Sans TC',sans-serif}
+  .screens{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+  .screen{display:flex;flex-direction:column;gap:8px}
+  .screen-lbl{font-size:12px;font-weight:700;color:var(--tx2)}
+  .stu-modal{position:static;max-width:460px}
+</style>
+</head>
+<body>
+
+<div class="screens">
+
+  <!-- 狀態 A：一般課程（改單價 + 加退學生） -->
+  <div class="screen">
+    <div class="screen-lbl">狀態 A · 一般課程</div>
+    <div class="stu-modal">
+      <div class="stu-modal-hd">
+        <div class="stu-modal-title"><span style="font-size:16px;font-weight:700">國二數學班</span></div>
+        <button class="stu-modal-close">✕</button>
+      </div>
+      <div class="stu-modal-body">
+        <div class="cm-meta">團班　·　👤 王老師　·　19:00</div>
+
+        <div class="cm-sec">
+          <div class="cm-lbl">課名</div>
+          <input class="cm-input" value="國二數學班" disabled>
+          <div class="cm-hint">改課名待「系統擁有課表」完成後開放——目前課表仍讀 Google 行事曆，系統改名會與行事曆標題對不上。</div>
+        </div>
+
+        <div class="cm-sec">
+          <div class="cm-lbl">每堂單價（課程預設）</div>
+          <div class="cm-price-row">
+            <input type="number" class="cm-input cm-price" min="0" inputmode="numeric" placeholder="未定價" value="450">
+            <span class="cm-unit">元 / 堂</span>
+          </div>
+          <div class="cm-hint">全班預設價。個別學生有優惠時，在該學生編輯面板覆蓋。</div>
+        </div>
+
+        <div class="cm-sec">
+          <div class="cm-lbl">本期登記名單<span class="cm-count">5</span></div>
+          <div class="co-roster">
+            <span class="co-stu">王小明<span class="co-stu-price">450</span><button class="co-stu-x" title="退課">✕</button></span>
+            <span class="co-stu">陳大華<span class="co-stu-price">450</span><button class="co-stu-x" title="退課">✕</button></span>
+            <span class="co-stu">李小美<span class="co-stu-price">400</span><button class="co-stu-x" title="退課">✕</button></span>
+            <span class="co-stu">張志強<span class="co-stu-price"><span class="co-undef">未定價</span></span><button class="co-stu-x" title="退課">✕</button></span>
+            <span class="co-stu">黃淑芬<span class="co-stu-price">450</span><button class="co-stu-x" title="退課">✕</button></span>
+          </div>
+          <div class="co-add">
+            <select class="co-add-sel">
+              <option value="1">吳建宏（國二）</option>
+              <option value="2">林佳蓉（國二）</option>
+              <option value="3">鄭凱文（國二）</option>
+            </select>
+            <button class="co-add-btn">＋ 加入</button>
+          </div>
+          <button class="co-clear-btn">🗑 整門課從登記簿移除（清改名殘留）</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 狀態 B：練習課（唯讀，名單來自備註、每堂不同） -->
+  <div class="screen">
+    <div class="screen-lbl">狀態 B · 練習課（唯讀）</div>
+    <div class="stu-modal">
+      <div class="stu-modal-hd">
+        <div class="stu-modal-title"><span style="font-size:16px;font-weight:700">週末練習課</span></div>
+        <button class="stu-modal-close">✕</button>
+      </div>
+      <div class="stu-modal-body">
+        <div class="cm-meta">練習課　·　👤 郁庭　·　09:00 / 14:00</div>
+
+        <div class="cm-sec">
+          <div class="cm-lbl">課名</div>
+          <input class="cm-input" value="週末練習課" disabled>
+          <div class="cm-hint">改課名待「系統擁有課表」完成後開放——目前課表仍讀 Google 行事曆，系統改名會與行事曆標題對不上。</div>
+        </div>
+
+        <div class="cm-sec">
+          <div class="cm-lbl">名單（練習課）</div>
+          <div class="co-note">練習課名單來自行事曆備註，每堂不同，此處唯讀。</div>
+          <div class="co-sess">
+            <span class="co-sess-d">6/21</span>
+            <span class="co-sess-r">
+              <span class="co-grp"><b>數學</b>：王小明、陳大華</span>
+              <span class="co-grp"><b>理化</b>：李小美</span>
+            </span>
+          </div>
+          <div class="co-sess">
+            <span class="co-sess-d">6/22</span>
+            <span class="co-sess-r">張志強、黃淑芬、吳建宏</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

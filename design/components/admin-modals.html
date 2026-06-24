@@ -1,0 +1,115 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Admin Modals · 行政小工具 Modal</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* 來源：補習班排程系統.html（status-modal / delete-modal / price-modal）+ js/enrollment.js renderPriceModal。
+     靜態快照、假資料、已移除 onclick。
+     共用 .stu-modal 殼的行政小工具 modal：變更狀態 / 徹底刪除 / 課程價目表。
+     （課表對帳是較大的對帳 UI，另列待補卡。） */
+  body{margin:0;padding:32px;background:rgba(0,0,0,.06);font-family:'Noto Sans TC',sans-serif}
+  .screens{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
+  .screen{display:flex;flex-direction:column;gap:8px}
+  .screen-lbl{font-size:12px;font-weight:700;color:var(--tx2)}
+  .stu-modal{position:static}
+</style>
+</head>
+<body>
+
+<div class="screens">
+
+  <!-- 變更學生狀態 -->
+  <div class="screen">
+    <div class="screen-lbl">變更學生狀態</div>
+    <div class="stu-modal" style="max-width:380px">
+      <div class="stu-modal-hd">
+        <div class="stu-modal-title"><span style="font-size:16px;font-weight:700">變更學生狀態</span></div>
+        <button class="stu-modal-close">✕</button>
+      </div>
+      <div class="stu-modal-body">
+        <div style="font-size:13.5px;color:var(--tx2);margin-bottom:14px">王小明（國二）目前狀態：在學</div>
+        <div style="font-size:12px;color:var(--tx3);margin-bottom:6px">新狀態</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+          <button class="status-opt-btn" data-status="畢業">畢業</button>
+          <button class="status-opt-btn" data-status="離開">離開</button>
+          <button class="status-opt-btn" data-status="暫停">暫停</button>
+        </div>
+        <div style="font-size:12px;color:var(--tx3);margin-bottom:6px">備註（選填，例如「國中畢業繼續高中」「家中因素暫停」）</div>
+        <textarea rows="3" style="width:100%;padding:8px 10px;border:1.5px solid var(--br);border-radius:var(--rs);font-family:inherit;font-size:13px;box-sizing:border-box;resize:vertical;color:var(--tx)"></textarea>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+          <button class="btn btns">取消</button>
+          <button class="btn btns btnp">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 徹底刪除學生 -->
+  <div class="screen">
+    <div class="screen-lbl">徹底刪除（危險區）</div>
+    <div class="stu-modal" style="max-width:400px">
+      <div class="stu-modal-hd">
+        <div class="stu-modal-title"><span style="font-size:16px;font-weight:700;color:#C0504A">🗑️ 徹底刪除學生</span></div>
+        <button class="stu-modal-close">✕</button>
+      </div>
+      <div class="stu-modal-body">
+        <div style="font-size:13.5px;color:var(--tx2);margin-bottom:14px;line-height:1.6">將永久移除「王小明」及其所有學期的修課登記，不可復原。此操作給清測試帳號／重複資料用。</div>
+        <div style="font-size:12px;color:var(--tx3);margin-bottom:6px">請輸入該學生的姓名以確認：</div>
+        <input class="del-modal-confirm-input" placeholder="輸入姓名" maxlength="20">
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+          <button class="btn btns">取消</button>
+          <button class="btn btns" style="background:#C0504A;color:#fff;border-color:#C0504A">永久刪除</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 課程價目表 -->
+  <div class="screen">
+    <div class="screen-lbl">課程價目表</div>
+    <div class="stu-modal" style="max-width:420px">
+      <div class="stu-modal-hd">
+        <div class="stu-modal-title"><span style="font-size:16px;font-weight:700">💰 課程價目表</span></div>
+        <button class="stu-modal-close">✕</button>
+      </div>
+      <div class="stu-modal-body">
+        <div style="font-size:12px;color:var(--tx3);margin-bottom:10px">每門課的預設每堂單價。個別學生有優惠時，在該學生的編輯面板覆蓋。</div>
+        <div>
+          <div class="price-row">
+            <span class="price-row-title">國二數學班</span>
+            <input type="number" class="price-row-input" value="450" placeholder="未定價" min="0" inputmode="numeric">
+            <span class="price-row-unit">元/堂</span>
+          </div>
+          <div class="price-row">
+            <span class="price-row-title">國三理化班</span>
+            <input type="number" class="price-row-input" value="500" placeholder="未定價" min="0" inputmode="numeric">
+            <span class="price-row-unit">元/堂</span>
+          </div>
+          <div class="price-row">
+            <span class="price-row-title">國一英文班</span>
+            <input type="number" class="price-row-input" value="" placeholder="未定價" min="0" inputmode="numeric">
+            <span class="price-row-unit">元/堂</span>
+          </div>
+          <div class="price-add-wrap">
+            <input placeholder="新增課程名稱…" maxlength="30">
+            <button class="btn btns">＋</button>
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
+          <button class="btn btns">取消</button>
+          <button class="btn btns btnp">儲存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

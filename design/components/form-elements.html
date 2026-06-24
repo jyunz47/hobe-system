@@ -1,0 +1,82 @@
+<!-- @dsCard group="Foundations" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Form Elements · 表單元素</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* 來源：補習班排程系統.html（date-picker / f-search）、js/students.js（stu-edit-* 修課登記列）、js/enrollment.js（price-row）。
+     靜態快照、假資料、已移除 onclick。
+     全站共用的表單輸入元件：日期、搜尋、文字、下拉、修課登記列、價目表列。 */
+  body{background:var(--bg);padding:24px;font-family:'Noto Sans TC',sans-serif}
+  .wrap{max-width:520px;display:flex;flex-direction:column;gap:20px}
+  h3{font-size:12px;color:var(--tx3);text-transform:uppercase;letter-spacing:.08em;margin:0}
+  .row{display:flex;flex-direction:column;gap:8px}
+</style>
+</head>
+<body>
+  <div class="wrap">
+
+    <div class="row">
+      <h3>日期選擇 input[type=date]</h3>
+      <input type="date" id="date-picker" value="2026-06-24" style="max-width:180px">
+    </div>
+
+    <div class="row">
+      <h3>搜尋框 .f-search</h3>
+      <input type="text" class="f-search" placeholder="搜尋課程 / 學生..." value="">
+    </div>
+
+    <div class="row">
+      <h3>姓名 / 年級（學生編輯）</h3>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input class="stu-edit-input" value="王小明" placeholder="姓名" maxlength="20" style="max-width:140px">
+        <select class="stu-edit-select">
+          <option>國一</option><option selected>國二</option><option>國三</option><option>高一</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="row">
+      <h3>修課登記列 .stu-edit-enroll-row</h3>
+      <div class="stu-edit-enroll-row">
+        <span class="stu-edit-course-tag">國二數學班<button class="rm-course-btn">✕</button></span>
+        <input type="number" class="stu-edit-price-input" value="400" placeholder="預設 450" min="0" inputmode="numeric">
+        <span class="stu-edit-price-unit">元/堂</span>
+      </div>
+      <div class="stu-edit-enroll-row">
+        <span class="stu-edit-course-tag">國二英文班<button class="rm-course-btn">✕</button></span>
+        <input type="number" class="stu-edit-price-input" value="" placeholder="未定價" min="0" inputmode="numeric">
+        <span class="stu-edit-price-unit">元/堂</span>
+      </div>
+      <div class="stu-edit-add-wrap">
+        <input class="stu-edit-new-course" placeholder="新增修課…">
+        <button class="stu-edit-add-btn">＋</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <h3>價目表列 .price-row</h3>
+      <div class="price-row">
+        <span class="price-row-title">國二數學班</span>
+        <input type="number" class="price-row-input" value="450" placeholder="未定價" min="0" inputmode="numeric">
+        <span class="price-row-unit">元/堂</span>
+      </div>
+      <div class="price-row">
+        <span class="price-row-title">國三理化班</span>
+        <input type="number" class="price-row-input" value="" placeholder="未定價" min="0" inputmode="numeric">
+        <span class="price-row-unit">元/堂</span>
+      </div>
+      <div class="price-add-wrap">
+        <input placeholder="新增課程名稱…" maxlength="30">
+        <button class="btn btns">＋</button>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

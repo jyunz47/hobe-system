@@ -1,0 +1,188 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Course Overview · 課程總覽（週課表矩陣）</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* 來源：js/settings.js renderSettings + renderCoCard。
+     靜態快照、假資料、已移除 onclick。
+     課程總覽後台＝類型分區 × 週一～日七欄，課程排進上課那天；
+     每張卡＝課名＋老師＋時間＋「登記成績／只點名」小開關；
+     判斷不出星期/類型的收在底部「未分類」。 */
+  body{background:var(--bg);padding:24px;font-family:'Noto Sans TC',sans-serif}
+  .wrap{max-width:1080px}
+</style>
+</head>
+<body>
+  <div class="wrap" id="co-list">
+
+    <div class="co-type-sec">
+      <div class="co-sec-hd">團班<span class="co-group-n">3</span></div>
+      <div class="co-week-grid">
+        <div class="co-day-col">
+          <div class="co-day-hd">週一</div>
+          <div class="co-card">
+            <div class="co-card-hd">
+              <span class="co-card-title">國二數學班</span>
+              <span class="co-card-teacher">👤 王老師</span>
+              <span class="co-card-time">19:00</span>
+            </div>
+            <label class="switch switch-sm">
+              <input type="checkbox" checked>
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+              <span class="switch-label">登記成績</span>
+            </label>
+          </div>
+          <div class="co-card">
+            <div class="co-card-hd">
+              <span class="co-card-title">國二數學班</span>
+              <span class="co-card-teacher">👤 林老師</span>
+              <span class="co-card-time">19:00</span>
+            </div>
+            <label class="switch switch-sm">
+              <input type="checkbox" checked>
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+              <span class="switch-label">登記成績</span>
+            </label>
+          </div>
+        </div>
+        <div class="co-day-col">
+          <div class="co-day-hd">週二</div>
+          <div class="co-day-empty">—</div>
+        </div>
+        <div class="co-day-col">
+          <div class="co-day-hd">週三</div>
+          <div class="co-card">
+            <div class="co-card-hd">
+              <span class="co-card-title">國三理化班</span>
+              <span class="co-card-teacher">👤 陳老師</span>
+              <span class="co-card-time">18:00</span>
+            </div>
+            <label class="switch switch-sm">
+              <input type="checkbox">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+              <span class="switch-label">只點名</span>
+            </label>
+          </div>
+        </div>
+        <div class="co-day-col">
+          <div class="co-day-hd">週四</div>
+          <div class="co-day-empty">—</div>
+        </div>
+        <div class="co-day-col">
+          <div class="co-day-hd">週五</div>
+          <div class="co-card">
+            <div class="co-card-hd">
+              <span class="co-card-title">國二數學班</span>
+              <span class="co-card-teacher">👤 王老師</span>
+              <span class="co-card-time">19:00</span>
+            </div>
+            <label class="switch switch-sm">
+              <input type="checkbox" checked>
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+              <span class="switch-label">登記成績</span>
+            </label>
+          </div>
+        </div>
+        <div class="co-day-col">
+          <div class="co-day-hd">週六</div>
+          <div class="co-day-empty">—</div>
+        </div>
+        <div class="co-day-col">
+          <div class="co-day-hd">週日</div>
+          <div class="co-day-empty">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="co-type-sec">
+      <div class="co-sec-hd">一對二家教<span class="co-group-n">2</span></div>
+      <div class="co-week-grid">
+        <div class="co-day-col">
+          <div class="co-day-hd">週一</div>
+          <div class="co-day-empty">—</div>
+        </div>
+        <div class="co-day-col">
+          <div class="co-day-hd">週二</div>
+          <div class="co-card">
+            <div class="co-card-hd">
+              <span class="co-card-title">新力、晨宇理化</span>
+              <span class="co-card-teacher">👤 郁庭</span>
+              <span class="co-card-time">17:30</span>
+            </div>
+            <label class="switch switch-sm">
+              <input type="checkbox">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+              <span class="switch-label">只點名</span>
+            </label>
+          </div>
+        </div>
+        <div class="co-day-col">
+          <div class="co-day-hd">週三</div>
+          <div class="co-day-empty">—</div>
+        </div>
+        <div class="co-day-col">
+          <div class="co-day-hd">週四</div>
+          <div class="co-day-empty">—</div>
+        </div>
+        <div class="co-day-col">
+          <div class="co-day-hd">週五</div>
+          <div class="co-card">
+            <div class="co-card-hd">
+              <span class="co-card-title">柏睿數學家教</span>
+              <span class="co-card-teacher">👤 王老師</span>
+              <span class="co-card-time">20:00</span>
+            </div>
+            <label class="switch switch-sm">
+              <input type="checkbox">
+              <span class="switch-track"><span class="switch-thumb"></span></span>
+              <span class="switch-label">只點名</span>
+            </label>
+          </div>
+        </div>
+        <div class="co-day-col">
+          <div class="co-day-hd">週六</div>
+          <div class="co-day-empty">—</div>
+        </div>
+        <div class="co-day-col">
+          <div class="co-day-hd">週日</div>
+          <div class="co-day-empty">—</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="co-type-sec">
+      <div class="co-sec-hd">未分類 / 本週未排<span class="co-group-n">2</span><span class="co-group-hint">無法判斷類型或本週沒排課</span></div>
+      <div class="co-flat">
+        <div class="co-card">
+          <div class="co-card-hd">
+            <span class="co-card-title">高一數學班</span>
+            <span class="co-card-teacher">👤 林老師</span>
+          </div>
+          <label class="switch switch-sm">
+            <input type="checkbox" checked>
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+            <span class="switch-label">登記成績</span>
+          </label>
+        </div>
+        <div class="co-card">
+          <div class="co-card-hd">
+            <span class="co-card-title">國一英文班</span>
+          </div>
+          <label class="switch switch-sm">
+            <input type="checkbox">
+            <span class="switch-track"><span class="switch-thumb"></span></span>
+            <span class="switch-label">只點名</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</body>
+</html>

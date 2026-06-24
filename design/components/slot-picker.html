@@ -1,0 +1,83 @@
+<!-- @dsCard group="Components" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Slot Picker · 補課時段選擇器</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* 來源：js/makeup.js buildSpStepper/buildSpDateSection/buildSpTimeSection/buildSpRoomSection/buildSpConfirm。
+     靜態快照、假資料、已移除 onclick。
+     補課時段選擇器＝步驟條（B4 stepper）＋四段：選日期→選時段（含分校 segmented toggle）→選教室→確認；
+     此快照展示「確認」階段（前三步已完成、皆有選定）。 */
+  body{background:var(--bg);padding:24px;font-family:'Noto Sans TC',sans-serif}
+  .box{max-width:520px;background:var(--card);border:1px solid var(--br);border-radius:var(--r);padding:18px;display:flex;flex-direction:column;gap:16px}
+</style>
+</head>
+<body>
+  <div class="box" id="sp-body">
+
+    <!-- 步驟條 -->
+    <div class="sp-stepper">
+      <div class="sp-step sp-step-done"><span class="sp-step-dot">✓</span><span class="sp-step-lbl">日期</span></div>
+      <span class="sp-step-line"></span>
+      <div class="sp-step sp-step-done"><span class="sp-step-dot">✓</span><span class="sp-step-lbl">時段</span></div>
+      <span class="sp-step-line"></span>
+      <div class="sp-step sp-step-done"><span class="sp-step-dot">✓</span><span class="sp-step-lbl">教室</span></div>
+      <span class="sp-step-line"></span>
+      <div class="sp-step sp-step-cur"><span class="sp-step-dot">4</span><span class="sp-step-lbl">確認</span></div>
+    </div>
+
+    <!-- 選日期 -->
+    <div>
+      <div class="sp-lbl">選擇日期</div>
+      <div class="sp-chips">
+        <div class="sp-date"><div class="sp-date-tag">今天</div><div class="sp-date-num">6/24</div><div class="sp-date-wd">週二</div></div>
+        <div class="sp-date sp-sel"><div class="sp-date-tag">明天</div><div class="sp-date-num">6/25</div><div class="sp-date-wd">週三</div></div>
+        <div class="sp-date"><div class="sp-date-tag"></div><div class="sp-date-num">6/26</div><div class="sp-date-wd">週四</div></div>
+        <div class="sp-date"><div class="sp-date-tag"></div><div class="sp-date-num">6/27</div><div class="sp-date-wd">週五</div></div>
+        <div class="sp-date-custom">其他日期…</div>
+      </div>
+    </div>
+
+    <!-- 選時段（含分校 segmented toggle） -->
+    <div>
+      <div class="sp-lbl">選擇時段（2 小時）</div>
+      <div class="period-tabs sp-seg" style="margin-bottom:10px">
+        <button class="period-tab active">北投分校</button>
+        <button class="period-tab">石牌分校</button>
+      </div>
+      <div class="sp-chips-wrap">
+        <div class="sp-chips">
+          <div class="sp-time sp-na">15:00</div>
+          <div class="sp-time">16:00</div>
+          <div class="sp-time sp-sel">17:00</div>
+          <div class="sp-time">18:00<span class="sp-time-sub">練習課</span></div>
+          <div class="sp-time">19:00</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 選教室 -->
+    <div>
+      <div class="sp-lbl">選擇教室</div>
+      <div class="sp-chips">
+        <div class="sp-room sp-sel sp-orig"><div class="sp-rname">小教室</div><div class="sp-rcap">原教室</div></div>
+        <div class="sp-room"><div class="sp-rname">301教室</div><div class="sp-rcap">空閒</div></div>
+        <div class="sp-room sp-na"><div class="sp-rname">302教室</div><div class="sp-rcap">已有課</div></div>
+        <div class="sp-room"><div class="sp-rname">石牌分校</div><div class="sp-rcap">空閒</div></div>
+      </div>
+    </div>
+
+    <!-- 確認 -->
+    <div class="sp-cfm">
+      <div class="sp-cfm-info"><b>補課時間</b>　6/25（週三）17:00–19:00<br><b>教室</b>　小教室</div>
+      <button class="btn btns btnp" style="white-space:nowrap">✓ 確認補課</button>
+    </div>
+
+  </div>
+</body>
+</html>
