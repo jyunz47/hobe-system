@@ -583,6 +583,20 @@ body.hide-todo-chip .stu-info-chip{display:none}
 .co-sess-r{color:var(--tx)}
 .co-grp{display:block;margin-bottom:2px}
 .co-grp b{color:var(--ac);font-weight:600}
+.co-note{font-size:11px;color:var(--tx3);margin-bottom:7px;line-height:1.45}
+/* 課程詳情 modal（course-modal） */
+.cm-meta{font-size:12px;color:var(--tx3);margin-bottom:16px}
+.cm-sec{margin-bottom:18px}
+.cm-sec:last-child{margin-bottom:0}
+.cm-lbl{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:var(--tx3);letter-spacing:.04em;margin-bottom:8px}
+.cm-count{font-size:11px;font-weight:600;color:var(--ac);background:var(--al);border-radius:99px;padding:1px 8px}
+.cm-input{width:100%;box-sizing:border-box;padding:8px 10px;border:1.5px solid var(--br);border-radius:var(--rs);font-size:13px;font-family:inherit;color:var(--tx);background:#fff}
+.cm-input:focus{outline:none;border-color:var(--ac)}
+.cm-input:disabled{background:var(--sf2);color:var(--tx2);cursor:not-allowed}
+.cm-price-row{display:flex;align-items:center;gap:9px}
+.cm-price{max-width:140px}
+.cm-unit{font-size:12px;color:var(--tx3);white-space:nowrap}
+.cm-hint{font-size:11px;color:var(--tx3);margin-top:6px;line-height:1.5}
 .switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
 .switch input{position:absolute;opacity:0;width:0;height:0}
 .switch-track{position:relative;width:34px;height:19px;border-radius:99px;background:var(--br);transition:background .15s;flex-shrink:0}

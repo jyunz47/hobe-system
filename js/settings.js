@@ -9,8 +9,10 @@ var SETTINGS_GRADE_CALS=['一般課程','練習課','加課'];
 // 課名正規化：去前後空白，避免同一門課因尾端空白被當兩門（parse.js origTitle 無標記時不 trim）
 function normTitle(t){return (t||'').trim();}
 
-// 展開中的課名（總覽列的展開狀態）
-var _coExpanded=new Set();
+// 課程卡 → 該卡的上下文（給置中 modal 用：點卡開 modal，不再就地展開）
+// key（課名@星期#老師）→ {c, daySess, wd, teacher, isPractice}
+var _coCardCtx=new Map();
+var _courseModalKey=null;
 
 function studentName(id){
   const s=(driveData.studentList||[]).find(s=>s.id===id);
@@ -54,6 +56,7 @@ var WEEK_LABEL={1:'週一',2:'週二',3:'週三',4:'週四',5:'週五',6:'週六
 function hhmm(d){return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;}
 
 function renderSettings(){
+  _coCardCtx.clear();
   const list=buildCourseOverview();
   const body=document.getElementById('co-list');
   if(!list.length){
@@ -104,12 +107,12 @@ function renderCoCard(c,daySess,wd,teacher){
   const isPractice=c.type==='practice';
   const teacherLabel=teacher!=null?teacher:([...c.teachers].join('、'));
   const key=c.title+'@'+(wd==null?'x':wd)+'#'+(teacher!=null?teacher:'');
-  const expanded=_coExpanded.has(key);
+  _coCardCtx.set(key,{c,daySess,wd,teacher,isPractice});  // 點卡時 modal 從這查回上下文
   const tEsc=JSON.stringify(c.title).replace(/"/g,'&quot;');
   const kEsc=JSON.stringify(key).replace(/"/g,'&quot;');
   const times=[...new Set((daySess||[]).map(s=>hhmm(s.date)))];
-  return `<div class="co-card${expanded?' open':''}">
-    <div class="co-card-hd" onclick="toggleCoExpand(${kEsc})">
+  return `<div class="co-card">
+    <div class="co-card-hd" onclick="openCourseModal(${kEsc})">
       <span class="co-card-title">${esc(c.title)}</span>
       ${teacherLabel?`<span class="co-card-teacher">👤 ${esc(teacherLabel)}</span>`:''}
       ${times.length?`<span class="co-card-time">${times.join(' / ')}</span>`:''}
@@ -119,23 +122,11 @@ function renderCoCard(c,daySess,wd,teacher){
       <span class="switch-track"><span class="switch-thumb"></span></span>
       <span class="switch-label">${on?'登記成績':'只點名'}</span>
     </label>
-    ${expanded?`<div class="co-detail">${renderCoDetail(c,isPractice,daySess)}</div>`:''}
   </div>`;
 }
 
-function renderCoDetail(c,isPractice,daySess){
-  if(isPractice){
-    const sess=(daySess&&daySess.length?daySess:c.sessions).slice().sort((a,b)=>a.date-b.date);
-    if(!sess.length)return '<div class="co-empty">本週尚未載入這門練習課的堂次。</div>';
-    return `<div class="co-note">練習課名單來自行事曆備註，每堂不同，此處唯讀。</div>`+sess.map(s=>{
-      const d=`${s.date.getMonth()+1}/${s.date.getDate()}`;
-      let roster;
-      if(s.groups.length)roster=s.groups.map(g=>`<span class="co-grp"><b>${esc(g.subject)}</b>：${esc(g.students.join('、'))}</span>`).join('');
-      else roster=s.students.length?esc(s.students.join('、')):'<span class="co-empty">無名單</span>';
-      return `<div class="co-sess"><span class="co-sess-d">${d}</span><span class="co-sess-r">${roster}</span></div>`;
-    }).join('');
-  }
-  // 一般課程：本期登記簿名單，可直接加退
+// 一般課程名單（modal 內）：本期登記簿，可直接加退
+function renderGeneralRoster(c){
   const tEsc=JSON.stringify(c.title).replace(/"/g,'&quot;');
   const enrolledIds=new Set(c.enrolled.map(en=>en.studentId));
   const opts=getStudentList({activeOnly:true})
@@ -158,6 +149,83 @@ function renderCoDetail(c,isPractice,daySess){
   return roster+adder+clear;
 }
 
+// 練習課名單（modal 內）：來自備註、每堂不同，唯讀
+function renderPracticeRoster(c,daySess){
+  const sess=(daySess&&daySess.length?daySess:c.sessions).slice().sort((a,b)=>a.date-b.date);
+  if(!sess.length)return '<div class="co-empty">本週尚未載入這門練習課的堂次。</div>';
+  return `<div class="co-note">練習課名單來自行事曆備註，每堂不同，此處唯讀。</div>`+sess.map(s=>{
+    const d=`${s.date.getMonth()+1}/${s.date.getDate()}`;
+    let roster;
+    if(s.groups.length)roster=s.groups.map(g=>`<span class="co-grp"><b>${esc(g.subject)}</b>：${esc(g.students.join('、'))}</span>`).join('');
+    else roster=s.students.length?esc(s.students.join('、')):'<span class="co-empty">無名單</span>';
+    return `<div class="co-sess"><span class="co-sess-d">${d}</span><span class="co-sess-r">${roster}</span></div>`;
+  }).join('');
+}
+
+// ── 課程詳情 modal（點卡開啟：改單價、加退學生；改課名延後到「系統擁有課表」）──
+function courseModalOpen(){return document.getElementById('course-modal-wrap').classList.contains('open');}
+function openCourseModal(key){
+  _courseModalKey=key;
+  renderCourseModal();
+  document.getElementById('course-modal-wrap').classList.add('open');
+}
+function closeCourseModal(){
+  document.getElementById('course-modal-wrap').classList.remove('open');
+  _courseModalKey=null;
+}
+function refreshCourseModal(){if(courseModalOpen())renderCourseModal();}
+
+function renderCourseModal(){
+  const ctx=_coCardCtx.get(_courseModalKey);
+  if(!ctx){closeCourseModal();return;}  // 課卡消失（如清空後）→ 收掉 modal
+  const {c,daySess,teacher,isPractice}=ctx;
+  const teacherLabel=teacher!=null?teacher:[...c.teachers].join('、');
+  const times=[...new Set((daySess||[]).map(s=>hhmm(s.date)))];
+  const meta=[TYPE_LABEL[c.type]||'未分類 / 本週未排',teacherLabel?('👤 '+teacherLabel):'',times.length?times.join(' / '):''].filter(Boolean).join('　·　');
+  const tEsc=JSON.stringify(c.title).replace(/"/g,'&quot;');
+  document.getElementById('course-modal-title').textContent=c.title;
+
+  // 改課名：延後（課表仍讀行事曆，系統改名會與標題對不上）→ 唯讀顯示＋說明
+  const renameSec=`<div class="cm-sec">
+    <div class="cm-lbl">課名</div>
+    <input class="cm-input" value="${esc(c.title)}" disabled>
+    <div class="cm-hint">改課名待「系統擁有課表」完成後開放——目前課表仍讀 Google 行事曆，系統改名會與行事曆標題對不上。</div>
+  </div>`;
+
+  // 改學費：課程預設單價（coursePrices）。練習課不走登記簿、不在此設價
+  const dp=getCourseDefaultPrice(c.title);
+  const priceSec=isPractice?'':`<div class="cm-sec">
+    <div class="cm-lbl">每堂單價（課程預設）</div>
+    <div class="cm-price-row">
+      <input type="number" class="cm-input cm-price" min="0" inputmode="numeric" placeholder="未定價" value="${dp??''}" onchange="coSavePrice(${tEsc},this.value)">
+      <span class="cm-unit">元 / 堂</span>
+    </div>
+    <div class="cm-hint">全班預設價。個別學生有優惠時，在該學生編輯面板覆蓋。</div>
+  </div>`;
+
+  const rosterSec=isPractice
+    ? `<div class="cm-sec"><div class="cm-lbl">名單（練習課）</div>${renderPracticeRoster(c,daySess)}</div>`
+    : `<div class="cm-sec"><div class="cm-lbl">本期登記名單<span class="cm-count">${c.enrolled.length}</span></div>${renderGeneralRoster(c)}</div>`;
+
+  document.getElementById('course-modal-body').innerHTML=
+    `<div class="cm-meta">${esc(meta)}</div>`+renameSec+priceSec+rosterSec;
+}
+
+// 改學費：寫課程預設單價（coursePrices）。空白＝未定價
+function coSavePrice(title,valStr){
+  const t=normTitle(title);
+  const v=(valStr||'').trim();
+  const price=v===''?null:Math.max(0,parseInt(v,10)||0);
+  const list=getCoursePrices().slice();
+  const row=list.find(c=>normTitle(c.title)===t);
+  if(row){row.title=t;row.price=price;}
+  else list.push({title:t,price});
+  saveCoursePrices(list);
+  toast(price==null?'已清除單價':`單價設為 ${price} 元/堂`,'ok');
+  renderSettings();      // 背景列重建（含 _coCardCtx）
+  refreshCourseModal();  // modal 內名單的 effectivePrice 跟著更新
+}
+
 // 一鍵移除某課名本期的全部登記（清掉改名後殘留的舊課；不碰其他期別、不碰行事曆、學生本人不刪）
 function coClearCourse(title){
   const t=normTitle(title);
@@ -169,6 +237,7 @@ function coClearCourse(title){
   saveEnrollments(getEnrollments().filter(e=>!(normTitle(e.courseTitle)===t&&e.periodId===pid)));
   toast(`已移除「${t}」的 ${victims.length} 筆登記`,'ok');
   renderSettings();
+  refreshCourseModal();
 }
 
 // 加學生進這門課（本期登記簿），單價留空＝用價目表預設
@@ -181,6 +250,7 @@ function coAddEnroll(btn,title){
   saveEnrollments(list);
   toast(`已加入 ${studentName(sid)}：${normTitle(title)}`,'ok');
   renderSettings();
+  refreshCourseModal();
 }
 
 // 退課：從登記簿移除這筆（可在學生編輯或這裡再加回）
@@ -191,11 +261,7 @@ function coRemoveEnroll(enId){
   saveEnrollments(getEnrollments().filter(e=>e.id!==enId));
   toast(`已退課：${studentName(en.studentId)} — ${en.courseTitle}`,'ok');
   renderSettings();
-}
-
-function toggleCoExpand(key){
-  if(_coExpanded.has(key))_coExpanded.delete(key);else _coExpanded.add(key);
-  renderSettings();
+  refreshCourseModal();
 }
 
 function toggleNeedsGrade(title,on){

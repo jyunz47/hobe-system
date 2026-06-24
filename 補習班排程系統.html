@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HOBE">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=22">
+<link rel="stylesheet" href="style.css?v=23">
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -286,7 +286,7 @@ if ('serviceWorker' in navigator) {
     <div id="panel-settings" class="panel" style="display:none">
       <div class="set-card">
         <div class="sec-hd">課程總覽<span class="sec-hd-line"></span></div>
-        <p class="set-card-sub">系統目前認得的每一門課：類型、老師、單價、是否需登記成績。點一門課展開看登記名單（練習課顯示每堂名單與科目）。單價在「學生管理 → 價目表」調整。</p>
+        <p class="set-card-sub">系統目前認得的每一門課：類型、老師、單價、是否需登記成績。點一門課開啟視窗：調整單價、加退學生（練習課名單唯讀）。批次調價也可到「學生管理 → 價目表」。</p>
         <div id="co-list"></div>
       </div>
     </div>
@@ -339,7 +339,7 @@ if ('serviceWorker' in navigator) {
 <script src="js/enrollment.js?v=8"></script>
 <script src="js/students.js?v=5"></script>
 <script src="js/attendance.js?v=2"></script>
-<script src="js/settings.js?v=11"></script>
+<script src="js/settings.js?v=12"></script>
 <script src="js/init.js?v=7"></script>
 
 <div class="stu-modal-wrap" id="stu-modal-wrap">
@@ -411,6 +411,17 @@ if ('serviceWorker' in navigator) {
         <button class="btn btns btnp" onclick="savePriceModal()">儲存</button>
       </div>
     </div>
+  </div>
+</div>
+
+<div class="stu-modal-wrap" id="course-modal-wrap">
+  <div class="stu-modal-overlay" onclick="closeCourseModal()"></div>
+  <div class="stu-modal" style="max-width:460px">
+    <div class="stu-modal-hd">
+      <div class="stu-modal-title"><span id="course-modal-title" style="font-size:16px;font-weight:700"></span></div>
+      <button class="stu-modal-close" onclick="closeCourseModal()">✕</button>
+    </div>
+    <div class="stu-modal-body" id="course-modal-body"></div>
   </div>
 </div>
 
