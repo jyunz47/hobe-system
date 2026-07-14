@@ -1,0 +1,6 @@
+{
+  "projectId": "a7832be0-d223-4060-8449-f85457458db6",
+  "projectName": "HOBE 設計系統",
+  "shape": "static-html",
+  "note": "此 repo 非 npm 設計系統：design/components/*.html 為手寫 @dsCard 預覽卡，直接鏡射上傳（design/components/** + style.css + tokens.css），不跑 converter。詳見 .design-sync/NOTES.md"
+}

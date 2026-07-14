@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HOBE 系統架構圖</title>
+<style>
+  :root{
+    --bg:#f6f6f7; --card:#ffffff; --border:#e4e4e7; --ring:#f0f0f2;
+    --text:#18181b; --muted:#71717a; --faint:#a1a1aa;
+    --line:#d4d4d8; --hot:#2563eb; --hot-ring:#bfdbfe;
+    --pill-bg:#f4f4f5; --pill-text:#52525b;
+    --act-bg:#eff6ff; --act-text:#1d4ed8; --act-border:#bfdbfe;
+    --fx-bg:#2563eb; --fx-text:#ffffff;
+    --neg-bg:#f4f4f5; --neg-text:#8e8e99;
+    --warn-text:#b45309;
+    --hover:#fafafa;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --bg:#131316; --card:#1c1c21; --border:#2e2e35; --ring:#232329;
+      --text:#e4e4e7; --muted:#9d9da8; --faint:#6b6b76;
+      --line:#3f3f46; --hot:#60a5fa; --hot-ring:#2c4a80;
+      --pill-bg:#27272d; --pill-text:#a1a1aa;
+      --act-bg:#172a4a; --act-text:#7ab5fd; --act-border:#2c4a80;
+      --fx-bg:#2c62c9; --fx-text:#eaf2ff;
+      --neg-bg:#232329; --neg-text:#7c7c88;
+      --warn-text:#fbbf24;
+      --hover:#222228;
+    }
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC",sans-serif;
+    background:var(--bg); color:var(--text); min-height:100vh;
+  }
+  header{padding:20px 28px 4px; display:flex; align-items:baseline; gap:14px; flex-wrap:wrap}
+  header h1{font-size:19px; font-weight:700}
+  header .sub{font-size:12.5px; color:var(--muted)}
+
+  #scroller{overflow-x:auto}
+  #graph{
+    position:relative; display:grid;
+    grid-template-columns:repeat(4, 296px);
+    gap:0 84px; align-items:start;
+    padding:24px 40px 80px; width:max-content; margin:0 auto;
+  }
+  #wires{position:absolute; inset:0; pointer-events:none; overflow:visible; z-index:0}
+  .wire path{fill:none; stroke:var(--hot); stroke-width:2}
+  .wire polygon{fill:var(--hot)}
+  .wire.neg path{stroke:var(--line); stroke-dasharray:5 4}
+  .wire.neg polygon{fill:var(--line)}
+
+  .col{display:flex; flex-direction:column; gap:24px; position:relative; z-index:1}
+  .col-label{
+    font-size:11.5px; font-weight:700; letter-spacing:.08em; color:var(--faint);
+    display:flex; align-items:center; gap:8px;
+  }
+  .col-label::after{content:''; flex:1; border-top:1px solid var(--border)}
+
+  .card{
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+    box-shadow:0 0 0 3px var(--ring); overflow:hidden;
+    transition:opacity .15s, box-shadow .15s, border-color .15s;
+  }
+  #graph.focus .card:not(.hot){opacity:.38}
+  .card.hot{border-color:var(--hot); box-shadow:0 0 0 3px var(--hot-ring)}
+  .card-head{display:flex; align-items:center; gap:9px; padding:11px 14px; font-weight:700; font-size:14px}
+  .card-head .hint{margin-left:auto; font-size:10.5px; font-weight:500; color:var(--faint); white-space:nowrap}
+  .card-body{border-top:1px solid var(--border); padding:5px 6px 6px}
+
+  .row{
+    display:flex; align-items:center; gap:6px; padding:7px 8px; border-radius:8px;
+    font-size:12.6px; flex-wrap:wrap;
+  }
+  .row .lbl{white-space:nowrap}
+  .row .dots{flex:1; min-width:12px; border-bottom:2px dotted var(--line); transform:translateY(4px)}
+  .row.dim .lbl{color:var(--neg-text)}
+
+  /* 動作列（⚡ 可點） */
+  .row.act{
+    cursor:pointer; font-weight:600; color:var(--act-text);
+    background:var(--act-bg); border:1px solid transparent;
+    margin:3px 2px;
+  }
+  .row.act:hover{border-color:var(--act-border)}
+  .row.act.lock{border-color:var(--hot); box-shadow:0 0 0 2px var(--hot-ring)}
+  .row.act .zap{flex:none; font-size:11px}
+
+  /* 連鎖效果 chip：動作觸發時出現在受影響的列上 */
+  .row .fx{
+    display:none; font-size:10.8px; font-weight:600; line-height:1.5;
+    background:var(--fx-bg); color:var(--fx-text);
+    border-radius:7px; padding:2px 8px; max-width:100%;
+  }
+  .row.fx-on .fx{display:inline-block}
+  .row.fx-on{background:var(--hover)}
+  .row.fx-on.neg .fx{background:var(--neg-bg); color:var(--neg-text)}
+
+  /* 手機版：動作下方直接列效果清單 */
+  #fxpanel{display:none}
+  footer{padding:0 40px 40px; font-size:11.5px; color:var(--faint); text-align:center}
+
+  @media (max-width:760px){
+    #graph{grid-template-columns:minmax(0,1fr); width:auto; gap:18px; padding:20px 16px 40px}
+    #wires{display:none}
+    #fxpanel{
+      display:block; margin:4px 2px 6px; padding:8px 12px; border-radius:10px;
+      background:var(--act-bg); font-size:11.8px; line-height:1.9; color:var(--text);
+    }
+    #fxpanel b{color:var(--act-text)}
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>🗺️ HOBE 系統架構圖</h1>
+  <span class="sub">功能脈絡導向：點一個 ⚡ 動作，看它觸發後系統各處跟著變什麼（藍線＝會變的地方、虛線＝特別不會變的地方）</span>
+</header>
+
+<div id="scroller"><div id="graph">
+  <svg id="wires"></svg>
+</div></div>
+<footer>手工整理快照（2026-07-04）・架構或行為大改時記得回來更新這頁</footer>
+
+<script>
+// 卡＝畫面或面板；一般 row＝畫面上的顯示元素；act:true 的 row＝可觸發的動作
+// effects: [{t:'卡id.列key', note:'觸發後這裡變什麼', neg:true=特別「不會變」}]
+const COLS = ['⚡ 你做的動作', '課表畫面跟著變', '學生・行事曆跟著變', '紀錄簿與未來'];
+const CARDS = [
+// ── 第 1 欄：動作 ──
+{ id:'courseCard', col:0, title:'🎴 課程卡', hint:'點開任一堂課', rows:[
+  { key:'absence', act:true, label:'標記請假', effects:[
+    { t:'calendar.title',      note:'標題加【○○請假】' },
+    { t:'coursePage.cards',    note:'課卡出現請假標記' },
+    { t:'coursePage.stats',    note:'請假 +1・整堂取消則堂數 −1' },
+    { t:'makeupList.pending',  note:'多一筆「待安排」' },
+    { t:'makeupList.badge',    note:'紅色數字 +1' },
+    { t:'studentsPage.debt',   note:'該生欠課數 +1' },
+    { t:'studentsPage.warn',   note:'累積未補可能亮警示' },
+    { t:'futureRec.tuition',   note:'記請假時機（1hr 內→補多半堂/退半堂）' },
+  ]},
+  { key:'noshow', act:true, label:'標記曠課', effects:[
+    { t:'calendar.title',      note:'標題加【○○曠課】' },
+    { t:'coursePage.cards',    note:'課卡紅色「曠課」框（可取消）' },
+    { t:'studentsPage.attend', note:'出缺勤記一筆曠課' },
+    { t:'makeupList.pending',  note:'不會多紀錄（曠課不補課）', neg:true },
+    { t:'studentsPage.debt',   note:'欠課數不變', neg:true },
+  ]},
+  { key:'move', act:true, label:'調課・整堂一起調', effects:[
+    { t:'calendar.title',      note:'原事件標題加【調課】' },
+    { t:'calendar.moveCal',    note:'調課行事曆多新時段事件' },
+    { t:'coursePage.cards',    note:'原課卡變調課樣式・新時段多調課色卡' },
+    { t:'coursePage.stats',    note:'調課 +1・堂數 −1' },
+    { t:'coursePage.timeline', note:'新時段色塊出現' },
+  ]},
+  { key:'schedule', act:true, label:'安排補課（四步驟）', effects:[
+    { t:'calendar.makeupCal',  note:'補課行事曆多事件（綁原請假）' },
+    { t:'makeupList.scheduled',note:'該筆從待安排移過來' },
+    { t:'makeupList.badge',    note:'紅色數字 −1' },
+    { t:'coursePage.cards',    note:'補課當天多一張補課色課卡' },
+    { t:'coursePage.timeline', note:'當天時間軸多色塊' },
+    { t:'studentsPage.debt',   note:'該生欠課數 −1' },
+  ]},
+  { key:'rollcall', act:true, label:'點名：到／遲到／曠課', effects:[
+    { t:'records.attendance',  note:'寫入本期出席（遲到記分鐘）' },
+    { t:'futureRec.tuition',   note:'（未來）實際堂數的事實來源' },
+    { t:'futureRec.salary',    note:'（未來）到班人數 → 團班計薪' },
+  ]},
+]},
+{ id:'recon', col:0, title:'🔍 課表對帳', hint:'學生管理進入', rows:[
+  { key:'enroll', act:true, label:'補登／退課', effects:[
+    { t:'records.enroll',      note:'登記簿 ＋/− 一筆' },
+    { t:'coursePage.cards',    note:'課卡顯示名單跟著變' },
+    { t:'studentsPage.courses',note:'學生卡修課清單更新' },
+    { t:'adminPanel.rosterView', note:'課程總覽名單更新' },
+    { t:'calendar.desc',       note:'⚠️ 備註不會跟著改（請假勾選名單照舊）', neg:true },
+  ]},
+  { key:'newstu', act:true, label:'查無此人 → 建檔並登記', effects:[
+    { t:'studentsPage.card',   note:'多一張學生卡（選定年級）' },
+    { t:'records.enroll',      note:'同時登記該堂課' },
+    { t:'coursePage.cards',    note:'課卡名單出現該生' },
+  ]},
+]},
+{ id:'adminPanel', col:0, title:'🗂️ 課程總覽後台', hint:'設定頁進入', rows:[
+  { key:'roster', act:true, label:'加退學生', effects:[
+    { t:'records.enroll',      note:'登記簿 ＋/− 一筆' },
+    { t:'coursePage.cards',    note:'課卡顯示名單跟著變' },
+    { t:'studentsPage.courses',note:'學生卡修課清單更新' },
+    { t:'calendar.desc',       note:'⚠️ 備註不會跟著改（請假勾選名單照舊）', neg:true },
+  ]},
+  { key:'price', act:true, label:'改單價（個人覆蓋）', effects:[
+    { t:'records.price',       note:'個人價蓋過課程預設價' },
+    { t:'futureRec.tuition',   note:'（未來）學費金額跟著變' },
+  ]},
+  { key:'rosterView', label:'（顯示）課程名單' },
+]},
+
+// ── 第 2 欄：課表畫面 ──
+{ id:'coursePage', col:1, title:'📅 課程頁', rows:[
+  { key:'cards',    label:'今日／本週課卡' },
+  { key:'stats',    label:'統計行（堂數/請假/調課）' },
+  { key:'timeline', label:'教室時間軸' },
+]},
+{ id:'makeupList', col:1, title:'🔁 待補課清單', rows:[
+  { key:'badge',     label:'左側選單紅色數字' },
+  { key:'pending',   label:'待安排區' },
+  { key:'scheduled', label:'已安排區' },
+  { key:'done',      label:'已完成區' },
+]},
+
+// ── 第 3 欄：學生・行事曆 ──
+{ id:'studentsPage', col:2, title:'🧑‍🎓 學生管理', rows:[
+  { key:'card',    label:'學生卡' },
+  { key:'debt',    label:'欠課數' },
+  { key:'warn',    label:'多收費警示' },
+  { key:'courses', label:'修課清單' },
+  { key:'attend',  label:'出缺勤統計' },
+]},
+{ id:'calendar', col:2, title:'🗓️ Google 行事曆', hint:'手機上也看得到', rows:[
+  { key:'title',     label:'事件標題前綴' },
+  { key:'makeupCal', label:'補課行事曆' },
+  { key:'moveCal',   label:'調課行事曆' },
+  { key:'desc',      label:'事件備註（名單）' },
+]},
+
+// ── 第 4 欄：紀錄簿與未來 ──
+{ id:'records', col:3, title:'📒 系統紀錄簿', hint:'雲端共用', rows:[
+  { key:'enroll',     label:'修課登記簿' },
+  { key:'attendance', label:'出席紀錄（本期）' },
+  { key:'price',      label:'價目表・個人價' },
+]},
+{ id:'futureRec', col:3, title:'🔭 未來吃這些資料', rows:[
+  { key:'tuition', label:'學費系統', dim:true },
+  { key:'salary',  label:'老師薪資表', dim:true },
+]},
+];
+
+const $graph = document.getElementById('graph');
+const $wires = document.getElementById('wires');
+const cardOf = id => CARDS.find(c=>c.id===id);
+
+// 建欄與卡
+const colEls = COLS.map(name=>{
+  const el = document.createElement('div');
+  el.className = 'col';
+  el.innerHTML = `<div class="col-label">${name}</div>`;
+  $graph.appendChild(el);
+  return el;
+});
+CARDS.forEach(c=>{
+  const el = document.createElement('div');
+  el.className = 'card'; el.dataset.id = c.id;
+  el.innerHTML = `
+    <div class="card-head"><span>${c.title}</span>${c.hint?`<span class="hint">${c.hint}</span>`:''}</div>
+    <div class="card-body">
+      ${c.rows.map(r=>`
+        <div class="row ${r.act?'act':''} ${r.dim?'dim':''}" data-card="${c.id}" data-key="${r.key}">
+          ${r.act?'<span class="zap">⚡</span>':''}
+          <span class="lbl">${r.label}</span>
+          <span class="dots"></span>
+          <span class="fx"></span>
+        </div>`).join('')}
+    </div>`;
+  colEls[c.col].appendChild(el);
+});
+
+const rowEl = t => { const [cid,key] = t.split('.');
+  return document.querySelector(`.row[data-card="${cid}"][data-key="${key}"]`); };
+const findAction = el => {
+  const c = cardOf(el.dataset.card);
+  return c && c.rows.find(r=>r.key===el.dataset.key && r.act);
+};
+
+let active = null;   // 目前鎖定的動作 row 元素
+
+function clearFx(){
+  document.querySelectorAll('.row.fx-on').forEach(r=>{
+    r.classList.remove('fx-on','neg'); r.querySelector('.fx').textContent='';
+  });
+  document.querySelectorAll('.card.hot').forEach(c=>c.classList.remove('hot'));
+  document.querySelectorAll('.row.act.lock').forEach(r=>r.classList.remove('lock'));
+  const p = document.getElementById('fxpanel'); if(p) p.remove();
+  $graph.classList.remove('focus');
+  $wires.innerHTML = '';
+  active = null;
+}
+
+function activate(rowElm){
+  clearFx();
+  const action = findAction(rowElm);
+  if(!action) return;
+  active = rowElm;
+  $graph.classList.add('focus');
+  rowElm.classList.add('lock');
+  rowElm.closest('.card').classList.add('hot');
+  action.effects.forEach(fx=>{
+    const tr = rowEl(fx.t); if(!tr) return;
+    tr.classList.add('fx-on'); if(fx.neg) tr.classList.add('neg');
+    tr.querySelector('.fx').textContent = fx.note;
+    tr.closest('.card').classList.add('hot');
+  });
+  // 手機版：動作下方列效果清單
+  if(window.innerWidth <= 760){
+    const p = document.createElement('div'); p.id = 'fxpanel';
+    p.innerHTML = action.effects.map(fx=>{
+      const [cid,key] = fx.t.split('.');
+      const c = cardOf(cid), r = c && c.rows.find(r=>r.key===key);
+      return `${fx.neg?'▫️':'▪️'} <b>${c?c.title.replace(/^\S+ /,''):cid}・${r?r.label:key}</b>：${fx.note}`;
+    }).join('<br>');
+    rowElm.after(p);
+  }
+  requestAnimationFrame(()=>drawWires(action, rowElm));  // 等 chip 撐開版面後再畫
+}
+
+function drawWires(action, rowElm){
+  $wires.innerHTML = '';
+  if(window.innerWidth <= 760) return;
+  const g = $graph.getBoundingClientRect();
+  const rr = rowElm.getBoundingClientRect();
+  const x1 = rr.right - g.left, y1 = rr.top - g.top + rr.height/2;
+  const wires = [];
+  action.effects.forEach(fx=>{
+    const tr = rowEl(fx.t); if(!tr) return;
+    const tb = tr.getBoundingClientRect();
+    const x2 = tb.left - g.left, y2 = tb.top - g.top + tb.height/2;
+    if(x2 <= x1) return;               // 同欄/回頭：只亮 chip 不畫線
+    const mx = x2 - 30;                // 貼近目標的垂直轉折，扇形展開比較乾淨
+    const s = Math.sign(y2-y1), c = Math.min(12, Math.abs(y2-y1));
+    const d = `M ${x1+6} ${y1} L ${mx-12} ${y1}`
+      + (c>0 ? ` Q ${mx} ${y1} ${mx} ${y1+s*c} L ${mx} ${y2-s*c} Q ${mx} ${y2} ${mx+12} ${y2}` : '')
+      + ` L ${x2-9} ${y2}`;
+    wires.push(`<g class="wire ${fx.neg?'neg':''}">
+      <path d="${d}"/><polygon points="${x2-9},${y2-4.5} ${x2-1},${y2} ${x2-9},${y2+4.5}"/></g>`);
+  });
+  $wires.setAttribute('width', g.width); $wires.setAttribute('height', g.height);
+  $wires.innerHTML = wires.join('');
+}
+
+document.addEventListener('click', e=>{
+  const row = e.target.closest('.row.act');
+  if(row){ row === active ? clearFx() : activate(row); }
+  else if(!e.target.closest('.card')) clearFx();
+});
+window.addEventListener('resize', ()=>{ if(active){ const a = findAction(active); drawWires(a, active); } });
+
+// 預設展示老闆舉的例子：標記請假
+window.addEventListener('load', ()=>activate(rowEl('courseCard.absence')));
+</script>
+</body>
+</html>
