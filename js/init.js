@@ -82,6 +82,14 @@ async function initAPIs(){
       scheduleTokenRefresh();
       if(currentPanel==='login')await onSignedIn();
       else await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
+    },
+    // 授權 popup 開不成（平板/手機會擋非點擊觸發的彈窗）或被手動關掉時，
+    // GIS 只走這裡、不走上面的 callback——沒設的話「登入中」轉圈會卡死
+    error_callback:(err)=>{
+      hideL();
+      if(err?.type==='popup_closed')return; // 使用者自己關掉授權視窗，不用吵
+      if(currentPanel==='login')toast('自動登入未完成，請點「使用 Google 帳號登入」','inf');
+      else toast('授權視窗被瀏覽器擋下','err',true);
     }
   });
   gisReady=true;
