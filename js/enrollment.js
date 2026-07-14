@@ -33,7 +33,8 @@ function saveEnrollments(list){driveData.enrollments=list;scheduleDriveSave();re
 function eventRoster(e){
   const descNames=e.students||[];
   if(!e.origTitle)return descNames;
-  const ens=getEnrollments({courseTitle:e.origTitle,periodId:yearPeriodId()});
+  // 只看行事曆課的登記（courseId==null）；系統自有課程若恰好同名，名冊各自獨立不混
+  const ens=getEnrollments({courseTitle:e.origTitle,periodId:yearPeriodId()}).filter(en=>en.courseId==null);
   if(!ens.length)return descNames; // 這門課這期沒有登記紀錄（尚未對帳）→ fallback 備註
   const byId=new Map(getStudentList().map(s=>[s.id,s]));
   const names=ens.map(en=>byId.get(en.studentId)?.name).filter(Boolean);
@@ -46,7 +47,8 @@ function eventRoster(e){
 // 其餘 studentId=null（無法可靠點名，UI 顯示但不可點，引導去課表對帳）。
 function eventRosterWithId(e){
   const byId=new Map(getStudentList().map(s=>[s.id,s]));
-  const ens=e.origTitle?getEnrollments({courseTitle:e.origTitle,periodId:yearPeriodId()}):[];
+  // 同 eventRoster：只看行事曆課的登記，系統課（courseId）不混入
+  const ens=e.origTitle?getEnrollments({courseTitle:e.origTitle,periodId:yearPeriodId()}).filter(en=>en.courseId==null):[];
   if(ens.length)return ens.map(en=>({studentId:en.studentId,name:byId.get(en.studentId)?.name||'(未知)'}));
   const byName=new Map();
   getStudentList().filter(s=>(s.status||'在學')==='在學').forEach(s=>{
@@ -61,7 +63,7 @@ function eventRosterWithId(e){
 
 // id 用單調遞增計數器，同 makeNewStudent 的慣例
 var _lastEnrollmentId=0;
-function makeEnrollment({studentId,courseTitle,periodId,price=null,startDate=null,endDate=null,note=''}){
+function makeEnrollment({studentId,courseTitle,periodId,price=null,startDate=null,endDate=null,note='',courseId=null,practiceSubject=''}){
   _lastEnrollmentId=Math.max(_lastEnrollmentId+1,Date.now()*1000);
   return{
     id:_lastEnrollmentId,
@@ -70,6 +72,8 @@ function makeEnrollment({studentId,courseTitle,periodId,price=null,startDate=nul
     startDate,        // null = 期初就上（插班才填 ISO 日期字串）
     endDate,          // null = 上到期末（中途停課才填）
     note,
+    courseId,         // 連 courses.id（系統自有課程）；null = 行事曆課，靠 courseTitle 對
+    practiceSubject,  // 練習課：該生的練習科目
     createdAt:new Date().toISOString(),
   };
 }
@@ -181,7 +185,8 @@ function computeReconciliation(entries,students,enrollments,pid){
 var _priceRows=[];
 function openPriceModal(){
   const titles=new Set(getCoursePrices().map(c=>c.title));
-  getEnrollments({periodId:yearPeriodId()}).forEach(en=>titles.add(en.courseTitle));
+  // 系統課（courseId）不進價目表：它的預設價存在課程本體（courses.defaultPrice）
+  getEnrollments({periodId:yearPeriodId()}).forEach(en=>{if(en.courseId==null)titles.add(en.courseTitle);});
   _priceRows=[...titles].sort((a,b)=>a.localeCompare(b,'zh-Hant')).map(t=>({title:t,price:getCourseDefaultPrice(t)}));
   renderPriceModal();
   document.getElementById('price-modal-wrap').classList.add('open');

@@ -17,7 +17,7 @@ async function loadMakeup(silent=false){
     const y=getSchoolYear(),past=new Date(y,8,1),future=new Date(y+1,7,31,23,59,59);
     const calEntries=Object.entries(calendarIds).filter(([name])=>MAKEUP_CALS.includes(name));
     const all=await Promise.all(calEntries.map(async([name,id])=>{
-      try{const r=await cachedEventList({calendarId:id,timeMin:past.toISOString(),timeMax:future.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:500});
+      try{const r=await cachedEventList({calendarId:id,timeMin:past.toISOString(),timeMax:future.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:2500});
       return(r.result.items||[]).map(e=>({...e,_calId:id,_calName:name}));}catch(e){return[];}
     }));
     const SUBJECTS=['數學','英文','理化','物理','化學','國文','生物','歷史','地理','社會','自然','寫作','作文'];
@@ -35,7 +35,7 @@ async function loadMakeup(silent=false){
     for(const calName of['補課','調課']){
       const calId=calendarIds[calName];if(!calId)continue;
       try{
-        const mr=await cachedEventList({calendarId:calId,timeMin:past.toISOString(),timeMax:future.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:500});
+        const mr=await cachedEventList({calendarId:calId,timeMin:past.toISOString(),timeMax:future.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:2500});
         (mr.result.items||[]).forEach(calEv=>{
           const desc=cleanDesc(calEv.description||'');
           const sD=new Date(calEv.start.dateTime||calEv.start.date);

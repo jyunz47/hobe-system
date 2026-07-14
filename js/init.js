@@ -221,7 +221,7 @@ var db=firebase.firestore();
 var SHARED_DOC=db.collection('sharedData').doc('main');
 
 async function loadFromFirestore(){
-  driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[]};
+  driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[],courses:[],teachers:[]};
   try{
     // 等 Firebase 從 localStorage 還原登入狀態（cmd+R 後 currentUser 起初是 null）
     if(!firebase.auth().currentUser){
@@ -242,6 +242,8 @@ async function loadFromFirestore(){
         enrollments:d.enrollments||[],
         coursePrices:d.coursePrices||[],
         courseSettings:d.courseSettings||[],
+        courses:d.courses||[],           // 系統自有課程（2026-07-04 起）——漏讀會導致新增課程按「更新」後消失
+        teachers:d.teachers||[],          // 老師檔（同上）
         enrollmentsMigratedAt:d.enrollmentsMigratedAt||null,
       };
     }
@@ -272,19 +274,21 @@ function switchPanel(id){
   if(id==='courses')Promise.all([loadToday(),loadWeek()]);
   if(id==='makeup')loadMakeup();
   if(id==='students')renderStudents();
+  if(id==='teachers')renderTeacherAdmin();
+  if(id==='add')initAddPage();
   if(id==='settings')renderSettings();
 }
 
 function showPanel(id){
   currentPanel=id;
-  ['courses','makeup','students','settings','login'].forEach(p=>{
+  ['courses','makeup','students','teachers','add','settings','login'].forEach(p=>{
     const el=document.getElementById('panel-'+p);
     if(p==='login')el.classList.toggle('active',p===id);
     else el.style.display=p===id?'block':'none';
   });
   document.querySelectorAll('.ni').forEach(el=>el.classList.remove('active'));
   const nav=document.getElementById('nav-'+id);if(nav)nav.classList.add('active');
-  const meta={courses:['課程','今日與本週課程'],makeup:['待補課/調課清單','找出需要安排補課或調課的課程'],students:['學生管理','請假、補課、欠課紀錄'],settings:['設定','課程與系統設定']};
+  const meta={courses:['課程','今日與本週課程'],makeup:['待補課/調課清單','找出需要安排補課或調課的課程'],students:['學生管理','請假、補課、欠課紀錄'],teachers:['老師管理','老師名單：改名、在職/離職、刪除'],add:['新增課程/學生','建檔工作站：直接輸入、送出即清空可連續建檔'],settings:['課程管理','系統課程總覽：類型、老師、單價、需登記成績']};
   const[t,s]=meta[id]||['',''];
   document.getElementById('tbt').textContent=t;
   document.getElementById('tbs').textContent=s;

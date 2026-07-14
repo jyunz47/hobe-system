@@ -19,9 +19,9 @@ function studentName(id){
   return s?s.name:'(已刪除)';
 }
 
-var TYPE_LABEL={one:'一對一家教',pair:'一對二家教',group:'團班',practice:'練習課'};
+var TYPE_LABEL={one:'一對一家教',pair:'一對二家教',group:'團班',practice:'練習課',trial:'試聽'};
 // 分區顯示順序；null = 本週沒排課、判斷不出類型
-var TYPE_ORDER=['one','pair','group','practice',null];
+var TYPE_ORDER=['one','pair','group','practice','trial',null];
 
 // 整理出每門課一筆 {title,type,teachers,sessions,enrolled}
 function buildCourseOverview(){
@@ -42,12 +42,21 @@ function buildCourseOverview(){
       c.sessions.push({date:e.startDt,students:e.students||[],groups:e.studentGroups||[],classroom:e.classroom,teacher:e.teacher});
     });
 
-  // 本期登記簿（一般課程的固定名單）
-  getEnrollments({periodId:pid}).forEach(en=>get(en.courseTitle).enrolled.push(en));
+  // 本期登記簿（一般課程的固定名單）；有 courseId 的是系統課登記，走下面的系統課入口
+  getEnrollments({periodId:pid}).forEach(en=>{if(en.courseId!=null)return;get(en.courseTitle).enrolled.push(en);});
   // 價目表課名也要在（可能整週沒排、也沒登記）
   getCoursePrices().forEach(p=>{if(normTitle(p.title))get(p.title);});
 
-  return [...map.values()].sort((a,b)=>a.title.localeCompare(b.title,'zh-Hant'));
+  // 系統自有課程（driveData.courses，2026-07-04 起）：以 id 為身分的獨立實體，不與行事曆課名合併
+  const sysBucket={'一對一':'one','一對二':'pair','團班':'group','練習課':'practice','試聽':'trial'};
+  const sys=getCourses().map(co=>({
+    title:co.name,type:sysBucket[co.type]||'group',sys:co,
+    teachers:new Set([teacherNameById(co.teacherId)].filter(Boolean)),
+    sessions:sysCourseSessions(co),
+    enrolled:getEnrollments({periodId:pid}).filter(en=>en.courseId===co.id),
+  }));
+
+  return [...map.values(),...sys].sort((a,b)=>a.title.localeCompare(b.title,'zh-Hant'));
 }
 
 // 週一起算的星期排序與標籤
@@ -68,7 +77,7 @@ function renderSettings(){
   const untyped=list.filter(c=>!(c.type!==null&&c.sessions.length));
   let html='';
 
-  ['one','pair','group','practice'].forEach(type=>{
+  ['one','pair','group','practice','trial'].forEach(type=>{
     const courses=typed.filter(c=>c.type===type);
     if(!courses.length)return;
     html+=`<div class="co-type-sec">
@@ -103,22 +112,25 @@ function renderSettings(){
 
 // daySess：該星期某老師的堂次；null = 未分類區。wd：星期。teacher：這張卡的老師（平行分班用，展開 key 也含它）
 function renderCoCard(c,daySess,wd,teacher){
-  const on=courseNeedsGrade(c.title);
+  const on=c.sys?!!c.sys.needsGrade:courseNeedsGrade(c.title);
   const isPractice=c.type==='practice';
   const teacherLabel=teacher!=null?teacher:([...c.teachers].join('、'));
-  const key=c.title+'@'+(wd==null?'x':wd)+'#'+(teacher!=null?teacher:'');
+  // 系統課 key 用 id（課名可改，title 不穩定）
+  const key=(c.sys?('sys'+c.sys.id):c.title)+'@'+(wd==null?'x':wd)+'#'+(teacher!=null?teacher:'');
   _coCardCtx.set(key,{c,daySess,wd,teacher,isPractice});  // 點卡時 modal 從這查回上下文
   const tEsc=JSON.stringify(c.title).replace(/"/g,'&quot;');
   const kEsc=JSON.stringify(key).replace(/"/g,'&quot;');
   const times=[...new Set((daySess||[]).map(s=>hhmm(s.date)))];
+  // 系統課的開關存課程本體（courses.needsGrade），行事曆課存 courseSettings
+  const gradeToggle=c.sys?`toggleSysNeedsGrade(${c.sys.id},this.checked)`:`toggleNeedsGrade(${tEsc},this.checked)`;
   return `<div class="co-card">
     <div class="co-card-hd" onclick="openCourseModal(${kEsc})">
-      <span class="co-card-title">${esc(c.title)}</span>
+      <span class="co-card-title">${esc(c.title)}${c.sys?'<span class="co-card-sys">系統</span>':''}</span>
       ${teacherLabel?`<span class="co-card-teacher">👤 ${esc(teacherLabel)}</span>`:''}
       ${times.length?`<span class="co-card-time">${times.join(' / ')}</span>`:''}
     </div>
     <label class="switch switch-sm" onclick="event.stopPropagation()">
-      <input type="checkbox" ${on?'checked':''} onchange="toggleNeedsGrade(${tEsc},this.checked)">
+      <input type="checkbox" ${on?'checked':''} onchange="${gradeToggle}">
       <span class="switch-track"><span class="switch-thumb"></span></span>
       <span class="switch-label">${on?'登記成績':'只點名'}</span>
     </label>
@@ -178,6 +190,7 @@ function refreshCourseModal(){if(courseModalOpen())renderCourseModal();}
 function renderCourseModal(){
   const ctx=_coCardCtx.get(_courseModalKey);
   if(!ctx){closeCourseModal();return;}  // 課卡消失（如清空後）→ 收掉 modal
+  if(ctx.c.sys){renderSysCourseModal(ctx);return;}  // 系統自有課程走自己的 modal（courses.js）
   const {c,daySess,teacher,isPractice}=ctx;
   const teacherLabel=teacher!=null?teacher:[...c.teachers].join('、');
   const times=[...new Set((daySess||[]).map(s=>hhmm(s.date)))];

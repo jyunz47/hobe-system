@@ -1,6 +1,34 @@
 // 學生管理 + 課表對帳（行事曆 vs 修課登記簿）+ 新增課程表單 + 學生編輯
 
-var GRADES=['國小','國一','國二','國三','高一','高二','高三','大學'];
+// 年級：國小分一~六年、國中/高中沿用舊值（國一…高三），末尾保留裸「國小」「大學」給舊資料
+// 顯示/分組順序＝這個陣列的順序
+var GRADES=['國小一','國小二','國小三','國小四','國小五','國小六','國一','國二','國三','高一','高二','高三','大學','國小'];
+
+// ── 兩層年級選擇器（先選階段國小/國中/高中，再選年）──
+var GRADE_SEG_YEARS={'國小':['一','二','三','四','五','六'],'國中':['一','二','三'],'高中':['一','二','三']};
+// 階段＋年 → 儲存字串（國中/高中維持舊格式「國一」「高二」，國小＝「國小三」）
+function gradeCompose(seg,yr){if(!seg||!yr)return'';if(seg==='國中')return'國'+yr;if(seg==='高中')return'高'+yr;return'國小'+yr;}
+// 儲存字串 → {seg,yr}；裸「國小」「大學」或空值拆不出（回空，走 legacy 顯示）
+function gradeDecompose(g){
+  if(/^國小[一二三四五六]$/.test(g))return{seg:'國小',yr:g.slice(2)};
+  if(/^國[一二三]$/.test(g))return{seg:'國中',yr:g.slice(1)};
+  if(/^高[一二三]$/.test(g))return{seg:'高中',yr:g.slice(1)};
+  return{seg:'',yr:''};
+}
+// 產生「階段 select ＋ 年 select」HTML；onSeg/onYr 是各自 onchange 的 JS 字串
+function gradePickerHtml(seg,yr,onSeg,onYr){
+  const years=GRADE_SEG_YEARS[seg]||[];
+  return `<div class="cf-grade-pick">
+    <select class="cm-input" onchange="${onSeg}">
+      <option value="" ${!seg?'selected':''} disabled>階段…</option>
+      ${['國小','國中','高中'].map(s=>`<option ${seg===s?'selected':''}>${s}</option>`).join('')}
+    </select>
+    <select class="cm-input" onchange="${onYr}" ${seg?'':'disabled'}>
+      <option value="" ${!yr?'selected':''} disabled>年級…</option>
+      ${years.map(y=>`<option ${yr===y?'selected':''}>${y}</option>`).join('')}
+    </select>
+  </div>`;
+}
 
 // 學生 schema（2026-05-29 起）：
 //   {id, name, grade, createdAt, courses?,
@@ -39,16 +67,18 @@ function saveStudentList(list){driveData.studentList=list;scheduleDriveSave();}
 // id 用單調遞增計數器：max(上次 id + 1, Date.now()*1000)
 // 同一毫秒內連續建立保證遞增、跨 session 也單調（時間始終往前）
 var _lastStudentId=0;
-function makeNewStudent({name,grade,courses}){
+function makeNewStudent({name,grade,courses,school='',parentPhone='',sourceChannel='',note=''}){
   const now=new Date().toISOString();
   _lastStudentId=Math.max(_lastStudentId+1,Date.now()*1000);
   const s={
     id:_lastStudentId,
     name,grade,
     createdAt:now,
-    school:'',
+    school,
     birthYear:null,
-    parentPhone:'',
+    parentPhone,
+    sourceChannel,   // 來源管道（2026-07-04 拍板增欄；試聽轉正式報名時自動帶）
+    note,            // 備註欄（2026-07-04 拍板增欄）
     status:'在學',
     statusChangedAt:now,
     statusNote:''
@@ -235,34 +265,59 @@ function closeScanSection(){
   document.getElementById('stu-scan-sec').style.display='none';
 }
 
-// ── 學生 CRUD ──
-function toggleAddStudentForm(){
-  const f=document.getElementById('stu-add-form');
-  const show=f.style.display==='none';
-  f.style.display=show?'flex':'none';
-  if(show)document.getElementById('stu-name-input').focus();
+// ── 學生 CRUD：新增學生表單（「新增課程/學生」頁的學生分頁，欄位 2026-07-04 拍板）──
+// 舊的學生管理行內快速表單（toggleAddStudentForm/addStudent）已由本表單取代（2026-07-04）
+var asState=null;
+function asBlank(){return{name:'',gradeSeg:'',grade:'',school:'',parentPhone:'',sourceChannel:'',note:'',dupAck:false};}
+function asSetSeg(v){asState.gradeSeg=v;if(gradeDecompose(asState.grade).seg!==v)asState.grade='';renderAddStudentForm();}
+function asSetYear(yr){asState.grade=gradeCompose(asState.gradeSeg,yr);}
+function initAddStudentPage(){asState=asBlank();renderAddStudentForm();}
+
+function asSet(f,v){asState[f]=v;if(f==='name')asState.dupAck=false;}
+function asNameChange(){renderAddStudentForm();}  // blur 時重繪，讓同名警示浮出
+
+function renderAddStudentForm(){
+  const st=asState;
+  const name=st.name.trim();
+  // 同名判斷（拍板）：對到既有學生（不分年級/狀態）先亮警示，勾「確認是另一位」才放行
+  const dups=name?getStudentList().filter(s=>s.name===name):[];
+  const warn=dups.length?`<div class="stu-modal-warn">⚠ 已有 ${dups.length} 位同名學生：${dups.map(s=>`${esc(s.name)}（${esc(s.grade||'?')}・${esc(s.school||'學校未填')}・${esc(s.status||'在學')}）`).join('、')}。若是同一人請不要重複建檔（修課請從課程那邊加）。<label class="as-dup-ack"><input type="checkbox" ${st.dupAck?'checked':''} onchange="asState.dupAck=this.checked"> 我確認過了，要新增的是另一位新學生</label></div>`:'';
+  document.getElementById('add-student-body').innerHTML=`
+    ${warn}
+    <div class="as-grid">
+      <div class="cm-sec"><div class="cm-lbl">姓名（必填）</div><input class="cm-input" id="as-name" value="${esc(st.name)}" maxlength="20" oninput="asSet('name',this.value)" onchange="asNameChange()"></div>
+      <div class="cm-sec"><div class="cm-lbl">年級（必選）</div>
+        ${gradePickerHtml(st.gradeSeg,gradeDecompose(st.grade).yr,"asSetSeg(this.value)","asSetYear(this.value)")}
+      </div>
+      <div class="cm-sec"><div class="cm-lbl">學校</div><input class="cm-input" value="${esc(st.school)}" maxlength="20" oninput="asSet('school',this.value)"></div>
+      <div class="cm-sec"><div class="cm-lbl">家長聯絡方式</div><input class="cm-input" value="${esc(st.parentPhone)}" maxlength="30" oninput="asSet('parentPhone',this.value)"></div>
+      <div class="cm-sec"><div class="cm-lbl">來源管道（怎麼知道補習班的）</div><input class="cm-input" list="cf-channels" value="${esc(st.sourceChannel)}" placeholder="例：朋友介紹" oninput="asSet('sourceChannel',this.value)"></div>
+    </div>
+    <div class="cm-sec"><div class="cm-lbl">備註</div><textarea class="cm-input as-note" rows="2" oninput="asSet('note',this.value)">${esc(st.note)}</textarea></div>
+    <div class="cf-foot"><span style="flex:1"></span><button class="btn btns btnp" onclick="asSubmit()">＋ 新增學生</button></div>`;
 }
 
-function addStudent(){
-  const name=document.getElementById('stu-name-input').value.trim();
-  const grade=document.getElementById('stu-grade-input').value;
-  if(!name)return toast('請輸入學生姓名','inf');
+function asSubmit(){
+  const st=asState;
+  const name=st.name.trim();
+  if(!name)return toast('請輸入學生姓名','err');
+  if(!st.grade)return toast('請選擇年級——沒選年級的學生在學生管理頁會看不到','err');
   const list=getStudentList();
-  const dups=list.filter(s=>s.name===name&&s.grade===grade);
-  if(dups.length){
-    const dupsHaveId=dups.every(s=>s.school||s.parentPhone);
-    if(!dupsHaveId){
-      const need=dups.filter(s=>!s.school&&!s.parentPhone).length;
-      return toast(`已有 ${dups.length} 位同名同年級且其中 ${need} 位尚未補學校或家長電話。請先去那位的編輯區補上辨識資料才能再新增。`,'err');
-    }
-    if(!confirm(`已有 ${dups.length} 位同名同年級。確定再新增「${name}（${grade}）」？\n\n建檔後請在編輯區補上學校或家長電話以區分。`))return;
+  const sameName=list.filter(s=>s.name===name);
+  // 同名同年級且舊檔缺辨識資料 → 先補舊檔（沿用原本保護，避免之後分不清誰是誰）
+  const sameGrade=sameName.filter(s=>s.grade===st.grade);
+  if(sameGrade.length){
+    const need=sameGrade.filter(s=>!s.school&&!s.parentPhone).length;
+    if(need)return toast(`已有 ${sameGrade.length} 位同名同年級、其中 ${need} 位還沒補學校或家長電話。請先到學生管理幫舊檔補辨識資料再新增。`,'err');
   }
-  list.push(makeNewStudent({name,grade}));
-  saveStudentList(list);
-  document.getElementById('stu-name-input').value='';
-  toggleAddStudentForm();
+  if(sameName.length&&!st.dupAck){renderAddStudentForm();return toast('有同名學生，請先勾「確認是另一位新學生」','inf');}
+  const stu=makeNewStudent({name,grade:st.grade,school:st.school.trim(),parentPhone:st.parentPhone.trim(),sourceChannel:st.sourceChannel.trim(),note:st.note.trim()});
+  saveStudentList([...list,stu]);
+  toast(`已新增 ${name}（${st.grade}）`,'ok');
+  asState=asBlank();
+  renderAddStudentForm();  // 清空重填，連續輸入下一筆
+  document.getElementById('as-name')?.focus();
   renderStudents();
-  toast(`已新增 ${name}（${grade}）`,'ok');
 }
 
 // ── 統計與警示 ──
@@ -869,8 +924,8 @@ function confirmDeleteStudent(){
 // 高三→畢業（設 status='畢業'，例外手動復學）
 // 國小、大學跳過（國小不分年級無法判斷；大學是頂層）
 function batchPromoteGrade(){
-  const GRADE_NEXT={'國一':'國二','國二':'國三','國三':'高一','高一':'高二','高二':'高三'};
-  const SKIP=['國小','大學'];
+  const GRADE_NEXT={'國小一':'國小二','國小二':'國小三','國小三':'國小四','國小四':'國小五','國小五':'國小六','國小六':'國一','國一':'國二','國二':'國三','國三':'高一','高一':'高二','高二':'高三'};
+  const SKIP=['大學','國小'];  // 大學已頂層；裸「國小」＝舊資料未分年、無法自動升
   const list=getStudentList();
   const active=list.filter(s=>(s.status||'在學')==='在學');
   const eligibleGrade=active.filter(s=>GRADE_NEXT[s.grade]);
@@ -884,7 +939,7 @@ function batchPromoteGrade(){
     return n?`  ${from} → ${to}：${n} 位`:'';
   }).filter(Boolean).join('\n');
   const gradMsg=eligibleGraduate.length?`\n  高三 → 畢業（狀態變更）：${eligibleGraduate.length} 位`:'';
-  const skipMsg=skipped.length?`\n\n${skipped.length} 位跳過（國小不分年級、大學已頂層）`:'';
+  const skipMsg=skipped.length?`\n\n${skipped.length} 位跳過（大學已頂層、或舊資料未分年級的「國小」）`:'';
   if(!confirm(`批次升年級將執行：\n${gradeSummary}${gradMsg}${skipMsg}\n\n國三→高一、高三→畢業 為自動處理。\n如有例外（國三畢業後不續、高三繼續大學），執行後個別調整即可。\n\n確定執行？`))return;
   const now=new Date().toISOString();
   eligibleGrade.forEach(s=>{s.grade=GRADE_NEXT[s.grade];});

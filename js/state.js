@@ -20,7 +20,7 @@ var dayEvents=[];
 var weekEvents=[];
 var absState={};
 var makeupList=[];
-var driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[]};
+var driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[],courses:[],teachers:[]};
 var driveSaveTimer=null;
 var drivePendingSave=false; // 本機是否有尚未寫入 Firestore 的改動（refreshCurrent 重讀前用來決定要不要先 flush）
 var makeupMatchMap=new Map(); // absenceEventId → {calEventId,scheduledDate,scheduledEnd,room,origTitle,absentStudents}
@@ -69,6 +69,15 @@ async function cachedEventList(params){
   const cached=_eventListCache.get(key);
   if(cached&&Date.now()-cached.ts<EVENT_CACHE_TTL_MS)return cached.response;
   const response=await gapi.client.calendar.events.list(params);
+  // 自動翻頁：maxResults 只是每頁上限，整學年掃描會超過一頁；不翻頁會默默掉後面的事件
+  let items=response.result.items||[];
+  let pageToken=response.result.nextPageToken;
+  while(pageToken){
+    const r=await gapi.client.calendar.events.list({...params,pageToken});
+    items=items.concat(r.result.items||[]);
+    pageToken=r.result.nextPageToken;
+  }
+  response.result.items=items;
   _eventListCache.set(key,{ts:Date.now(),response});
   return response;
 }

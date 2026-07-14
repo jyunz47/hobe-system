@@ -14,7 +14,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HOBE">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=23">
+<link rel="stylesheet" href="style.css?v=28">
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -26,7 +26,6 @@ if ('serviceWorker' in navigator) {
 <aside class="sidebar">
   <div class="logo"><h1>HOBE</h1><p>排程系統</p></div>
   <nav class="nav">
-    <div class="nav-sec">課程管理</div>
     <button class="ni active" id="nav-courses" data-m="課程" onclick="switchPanel('courses')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg>
       <span class="ni-txt">課程</span>
@@ -36,14 +35,21 @@ if ('serviceWorker' in navigator) {
       <span class="ni-txt">待補課/調課清單</span>
       <span class="nbadge" id="badge-makeup" style="display:none">0</span>
     </button>
+    <button class="ni" id="nav-settings" data-m="課程管理" onclick="switchPanel('settings')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M8 4v5"/><path d="M6 13h6M6 16h9"/></svg>
+      <span class="ni-txt">課程管理</span>
+    </button>
     <button class="ni" id="nav-students" data-m="學生" onclick="switchPanel('students')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
       <span class="ni-txt">學生管理</span>
     </button>
-    <div class="nav-sec">系統</div>
-    <button class="ni" id="nav-settings" data-m="設定" onclick="switchPanel('settings')">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-      <span class="ni-txt">設定</span>
+    <button class="ni" id="nav-teachers" data-m="老師" onclick="switchPanel('teachers')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a8 8 0 0116 0v1"/><path d="M15 3.5l2 2"/></svg>
+      <span class="ni-txt">老師管理</span>
+    </button>
+    <button class="ni" id="nav-add" data-m="新增" onclick="switchPanel('add')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+      <span class="ni-txt">新增課程/學生</span>
     </button>
   </nav>
   <div class="sf">
@@ -243,25 +249,29 @@ if ('serviceWorker' in navigator) {
           <button class="btn btns" onclick="batchPromoteGrade()" title="國一~高二 +1、國三→高一、高三→畢業；國小/大學跳過">📅 升年級</button>
           <button class="btn btns" onclick="openPriceModal()" title="每門課的預設每堂單價；個別學生的優惠價在學生編輯裡設定">💰 價目表</button>
           <button class="btn btns" onclick="scanStudentsFromCalendar()" title="比對行事曆備注與修課登記簿，列出差異讓你逐條決定；不會自動改任何資料">🧾 課表對帳</button>
-          <button class="btn btns btnp" onclick="toggleAddStudentForm()">＋ 新增學生</button>
+          <button class="btn btns btnp" onclick="goAddStudent()" title="到「新增課程/學生」頁建檔">＋ 新增學生</button>
         </div>
       </div>
       <div id="stu-scan-sec" style="display:none"></div>
-      <div class="stu-add-form" id="stu-add-form" style="display:none">
-        <input id="stu-name-input" placeholder="學生姓名" maxlength="20">
-        <select id="stu-grade-input">
-          <option value="國小">國小</option>
-          <option value="國一">國一</option>
-          <option value="國二" selected>國二</option>
-          <option value="國三">國三</option>
-          <option value="高一">高一</option>
-          <option value="高二">高二</option>
-          <option value="高三">高三</option>
-        </select>
-        <button class="btn btns btnp" onclick="addStudent()">新增</button>
-        <button class="btn btns" onclick="toggleAddStudentForm()">取消</button>
-      </div>
       <div id="stu-list"></div>
+    </div>
+
+    <!-- Add（新增課程/學生 建檔工作站）-->
+    <div id="panel-add" class="panel" style="display:none">
+      <div class="period-tabs">
+        <button class="period-tab active" id="add-tab-course" onclick="switchAddTab('course')">新增課程</button>
+        <button class="period-tab" id="add-tab-student" onclick="switchAddTab('student')">新增學生</button>
+      </div>
+      <div class="set-card add-card" id="add-course-card">
+        <div class="sec-hd">新增課程<span class="sec-hd-line"></span></div>
+        <p class="set-card-sub">填學生、科目、老師、排課，系統自動判類型與命名（可手改）。存進系統自有課表、不寫 Google 行事曆；建立後表單自動清空，可連續輸入。</p>
+        <div id="add-course-body"></div>
+      </div>
+      <div class="set-card add-card" id="add-student-card" style="display:none">
+        <div class="sec-hd">新增學生<span class="sec-hd-line"></span></div>
+        <p class="set-card-sub">姓名與年級必填。同名舊生會先跳確認避免重複建檔；新增後表單自動清空，可連續輸入。</p>
+        <div id="add-student-body"></div>
+      </div>
     </div>
 
     <!-- Makeup -->
@@ -285,9 +295,18 @@ if ('serviceWorker' in navigator) {
     <!-- Settings -->
     <div id="panel-settings" class="panel" style="display:none">
       <div class="set-card">
-        <div class="sec-hd">課程總覽<span class="sec-hd-line"></span></div>
-        <p class="set-card-sub">系統目前認得的每一門課：類型、老師、單價、是否需登記成績。點一門課開啟視窗：調整單價、加退學生（練習課名單唯讀）。批次調價也可到「學生管理 → 價目表」。</p>
+        <div class="sec-hd">課程總覽<span class="sec-hd-line"></span><button class="btn btns btnp" style="flex-shrink:0" onclick="goAddCourse()" title="到「新增課程/學生」頁建課">＋ 新增課程</button></div>
+        <p class="set-card-sub">系統目前認得的每一門課：類型、老師、單價、是否需登記成績。點一門課開啟視窗：調整單價、加退學生（練習課名單唯讀）。標「系統」的是系統自有課程（不在 Google 行事曆），點開可編輯與刪除。批次調價也可到「學生管理 → 價目表」。</p>
         <div id="co-list"></div>
+      </div>
+    </div>
+
+    <!-- Teachers（老師管理）-->
+    <div id="panel-teachers" class="panel" style="display:none">
+      <div class="set-card add-card">
+        <div class="sec-hd">老師名單<span class="sec-hd-line"></span></div>
+        <p class="set-card-sub">老師檔＝姓名＋狀態，刻意精簡；「教哪些課」記在課程上。點姓名直接改（全部課卡跟著換）、點狀態切換在職/離職（離職不再出現在建課下拉）。還有課程掛著的老師不能刪。</p>
+        <div id="teacher-admin"></div>
       </div>
     </div>
 
@@ -336,11 +355,12 @@ if ('serviceWorker' in navigator) {
 <script src="js/week.js?v=8"></script>
 <script src="js/absence.js?v=6"></script>
 <script src="js/makeup.js?v=5"></script>
-<script src="js/enrollment.js?v=8"></script>
-<script src="js/students.js?v=5"></script>
+<script src="js/enrollment.js?v=9"></script>
+<script src="js/students.js?v=7"></script>
 <script src="js/attendance.js?v=2"></script>
-<script src="js/settings.js?v=12"></script>
-<script src="js/init.js?v=7"></script>
+<script src="js/settings.js?v=15"></script>
+<script src="js/courses.js?v=5"></script>
+<script src="js/init.js?v=10"></script>
 
 <div class="stu-modal-wrap" id="stu-modal-wrap">
   <div class="stu-modal-overlay" onclick="closeStudentModal()"></div>
@@ -424,6 +444,27 @@ if ('serviceWorker' in navigator) {
     <div class="stu-modal-body" id="course-modal-body"></div>
   </div>
 </div>
+
+<div class="stu-modal-wrap" id="cf-modal-wrap">
+  <div class="stu-modal-overlay" onclick="closeCourseForm()"></div>
+  <div class="stu-modal" style="max-width:540px">
+    <div class="stu-modal-hd">
+      <div class="stu-modal-title"><span id="cf-modal-title" style="font-size:16px;font-weight:700">＋ 新增課程</span></div>
+      <button class="stu-modal-close" onclick="closeCourseForm()">✕</button>
+    </div>
+    <div class="stu-modal-body" id="cf-modal-body"></div>
+  </div>
+</div>
+
+<!-- 新增課程表單的下拉建議（datalist 全域一份，表單與課程視窗共用） -->
+<datalist id="cf-subjects">
+  <option value="數學"><option value="理化"><option value="物理"><option value="化學">
+  <option value="生物"><option value="英文"><option value="國文"><option value="練習">
+</datalist>
+<datalist id="cf-channels">
+  <option value="朋友介紹"><option value="家長介紹"><option value="兄弟姊妹就讀">
+  <option value="網路搜尋"><option value="FB / IG"><option value="招牌路過"><option value="傳單">
+</datalist>
 
 </body>
 </html>
