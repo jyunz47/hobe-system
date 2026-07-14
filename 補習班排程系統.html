@@ -299,6 +299,12 @@ if ('serviceWorker' in navigator) {
         <p class="set-card-sub">系統目前認得的每一門課：類型、老師、單價、是否需登記成績。點一門課開啟視窗：調整單價、加退學生（練習課名單唯讀）。標「系統」的是系統自有課程（不在 Google 行事曆），點開可編輯與刪除。批次調價也可到「學生管理 → 價目表」。</p>
         <div id="co-list"></div>
       </div>
+      <!-- Cutover 一次性工具：系統轉自有課表用，重建完成後移除 -->
+      <div class="set-card" style="margin-top:14px;border:1px solid #E4C7C3">
+        <div class="sec-hd" style="color:#C0504A">Cutover 清空重建<span class="sec-hd-line"></span></div>
+        <p class="set-card-sub">系統轉自有課表的一次性操作：清空學生、修課登記、價目表、課程設定、系統課程與老師；<b>保留待補課清單紀錄、不動 Google 行事曆</b>。清完到「新增課程/學生」頁重建暑期課表。</p>
+        <button class="btn btns" style="color:#C0504A;border-color:#E4C7C3" onclick="openCutoverModal()">🧨 清空並開始重建…</button>
+      </div>
     </div>
 
     <!-- Teachers（老師管理）-->
@@ -358,7 +364,7 @@ if ('serviceWorker' in navigator) {
 <script src="js/enrollment.js?v=9"></script>
 <script src="js/students.js?v=8"></script>
 <script src="js/attendance.js?v=2"></script>
-<script src="js/settings.js?v=16"></script>
+<script src="js/settings.js?v=17"></script>
 <script src="js/courses.js?v=5"></script>
 <script src="js/init.js?v=11"></script>
 
@@ -392,6 +398,25 @@ if ('serviceWorker' in navigator) {
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
         <button class="btn btns" onclick="closeStatusModal()">取消</button>
         <button class="btn btns btnp" onclick="confirmStatusChange()">儲存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="stu-modal-wrap" id="cutover-modal-wrap">
+  <div class="stu-modal-overlay" onclick="closeCutoverModal()"></div>
+  <div class="stu-modal" style="max-width:430px">
+    <div class="stu-modal-hd">
+      <div class="stu-modal-title"><span style="font-size:16px;font-weight:700;color:#C0504A">🧨 Cutover 清空重建</span></div>
+      <button class="stu-modal-close" onclick="closeCutoverModal()">✕</button>
+    </div>
+    <div class="stu-modal-body">
+      <div id="cutover-modal-info" style="font-size:13.5px;color:var(--tx2);margin-bottom:14px;line-height:1.7"></div>
+      <div style="font-size:12px;color:var(--tx3);margin-bottom:6px">確定的話，請輸入「清空重建」四個字：</div>
+      <input id="cutover-modal-confirm" class="del-modal-confirm-input" placeholder="清空重建" maxlength="10" onkeydown="if(event.key==='Enter')confirmCutover()">
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn btns" onclick="closeCutoverModal()">取消</button>
+        <button class="btn btns" style="background:#C0504A;color:#fff;border-color:#C0504A" onclick="confirmCutover()">永久清空</button>
       </div>
     </div>
   </div>

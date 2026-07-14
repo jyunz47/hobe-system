@@ -288,3 +288,68 @@ function toggleNeedsGrade(title,on){
   saveCourseSettings(list);
   renderSettings();  // 重繪以更新「需登記成績／只點名」標籤
 }
+
+// ── Cutover 清空重建（一次性工具，2026-07-14；重建完成後整段可移除）──
+// 清空範圍（2026-06-24 拍板、07-14 老闆確認提前執行＋徹底清雲端）：
+// 主文件「整份重寫」——studentList / enrollments / coursePrices / courseSettings /
+// courses / teachers 歸零，歷史殘留的舊欄位也一併消失；sharedData 其他文件
+// （attendance_<期別> 等點名測試紀錄）全數刪除。
+// 保留：makeupScheduled（待補課清單紀錄，名字制，重建後同名自動對回；
+// 清空當下從雲端重讀，不受本機載入狀態影響）。Google 行事曆事件完全不動。
+function openCutoverModal(){
+  const d=driveData,n=a=>(a||[]).length;
+  document.getElementById('cutover-modal-info').innerHTML=
+    `這會<b>永久刪除</b>雲端上的：<br>
+     ・學生 <b>${n(d.studentList)}</b> 位（含歷屆）<br>
+     ・修課登記 <b>${n(d.enrollments)}</b> 筆（所有學期，含個人單價）<br>
+     ・價目表 <b>${n(d.coursePrices)}</b> 筆、課程設定 <b>${n(d.courseSettings)}</b> 筆<br>
+     ・系統課程 <b>${n(d.courses)}</b> 門、老師 <b>${n(d.teachers)}</b> 位<br>
+     ・點名等測試紀錄與歷史殘留欄位（雲端主文件整份重寫）<br><br>
+     <b>保留</b>：待補課清單紀錄 <b>${n(d.makeupScheduled)}</b> 筆（以名字記，重建學生時名字打一樣就自動對回）。<br>
+     <b>不動</b>：Google 行事曆的所有事件、登入白名單。<br><br>
+     清完後雲端只剩待補課清單。請到「新增課程/學生」頁重建暑期課表。<b>此操作無法復原。</b>`;
+  document.getElementById('cutover-modal-confirm').value='';
+  document.getElementById('cutover-modal-wrap').classList.add('open');
+  requestAnimationFrame(()=>document.getElementById('cutover-modal-confirm')?.focus());
+}
+function closeCutoverModal(){document.getElementById('cutover-modal-wrap').classList.remove('open');}
+async function confirmCutover(){
+  const typed=document.getElementById('cutover-modal-confirm').value.trim();
+  if(typed!=='清空重建')return toast('請輸入「清空重建」四個字以確認','err');
+  // 取消排程中的自動存檔：它抓的是舊 driveData，晚於清空寫入會把舊資料整包寫回
+  clearTimeout(driveSaveTimer);drivePendingSave=false;
+  showL('清空中…');
+  let fresh;
+  try{
+    // 保留欄位以「清空當下的雲端值」為準（本機萬一沒載到，不會把空的待補課清單寫回去）
+    const snap=await SHARED_DOC.get();
+    const cur=snap.exists?snap.data():{};
+    fresh={
+      studentList:[],enrollments:[],coursePrices:[],courseSettings:[],courses:[],teachers:[],
+      makeupScheduled:cur.makeupScheduled||[],
+      enrollmentsMigratedAt:cur.enrollmentsMigratedAt||null,
+    };
+    // 整份重寫（不用 merge）：雲端主文件從此只有上面這幾欄，舊版殘留欄位一併消失
+    await SHARED_DOC.set(fresh);
+  }catch(e){
+    hideL();
+    return toast('清空失敗（雲端寫入錯誤），資料未動：'+(e?.message||e),'err');
+  }
+  // 主清空成功後，刪 sharedData 其他文件（attendance_<期別> 等）；失敗不影響主清空
+  let extraDeleted=0;
+  try{
+    const col=await db.collection('sharedData').get();
+    for(const doc of col.docs){if(doc.id!=='main'){await doc.ref.delete();extraDeleted++;}}
+  }catch(e){console.warn('附屬文件清理失敗（主清空已完成）',e);}
+  Object.assign(driveData,fresh);
+  hideL();
+  closeCutoverModal();
+  closeCourseModal();
+  // 清掉頁面暫存並全頁重繪（課程卡名單清空後 fallback 回備註名字）
+  stuEditId=null;_editEnrollments=[];scanData=null;_recon=null;
+  renderSettings();
+  renderStudents();
+  renderTeacherAdmin();
+  refreshCourseCards();
+  toast(`已清空（保留待補課紀錄 ${fresh.makeupScheduled.length} 筆${extraDeleted?`、另刪附屬文件 ${extraDeleted} 份`:''}）。到「新增課程/學生」頁開始建暑期課表。`,'ok');
+}
