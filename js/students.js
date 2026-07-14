@@ -382,10 +382,19 @@ var mkOpenId=null;
 
 function toggleStudentDetail(id){openStudentModal(id);}
 
+// 學生視窗「加入課程」狀態（雙向連結的學生側入口，與課程視窗「加入學生」寫同一筆 enrollment）
+var _stuModalId=null;
+var _stuAC=null;
+function refreshStudentModal(){
+  if(_stuModalId!=null&&document.getElementById('stu-modal-wrap').classList.contains('open'))openStudentModal(_stuModalId);
+}
+
 function openStudentModal(id){
   const list=getStudentList();
   const s=list.find(x=>x.id===id);
   if(!s)return;
+  _stuModalId=id;
+  _stuAC={courseId:null,price:'',subjects:[]};
   const stats=getStudentStats(s.id);
   document.getElementById('stu-modal-name').textContent=s.name;
   document.getElementById('stu-modal-grade').textContent=s.grade;
@@ -430,16 +439,17 @@ function openStudentModal(id){
   if(stats.pendingDecision>0)extraBits.push(`<span style="color:var(--tx3)">待確認補課 ${stats.pendingDecision} 筆</span>`);
   if(extraBits.length)body+=`<div style="margin-top:8px;font-size:13px;display:flex;gap:12px;flex-wrap:wrap">${extraBits.join('')}</div>`;
   body+=`</div>`;
-  // 修課（登記簿，含單價）；沒有本期登記時退回舊 s.courses 顯示（歷屆生）
+  // 修課（登記簿，含單價）；在學生多「加入課程」入口；沒有本期登記時退回舊 s.courses 顯示（歷屆生）
   const ens=getEnrollments({studentId:s.id,periodId:yearPeriodId()});
-  if(ens.length){
+  const isActive=(s.status||'在學')==='在學';
+  if(ens.length||isActive){
+    const tags=ens.map(en=>stuCourseTagHtml(en)).join('')
+      ||`<span style="font-size:12px;color:var(--tx3)">本期還沒有修課登記</span>`;
     body+=`<div><div class="stu-modal-sec-lbl">修課（${period.label}）</div>
-      <div class="stu-courses">${ens.map(en=>{
-        const p=effectivePrice(en);
-        const priceStr=p!=null?`${p} 元/堂${en.price!=null?'・自訂':''}`:'未定價';
-        return`<span class="stu-course-tag">${esc(en.courseTitle)}<span class="stu-course-price${p==null?' undef':''}">${priceStr}</span></span>`;
-      }).join('')}</div></div>`;
-  }else{
+      <div class="stu-courses">${tags}</div>
+      ${isActive?'<div id="stu-ac-box"></div>':''}</div>`;
+  }
+  if(!ens.length){
     const displayCourses=(s.courses||[]).filter(c=>!/^【調課】/.test(c));
     if(displayCourses.length){
       body+=`<div><div class="stu-modal-sec-lbl">課程（舊紀錄）</div>
@@ -467,11 +477,115 @@ function openStudentModal(id){
     body+=`</div>`;
   }
   document.getElementById('stu-modal-body').innerHTML=body;
+  if(isActive)renderStuAddCourse(s.id);
   document.getElementById('stu-modal-wrap').classList.add('open');
 }
 
 function closeStudentModal(){
   document.getElementById('stu-modal-wrap').classList.remove('open');
+  _stuModalId=null;_stuAC=null;
+}
+
+// ── 學生視窗：修課 tag 一顆 ──
+// 系統課（courseId）：預設價在課程本體、不查價目表；練習課顯示科目、試聽標示不收費；可直接退課（✕）
+// 行事曆課（courseId=null）：維持原樣（價目表＋個人覆蓋），加退走學生編輯面板
+function stuCourseTagHtml(en){
+  const co=en.courseId!=null?findCourseById(en.courseId):null;
+  let priceStr;
+  if(co&&co.type==='試聽')priceStr='試聽・不收費';
+  else if(co&&co.type==='練習課')priceStr=en.practiceSubject?esc(en.practiceSubject):'練習課';
+  else{
+    const p=co?(en.price??co.defaultPrice):effectivePrice(en);
+    priceStr=p!=null?`${p} 元/堂${en.price!=null?'・自訂':''}`:'未定價';
+  }
+  const undef=priceStr==='未定價';
+  const x=co?`<button class="co-stu-x" title="退課" onclick="coRemoveEnroll(${en.id})">✕</button>`:'';
+  return`<span class="stu-course-tag">${esc(en.courseTitle)}<span class="stu-course-price${undef?' undef':''}">${priceStr}</span>${x}</span>`;
+}
+
+// ── 學生視窗：「加入課程」盒（選系統課 → 依課型補欄 → 寫入 enrollment）──
+function renderStuAddCourse(sid){
+  const box=document.getElementById('stu-ac-box');
+  if(!box)return;
+  const pid=yearPeriodId();
+  const enrolledCids=new Set(getEnrollments({studentId:sid,periodId:pid}).filter(en=>en.courseId!=null).map(en=>en.courseId));
+  const avail=getCourses().filter(co=>!enrolledCids.has(co.id))
+    .sort((a,b)=>(a.name||'').localeCompare(b.name||'','zh-Hant'));
+  if(!avail.length){
+    box.innerHTML=getCourses().length
+      ?`<div class="cm-hint">系統課程都已加入。</div>`
+      :`<div class="cm-hint">還沒有系統課程可加入（到「新增課程/學生」頁建立）。</div>`;
+    return;
+  }
+  const st=_stuAC;
+  const co=st.courseId!=null?findCourseById(st.courseId):null;
+  // 選項附類型／老師／時段：平行分班課名可能相同（三班都叫國二數學班），靠這行分辨
+  const opts=avail.map(c=>{
+    const slot=sysSlotLabel(c);
+    return`<option value="${c.id}" ${st.courseId===c.id?'selected':''}>${esc(c.name)}（${c.type}・${esc(teacherNameById(c.teacherId)||'未指定')}${slot?'・'+esc(slot):''}）</option>`;
+  }).join('');
+  let extra='';
+  if(co){
+    if(co.type==='練習課'){
+      const common=CF_PRAC_SUBJECTS.map(x=>stuAcSubjBtn(x,st.subjects.includes(x))).join('');
+      const customs=st.subjects.filter(x=>!CF_PRAC_SUBJECTS.includes(x)).map(x=>stuAcSubjBtn(x,true)).join('');
+      extra=`<div class="cm-lbl" style="margin-top:8px">練習科目（點選，可多個）</div>
+        <div class="cf-subj-tags">${common}${customs}<input class="cf-subj-add" list="cf-subjects" placeholder="＋其他" onkeydown="if(event.key==='Enter'){event.preventDefault();stuAcAddSubj(this)}"></div>`;
+    }else if(co.type==='試聽'){
+      extra=`<div class="cm-hint">試聽不收費、不進學費結算。</div>`;
+    }else{
+      const ph=co.defaultPrice!=null?`預設 ${co.defaultPrice}`:'未定價';
+      extra=`<div class="cm-price-row" style="margin-top:8px">
+        <input type="number" class="cm-input cm-price" min="0" inputmode="numeric" placeholder="${ph}" value="${esc(String(st.price))}" oninput="_stuAC.price=this.value">
+        <span class="cm-unit">元 / 堂（留空＝用課程預設價）</span></div>`;
+    }
+  }
+  box.innerHTML=`<div class="co-add">
+    <select class="co-add-sel" onchange="stuAcPick(this.value)">
+      <option value="" ${st.courseId==null?'selected':''}>＋ 加入課程…</option>${opts}
+    </select>
+    ${co?`<button class="co-add-btn" onclick="stuAcSubmit(${sid})">＋ 加入</button>`:''}
+  </div>${extra}`;
+}
+function stuAcPick(v){
+  _stuAC.courseId=v?parseInt(v,10):null;
+  _stuAC.price='';_stuAC.subjects=[];
+  renderStuAddCourse(_stuModalId);
+}
+function stuAcSubjBtn(subj,on){
+  const a=JSON.stringify(String(subj)).replace(/"/g,'&quot;');
+  return`<button type="button" class="cf-subj-tog${on?' on':''}" onclick="stuAcToggleSubj(${a})">${esc(subj)}</button>`;
+}
+function stuAcToggleSubj(subj){
+  const i=_stuAC.subjects.indexOf(subj);
+  if(i>=0)_stuAC.subjects.splice(i,1);else _stuAC.subjects.push(subj);
+  renderStuAddCourse(_stuModalId);
+}
+function stuAcAddSubj(inp){
+  const s=(inp.value||'').trim();
+  if(!s)return;
+  if(!_stuAC.subjects.includes(s))_stuAC.subjects.push(s);
+  inp.value='';
+  renderStuAddCourse(_stuModalId);
+}
+function stuAcSubmit(sid){
+  const co=_stuAC&&_stuAC.courseId!=null?findCourseById(_stuAC.courseId):null;
+  if(!co)return;
+  const pid=yearPeriodId();
+  if(getEnrollments({studentId:sid,periodId:pid}).some(en=>en.courseId===co.id))return toast('已在這門課的名單裡','inf');
+  const noFee=(co.type==='練習課'||co.type==='試聽');
+  const v=String(_stuAC.price??'').trim();
+  const price=noFee||v===''?null:Math.max(0,parseInt(v,10)||0);
+  const list=getEnrollments().slice();
+  list.push(makeEnrollment({
+    studentId:sid,courseTitle:co.name,periodId:pid,courseId:co.id,
+    price,practiceSubject:co.type==='練習課'?_stuAC.subjects.join('、'):'',
+  }));
+  saveEnrollments(list);
+  toast(`已加入 ${studentName(sid)}：${co.name}`,'ok');
+  renderSettings();        // 課程總覽人數／名單跟著更新
+  refreshCourseModal();
+  openStudentModal(sid);   // 重繪學生視窗（新課即時出現，選擇器歸零）
 }
 
 async function jumpToMakeup(eventId){

@@ -267,6 +267,7 @@ function coAddEnroll(btn,title){
 }
 
 // 退課：從登記簿移除這筆（可在學生編輯或這裡再加回）
+// 呼叫端有二：課程視窗名單的 ✕、學生視窗修課 tag 的 ✕（系統課），兩邊的視窗都要刷新
 function coRemoveEnroll(enId){
   const en=getEnrollments().find(e=>e.id===enId);
   if(!en)return;
@@ -275,6 +276,7 @@ function coRemoveEnroll(enId){
   toast(`已退課：${studentName(en.studentId)} — ${en.courseTitle}`,'ok');
   renderSettings();
   refreshCourseModal();
+  refreshStudentModal();
 }
 
 function toggleNeedsGrade(title,on){
