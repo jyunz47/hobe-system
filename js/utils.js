@@ -6,6 +6,7 @@ function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').
 function typeLbl(t){return t==='one'?'一對一':t==='pair'?'一對二':t==='practice'?'練習課':'團班';}
 // 標題判成「家教一對一」但備註卻有 ≥2 位學生 → 標題八成寫錯（一對一不該有兩人）。回傳警告 chip
 function typeMismatchChip(e){
+  if(e.courseId!=null)return''; // 系統課類型是明確設定的，不做「標題猜型」警告
   if(e.type!=='one'||(e.students?.length||0)<2)return'';
   return`<span class="tpill" style="background:#fee2e2;color:#991b1b;border:1px solid #fca5a5" title="標題判為「家教一對一」，但備註有 ${e.students.length} 位學生。若是一對二請把標題寫成「○、○家教」，團班請用「○○班」">⚠ 標題/人數不符</span>`;
 }

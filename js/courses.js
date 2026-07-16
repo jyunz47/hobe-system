@@ -79,10 +79,11 @@ function cfType(){
 // 把一個學生的練習科目字串（可能「數學、理化」）拆成陣列
 function cfSubjList(sid){return (cfState.practiceSubjects[sid]||'').split(/[、,，]/).map(s=>s.trim()).filter(Boolean);}
 
-// 練習課命名（#7 規則）：
+// 練習課命名（#7 規則＋2026-07-16 跨年級規則）：
 //   1 人 → 「(名)(科目)練習課」
-//   ≥2 人且全班同一科 → 「(名)(名)…(科目)練習課」（≤2 列名，3+ 用最多人年級）
-//   ≥2 人但科目不同 → 「(名)(名)練習課」（≤2 列名，3+ 用最多人年級或週別）
+//   ≥2 人跨年級 → 「(年級)、(年級)練習課」（年級照低到高排，不掛名不掛科目）
+//   ≥2 人同年級且全班同一科 → 「(名)(名)…(科目)練習課」（≤2 列名，3+ 用最多人年級）
+//   ≥2 人同年級但科目不同 → 「(名)(名)練習課」（≤2 列名，3+ 用最多人年級或週別）
 function cfPracticeName(){
   const st=cfState;
   const ids=st.students;
@@ -91,6 +92,9 @@ function cfPracticeName(){
   const subjSet=new Set();ids.forEach(id=>cfSubjList(id).forEach(s=>subjSet.add(s)));
   const subjStr=[...subjSet].join('、');
   if(ids.length===1)return names[0]+subjStr+'練習課';
+  // 跨年級：課名列出各年級（低→高，照 GRADES 順序）
+  const gradeSet=new Set(ids.map(id=>getStudentList().find(s=>s.id===id)?.grade).filter(Boolean));
+  if(gradeSet.size>=2)return [...gradeSet].sort((a,b)=>GRADES.indexOf(a)-GRADES.indexOf(b)).join('、')+'練習課';
   const head=ids.length<=2?names.join(''):cfTopGrade();
   if(subjSet.size===1)return head+subjStr+'練習課';   // 全班同一科
   return head+'練習課';                                  // 科目不同，不掛科目
@@ -262,17 +266,17 @@ function renderCourseForm(){
       const p=st.pendingStu;
       extra=`<div class="cf-resolve"><div class="cf-resolve-lbl">「${esc(p.name)}」不在系統 → 現場建檔並加入</div>
         <div class="as-grid">
-          <div class="cm-sec"><div class="cm-lbl">姓名</div><input class="cm-input" value="${esc(p.name)}" oninput="cfPendingSet('name',this.value)"></div>
+          <div class="cm-sec"><div class="cm-lbl">姓名</div><input class="cm-input" name="search-newstu" autocomplete="off" value="${esc(p.name)}" oninput="cfPendingSet('name',this.value)"></div>
           <div class="cm-sec"><div class="cm-lbl">年級（必選）</div>${gradePickerHtml(p.gradeSeg,gradeDecompose(p.grade).yr,"cfPendingSeg(this.value)","cfPendingYear(this.value)")}</div>
-          <div class="cm-sec"><div class="cm-lbl">學校</div><input class="cm-input" value="${esc(p.school)}" oninput="cfPendingSet('school',this.value)"></div>
-          <div class="cm-sec"><div class="cm-lbl">家長聯絡方式</div><input class="cm-input" value="${esc(p.parentPhone)}" oninput="cfPendingSet('parentPhone',this.value)"></div>
+          <div class="cm-sec"><div class="cm-lbl">學校</div><input class="cm-input" name="search-school" autocomplete="off" value="${esc(p.school)}" oninput="cfPendingSet('school',this.value)"></div>
+          <div class="cm-sec"><div class="cm-lbl">家長聯絡方式</div><input class="cm-input" name="search-contact" autocomplete="off" value="${esc(p.parentPhone)}" oninput="cfPendingSet('parentPhone',this.value)"></div>
         </div>
         <div class="cf-foot"><span style="flex:1"></span><button class="btn btns" onclick="cfCancelStuAdd()">取消</button><button class="btn btns btnp" onclick="cfCreatePendingStudent()">建檔並加入</button></div></div>`;
     }
     stuSec=`<div class="cm-sec"><div class="cm-lbl">學生（初始名單，之後隨時可加退）${t==='練習課'?'<span class="cm-hint" style="margin:0 0 0 6px">點科目可選多個</span>':''}<span class="cm-count">${st.students.length}</span></div>
       ${chips}
       <div class="co-add">
-        <input class="co-add-sel" id="cf-stu-input" list="cf-students-dl" placeholder="輸入學生姓名…" value="${esc(st.stuInput||'')}" oninput="cfStuInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();cfResolveStudent()}">
+        <input class="co-add-sel" id="cf-stu-input" name="search-student" autocomplete="off" list="cf-students-dl" placeholder="輸入學生姓名…" value="${esc(st.stuInput||'')}" oninput="cfStuInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();cfResolveStudent()}">
         <datalist id="cf-students-dl">${dlOpts}</datalist>
         <button class="co-add-btn" onclick="cfResolveStudent()">＋ 加入</button>
       </div>
@@ -280,7 +284,7 @@ function renderCourseForm(){
   }
 
   const subjSec=`<div class="cm-sec"><div class="cm-lbl">科目</div>
-    <input class="cm-input" list="cf-subjects" value="${esc(st.subject)}" placeholder="例：數學（填「練習」＝練習課）" oninput="cfSubjectInput(this.value)" onchange="cfSubjectChange()">
+    <input class="cm-input" name="search-subject" autocomplete="off" list="cf-subjects" value="${esc(st.subject)}" placeholder="例：數學（填「練習」＝練習課）" oninput="cfSubjectInput(this.value)" onchange="cfSubjectChange()">
   </div>`;
 
   const modeSec=`<div class="cm-sec"><div class="cm-lbl">排課</div>
@@ -311,7 +315,7 @@ function renderCourseForm(){
     :`<div class="cm-lbl" style="margin-top:12px">老師費率（薪資表用，可先空著）</div>
       <div class="cm-price-row"><input type="number" class="cm-input cm-price" min="0" inputmode="numeric" placeholder="未定" value="${st.teacherRate===''?'':esc(String(st.teacherRate))}" oninput="cfRateInput(this.value)"><span class="cm-unit">${cfRateUnit(t)}</span></div>`;
   const teacherSec=`<div class="cm-sec"><div class="cm-lbl">老師${t==='練習課'?'（預設輔導老師，當堂可換）':''}</div>
-    <input class="cm-input" list="cf-teachers-dl" placeholder="輸入老師姓名…" value="${esc(st.teacherName)}" oninput="cfTeacherInput(this.value)" onchange="renderCourseForm()">
+    <input class="cm-input" name="search-teacher" autocomplete="off" list="cf-teachers-dl" placeholder="輸入老師姓名…" value="${esc(st.teacherName)}" oninput="cfTeacherInput(this.value)" onchange="renderCourseForm()">
     <datalist id="cf-teachers-dl">${tDl}</datalist>
     ${tNewHint}
     ${rateSec}
@@ -336,7 +340,7 @@ function renderCourseForm(){
   </label>${t==='練習課'?'<div class="cm-hint">練習課預設要登記成績（每堂考卷分數）。</div>':''}</div>`;
 
   const channelSec=t==='試聽'?`<div class="cm-sec"><div class="cm-lbl">來源管道（怎麼知道補習班的）</div>
-    <input class="cm-input" list="cf-channels" value="${esc(st.sourceChannel)}" placeholder="例：朋友介紹" oninput="cfChannelInput(this.value)">
+    <input class="cm-input" name="search-channel" autocomplete="off" list="cf-channels" value="${esc(st.sourceChannel)}" placeholder="例：朋友介紹" oninput="cfChannelInput(this.value)">
     <div class="cm-hint">之後正式報名，來源管道會跟著轉進學生檔。</div>
   </div>`:'';
 
@@ -345,7 +349,7 @@ function renderCourseForm(){
     <div class="cm-lbl">系統判定${st.pinnedType?'（已手動鎖定，再點一次解除）':'（自動，點類型可改）'}</div>
     <div class="cf-type-row">${typeChips}</div>
     <div class="cm-lbl" style="margin-top:12px">課名（自動命名，可直接改；清空＝回到自動）</div>
-    <input class="cm-input" id="cf-name" value="${esc(st.name)}" placeholder="${esc(cfAutoName()||'選學生、填科目後自動命名')}" oninput="cfNameInput(this.value)">
+    <input class="cm-input" id="cf-name" name="search-coursename" autocomplete="off" value="${esc(st.name)}" placeholder="${esc(cfAutoName()||'選學生、填科目後自動命名')}" oninput="cfNameInput(this.value)">
   </div>`;
 
   const foot=onPage
@@ -438,6 +442,8 @@ function deleteCourse(id){
   const co=findCourseById(id);
   if(!co)return;
   const ens=getEnrollments().filter(en=>en.courseId===id);
+  // 連動清掉本課的系統請假紀錄（不留孤兒；待補課清單重建時查無課程也會跳過）
+  if(getAbsences().some(a=>a.courseId===id))saveAbsences(getAbsences().filter(a=>a.courseId!==id));
   const times=sysSlotLabel(co)||'（未排時段）';
   if(!confirm(`刪除課程「${co.name}」？\n\n上課時間：\n${times.split('、').map(s=>'  ・'+s).join('\n')}\n\n會一併移除 ${ens.length} 筆修課登記。學生本人不會被刪。此操作無法復原。`))return;
   saveCourses(getCourses().filter(c=>c.id!==id));

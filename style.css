@@ -958,6 +958,14 @@ body:has(#panel-login.active) .content{padding:0}
 .tc-act.roster{flex:0 0 auto}
 .tc-act.roster b{font-family:'DM Mono',monospace;color:var(--tx3);font-weight:600}
 .tcard2-roster{padding:10px 16px 13px;font-size:12.5px;color:var(--tx2);line-height:1.7;border-top:1px solid #F0ECE2;background:#FAF8F3}
+/* 練習課名單（卡片點開直接看）：年級 → 科目 → 學生（兩層分類） */
+.tcard2-prac{display:none;padding:10px 16px 13px;border-top:1px solid #F0ECE2;background:#FAF8F3}
+.tcard2.tc-open .tcard2-prac{display:block}
+.prac-grade-row{display:flex;gap:9px;align-items:flex-start;padding:4px 0}
+.prac-grade{flex:none;font-size:11px;font-weight:700;color:var(--tx3);background:var(--sf2);padding:2px 8px;border-radius:7px;margin-top:1px}
+.prac-subj-lines{display:flex;flex-direction:column;gap:2px;flex:1;min-width:0}
+.prac-subj-line{font-size:12.5px;color:var(--tx1);line-height:1.6}
+.prac-subj-lbl{font-size:11px;font-weight:600;color:var(--tx3);margin-right:7px}
 .tcard2 .abs-panel{border-top:1px solid #F0ECE2}
 
 /* 點名面板（課程卡內嵌）*/
@@ -969,6 +977,7 @@ body:has(#panel-login.active) .content{padding:0}
 .att-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 2px;border-bottom:1px solid #F0ECE2}
 .att-row:last-child{border-bottom:none}
 .att-nm{font-size:13px;color:var(--tx1);font-weight:500}
+.att-subj{font-size:11px;color:var(--tx3);font-weight:400;margin-left:6px}
 .att-nm.struck{text-decoration:line-through;color:var(--tx3);font-weight:400}
 .att-lock{font-size:11px;font-weight:700;color:#C16B36;background:#FBF4EA;padding:2px 8px;border-radius:7px}
 .att-hint{font-size:11px;color:var(--tx3);background:var(--sf2);padding:2px 8px;border-radius:7px}

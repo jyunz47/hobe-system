@@ -44,7 +44,8 @@ function buildAbsPanel(e, sfx=''){
     </div>
   </div>`;
   // 一對二（剛好兩人）：一人請假時，常傾向整堂一起調課以省老師成本 → 提供捷徑導向既有調課流程
-  if(e.type==='pair'&&e.students.length===2){
+  // 系統課堂的調課待第 3 刀，捷徑先不顯示
+  if(e.type==='pair'&&e.students.length===2&&e.courseId==null){
     html+=`<div style="margin:4px 0 10px;font-size:12px;color:var(--tx2)">
       一對二也可改為 <button class="btn btns" style="font-size:12px;padding:3px 10px" onclick="startWholeReschedule('${eid}')">🔄 整堂一起調課</button>（兩人都不缺課、不個別補課、維持原時長）
     </div>`;
@@ -180,6 +181,29 @@ function updatePreview(id,sfx){
   el.innerHTML=`新標題：<strong>${esc(res.title)}</strong> ${hint}`;
 }
 
+// 系統課堂：把面板選擇寫進 driveData.absences（與 computeAbsResult 同語意：
+// 標一邊保留另一邊、同一人改標會搬組；老師請假清空學生兩組）
+function sysApplyAbsence(ev,state){
+  const idOf=new Map(eventRosterWithId(ev).map(r=>[r.name,r.studentId]));
+  const list=getAbsences().slice();
+  let rec=list.find(a=>a.occId===ev.id);
+  if(!rec){
+    rec={id:Date.now(),occId:ev.id,courseId:ev.courseId,date:ev.startDt.toISOString(),
+      teacherAbsent:false,leave:[],noShow:[],makeupSkip:[],createdAt:new Date().toISOString()};
+    list.push(rec);
+  }
+  if(state.type==='teacher'){rec.teacherAbsent=true;rec.leave=[];rec.noShow=[];}
+  else{
+    const newOnes=state.type==='student-auto'?ev.students.slice(0,1):(state.students||[]);
+    rec.leave=(rec.leave||[]).filter(x=>!newOnes.includes(x.name));
+    rec.noShow=(rec.noShow||[]).filter(x=>!newOnes.includes(x.name));
+    if(state.timing==='C')newOnes.forEach(n=>rec.noShow.push({studentId:idOf.get(n)??null,name:n}));
+    else newOnes.forEach(n=>rec.leave.push({studentId:idOf.get(n)??null,name:n,timing:state.timing||'B'}));
+  }
+  rec.updatedAt=new Date().toISOString();
+  saveAbsences(list);
+}
+
 async function confirmAbs(id,sfx){
   const state=absState[id];
   const ev=findEventById(id);
@@ -190,6 +214,14 @@ async function confirmAbs(id,sfx){
   // Close panels
   const panel=document.getElementById('absp-'+id);if(panel)panel.classList.remove('open');
   const panelW=document.getElementById('absp-w-'+id);if(panelW)panelW.classList.remove('open');
+  // 系統課堂：寫 driveData.absences，不碰 Google Calendar
+  if(ev.courseId!=null){
+    sysApplyAbsence(ev,state);
+    toast('已標記：'+newTitle,'ok');
+    await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
+    if(selectedWeekEvent===id) closeWeekModal();
+    return;
+  }
   showL('更新 Google Calendar...');
   try{
     // 把每位學生的請假時機 map 存進隱藏欄位，供日後學費系統讀（老師請假清掉）
@@ -225,6 +257,7 @@ function showCancelPicker(ev){
   picker.id='cancel-picker-'+id;
   picker.className='abs-panel open';
   picker.style.borderTop='1px solid var(--br)';
+  picker.style.gridColumn='1/-1'; // 今日課程是兩欄格線（.tgrid），佔滿整列才不會跑到卡片旁邊
   picker.innerHTML=`
     <div class="abs-title">選擇要取消請假的學生</div>
     <div class="stu-chips" id="cancel-chips-${esc(id)}">${
@@ -269,6 +302,24 @@ function rebuildAbsTitle(ev,leaveArr,noShowArr){
 }
 
 async function doCancel(id,ev,cancelStudents){
+  // 系統課堂：從請假紀錄移除（保留曠課群組），紀錄清空即刪整筆
+  if(ev.courseId!=null){
+    const clearAll=(cancelStudents.length===0||ev.type==='one');
+    let list=getAbsences().slice();
+    const rec=list.find(a=>a.occId===id);
+    if(rec){
+      rec.teacherAbsent=clearAll?false:rec.teacherAbsent;
+      rec.leave=clearAll?[]:(rec.leave||[]).filter(x=>!cancelStudents.includes(x.name));
+      rec.makeupSkip=(rec.makeupSkip||[]).filter(n=>(rec.leave||[]).some(x=>x.name===n)); // 不再請假的人不留不補課標記
+      rec.updatedAt=new Date().toISOString();
+      if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length)list=list.filter(a=>a!==rec);
+      saveAbsences(list);
+    }
+    toast('已取消請假','ok');
+    await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
+    closeWeekModal();
+    return;
+  }
   showL('恢復課程標題...');
   try{
     // 取消請假：清掉指定（或全部）請假學生，保留既有曠課群組
@@ -305,6 +356,7 @@ function showNoShowCancelPicker(ev){
   picker.id=pickerId;
   picker.className='abs-panel open';
   picker.style.borderTop='1px solid var(--br)';
+  picker.style.gridColumn='1/-1'; // 同上：整列顯示
   picker.innerHTML=`
     <div class="abs-title">選擇要取消曠課的學生</div>
     <div class="stu-chips">${
@@ -337,6 +389,21 @@ async function confirmCancelNoShow(id){
 }
 
 async function doCancelNoShow(id,ev,cancelStudents){
+  // 系統課堂：從曠課群組移除（保留請假群組），紀錄清空即刪整筆
+  if(ev.courseId!=null){
+    let list=getAbsences().slice();
+    const rec=list.find(a=>a.occId===id);
+    if(rec){
+      rec.noShow=(cancelStudents.length===0)?[]:(rec.noShow||[]).filter(x=>!cancelStudents.includes(x.name));
+      rec.updatedAt=new Date().toISOString();
+      if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length)list=list.filter(a=>a!==rec);
+      saveAbsences(list);
+    }
+    toast('已取消曠課','ok');
+    await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
+    closeWeekModal();
+    return;
+  }
   showL('取消曠課...');
   try{
     // 取消曠課：清掉指定（或全部）曠課學生，保留既有請假群組

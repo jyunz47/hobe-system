@@ -32,6 +32,13 @@ function saveEnrollments(list){driveData.enrollments=list;scheduleDriveSave();re
 // 僅供學費結算裁切堂數。
 function eventRoster(e){
   const descNames=e.students||[];
+  // 系統自有課堂：直接以 courseId 反查本期登記簿（同名不混、與展開器一致）
+  if(e.courseId!=null){
+    const byId=new Map(getStudentList().map(s=>[s.id,s]));
+    return getEnrollments({periodId:yearPeriodId()})
+      .filter(en=>en.courseId===e.courseId)
+      .map(en=>byId.get(en.studentId)?.name).filter(Boolean);
+  }
   if(!e.origTitle)return descNames;
   // 只看行事曆課的登記（courseId==null）；系統自有課程若恰好同名，名冊各自獨立不混
   const ens=getEnrollments({courseTitle:e.origTitle,periodId:yearPeriodId()}).filter(en=>en.courseId==null);
@@ -47,6 +54,12 @@ function eventRoster(e){
 // 其餘 studentId=null（無法可靠點名，UI 顯示但不可點，引導去課表對帳）。
 function eventRosterWithId(e){
   const byId=new Map(getStudentList().map(s=>[s.id,s]));
+  // 系統自有課堂：以 courseId 反查本期登記簿，studentId 直接來自登記（同名終結）
+  if(e.courseId!=null){
+    return getEnrollments({periodId:yearPeriodId()})
+      .filter(en=>en.courseId===e.courseId)
+      .map(en=>({studentId:en.studentId,name:byId.get(en.studentId)?.name||'(未知)'}));
+  }
   // 同 eventRoster：只看行事曆課的登記，系統課（courseId）不混入
   const ens=e.origTitle?getEnrollments({courseTitle:e.origTitle,periodId:yearPeriodId()}).filter(en=>en.courseId==null):[];
   if(ens.length)return ens.map(en=>({studentId:en.studentId,name:byId.get(en.studentId)?.name||'(未知)'}));

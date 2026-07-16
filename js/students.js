@@ -285,13 +285,13 @@ function renderAddStudentForm(){
   document.getElementById('add-student-body').innerHTML=`
     ${warn}
     <div class="as-grid">
-      <div class="cm-sec"><div class="cm-lbl">姓名（必填）</div><input class="cm-input" id="as-name" value="${esc(st.name)}" maxlength="20" oninput="asSet('name',this.value)" onchange="asNameChange()"></div>
+      <div class="cm-sec"><div class="cm-lbl">姓名（必填）</div><input class="cm-input" id="as-name" name="search-newstu" autocomplete="off" value="${esc(st.name)}" maxlength="20" oninput="asSet('name',this.value)" onchange="asNameChange()"></div>
       <div class="cm-sec"><div class="cm-lbl">年級（必選）</div>
         ${gradePickerHtml(st.gradeSeg,gradeDecompose(st.grade).yr,"asSetSeg(this.value)","asSetYear(this.value)")}
       </div>
-      <div class="cm-sec"><div class="cm-lbl">學校</div><input class="cm-input" value="${esc(st.school)}" maxlength="20" oninput="asSet('school',this.value)"></div>
-      <div class="cm-sec"><div class="cm-lbl">家長聯絡方式</div><input class="cm-input" value="${esc(st.parentPhone)}" maxlength="30" oninput="asSet('parentPhone',this.value)"></div>
-      <div class="cm-sec"><div class="cm-lbl">來源管道（怎麼知道補習班的）</div><input class="cm-input" list="cf-channels" value="${esc(st.sourceChannel)}" placeholder="例：朋友介紹" oninput="asSet('sourceChannel',this.value)"></div>
+      <div class="cm-sec"><div class="cm-lbl">學校</div><input class="cm-input" name="search-school" autocomplete="off" value="${esc(st.school)}" maxlength="20" oninput="asSet('school',this.value)"></div>
+      <div class="cm-sec"><div class="cm-lbl">家長聯絡方式</div><input class="cm-input" name="search-contact" autocomplete="off" value="${esc(st.parentPhone)}" maxlength="30" oninput="asSet('parentPhone',this.value)"></div>
+      <div class="cm-sec"><div class="cm-lbl">來源管道（怎麼知道補習班的）</div><input class="cm-input" name="search-channel" autocomplete="off" list="cf-channels" value="${esc(st.sourceChannel)}" placeholder="例：朋友介紹" oninput="asSet('sourceChannel',this.value)"></div>
     </div>
     <div class="cm-sec"><div class="cm-lbl">備註</div><textarea class="cm-input as-note" rows="2" oninput="asSet('note',this.value)">${esc(st.note)}</textarea></div>
     <div class="cf-foot"><span style="flex:1"></span><button class="btn btns btnp" onclick="asSubmit()">＋ 新增學生</button></div>`;

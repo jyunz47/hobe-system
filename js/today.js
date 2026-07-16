@@ -7,11 +7,8 @@ async function loadToday(){
     const d=currentDate;
     const start=new Date(d.getFullYear(),d.getMonth(),d.getDate(),0,0,0);
     const end=new Date(d.getFullYear(),d.getMonth(),d.getDate(),23,59,59);
-    const all=await Promise.all(Object.entries(calendarIds).map(async([name,id])=>{
-      try{const r=await cachedEventList({calendarId:id,timeMin:start.toISOString(),timeMax:end.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:200});
-      return(r.result.items||[]).map(e=>({...e,_calId:id,_calName:name}));}catch(e){return[];}
-    }));
-    dayEvents=all.flat().map(parseEv).sort((a,b)=>a.startDt-b.startDt);
+    // 改讀系統自有課表（不再撈 Google Calendar）：展開系統課程成當日課堂
+    dayEvents=expandCoursesForRange(start,end).sort((a,b)=>a.startDt-b.startDt);
     await loadAttendance();
     hideErr('courses');
     renderTL();
@@ -265,6 +262,10 @@ function buildAttPanel(e){
   if(!roster.length)return'<div class="att-empty">這堂沒有名單</div>';
   const absSet=new Set(e.absentStudents||[]);
   const noShowSet=new Set(e.noShowStudents||[]);
+  // 練習課：每人的練習科目顯示在名字旁（來自展開器的 studentGroups）
+  const subjOf=new Map();
+  (e.studentGroups||[]).forEach(g=>g.students.forEach(nm=>subjOf.set(nm,subjOf.has(nm)?subjOf.get(nm)+'、'+g.subject:g.subject)));
+  const subjTag=nm=>subjOf.has(nm)?`<span class="att-subj">${esc(subjOf.get(nm))}</span>`:'';
   const s=attSummary(e);
   // 常態整班都到 → 給「全部到」一鍵；沒到的再個別改
   const head=s.total?`<div class="att-hd">
@@ -273,14 +274,14 @@ function buildAttPanel(e){
   </div>`:'';
   const rows=roster.map(r=>{
     const lock=absSet.has(r.name)?'請假':noShowSet.has(r.name)?'曠課':null;
-    if(lock)return`<div class="att-row att-locked"><span class="att-nm struck">${esc(r.name)}</span><span class="att-lock">${lock}</span></div>`;
-    if(r.studentId==null)return`<div class="att-row att-noid"><span class="att-nm">${esc(r.name)}</span><span class="att-hint">需對帳</span></div>`;
+    if(lock)return`<div class="att-row att-locked"><span class="att-nm struck">${esc(r.name)}${subjTag(r.name)}</span><span class="att-lock">${lock}</span></div>`;
+    if(r.studentId==null)return`<div class="att-row att-noid"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}</span><span class="att-hint">需對帳</span></div>`;
     const eid=esc(e.id),sid=r.studentId;
     // 正在輸入遲到分鐘 → 該列換成行內數字輸入
     if(attLatePick&&attLatePick.eid===e.id&&attLatePick.sid===sid){
       const cur=getAtt(e.id,sid)?.lateMin||'';
       return`<div class="att-row att-picking">
-        <span class="att-nm">${esc(r.name)}</span>
+        <span class="att-nm">${esc(r.name)}${subjTag(r.name)}</span>
         <span class="att-lateedit">遲到 <input type="number" min="1" inputmode="numeric" class="att-mininput" id="lateinp-${eid}-${sid}" value="${cur}" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')saveLate('${eid}',${sid});if(event.key==='Escape')cancelLate('${eid}')"> 分
         <button class="att-min ok" onclick="event.stopPropagation();saveLate('${eid}',${sid})">✓</button>
         <button class="att-min cancel" onclick="event.stopPropagation();cancelLate('${eid}')">✕</button></span>
@@ -290,7 +291,7 @@ function buildAttPanel(e){
     const lateMin=rec&&rec.status==='到'?(rec.lateMin||0):0;
     const onTime=rec&&rec.status==='到'&&!lateMin;
     // 到 = 主要 toggle（高頻）；遲到 = 直接輸入分鐘（次高頻）；曠 = 沒來，跳既有曠課流程（罕見）
-    return`<div class="att-row"><span class="att-nm">${esc(r.name)}</span>
+    return`<div class="att-row"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}</span>
       <span class="att-seg">
         <button class="att-here${onTime?' on':''}" onclick="event.stopPropagation();onHere('${eid}',${sid})">${onTime?'✓ 到':'到'}</button>
         <button class="att-late${lateMin?' on':''}" onclick="event.stopPropagation();onLate('${eid}',${sid})">${lateMin?'遲 '+lateMin+' 分':'遲到'}</button>
@@ -365,6 +366,41 @@ function onSkip(eventId,studentId){
   },60);
 }
 
+// 練習課名單（卡片點開直接看，2026-07-16 老闆要求）：年級 → 科目 → 學生（兩層分類）
+// 年級照低→高；科目照常用科目順序（CF_PRAC_SUBJECTS），自訂科目排後、未填科目最後
+// 一位學生練多科會在每個科目各出現一次（與課程管理視窗「名單總覽」同格式）
+function pracRosterHtml(e){
+  if(e.type!=='practice')return'';
+  const byId=new Map(getStudentList().map(s=>[s.id,s]));
+  let rows=[]; // {name,grade,subjects:'數學、理化'}
+  if(e.courseId!=null){ // 系統課：登記簿直接有 studentId + 練習科目
+    rows=getEnrollments({periodId:yearPeriodId()}).filter(en=>en.courseId===e.courseId)
+      .map(en=>{const s=byId.get(en.studentId);return{name:s?s.name:'(未知)',grade:s?.grade||'',subjects:en.practiceSubject||''};});
+  }else{ // 行事曆課（過渡期）：科目來自備註分組、年級靠唯一同名對出
+    const subjOf=new Map();
+    (e.studentGroups||[]).forEach(g=>g.students.forEach(nm=>subjOf.set(nm,subjOf.has(nm)?subjOf.get(nm)+'、'+g.subject:g.subject)));
+    rows=(e.students||[]).map(nm=>{const m=getStudentList().filter(s=>s.name===nm);return{name:nm,grade:m.length===1?(m[0].grade||''):'',subjects:subjOf.get(nm)||''};});
+  }
+  if(!rows.length)return'';
+  const byGrade=new Map();
+  rows.forEach(r=>{const g=r.grade||'未填年級';if(!byGrade.has(g))byGrade.set(g,[]);byGrade.get(g).push(r);});
+  const gOrder=g=>{const i=GRADES.indexOf(g);return i<0?99:i;};
+  const sOrder=s=>{if(s==='未填科目')return 999;const i=CF_PRAC_SUBJECTS.indexOf(s);return i<0?99:i;};
+  return `<div class="tcard2-prac">${[...byGrade.entries()].sort((a,b)=>gOrder(a[0])-gOrder(b[0])).map(([g,list])=>{
+    const bySubj=new Map(); // 該年級內：科目 → 名字們
+    list.forEach(r=>{
+      const subjects=(r.subjects||'').split(/[、,，]/).map(s=>s.trim()).filter(Boolean);
+      (subjects.length?subjects:['未填科目']).forEach(subj=>{
+        if(!bySubj.has(subj))bySubj.set(subj,[]);
+        bySubj.get(subj).push(r.name);
+      });
+    });
+    const subjLines=[...bySubj.entries()].sort((a,b)=>sOrder(a[0])-sOrder(b[0]))
+      .map(([subj,names])=>`<div class="prac-subj-line"><span class="prac-subj-lbl">${esc(subj)}</span>${esc(names.join('、'))}</div>`).join('');
+    return `<div class="prac-grade-row"><span class="prac-grade">${esc(g)}</span><div class="prac-subj-lines">${subjLines}</div></div>`;
+  }).join('')}</div>`;
+}
+
 function tcardHtml(e){
   const id=esc(e.id);
   const tcv=calColor(e.calName);
@@ -389,7 +425,12 @@ function tcardHtml(e){
   const mkBadge=(()=>{if(!e.isFullAbsent&&!e.isRescheduled)return'';const rec=findMakeupScheduledById(e.id);return rec?`<span class="tc-badge tc-badge-arr">✓ 已安排</span>`:`<span class="tc-badge tc-badge-un">未安排</span>`;})();
   // 動作列：請假內嵌（今日情境面板），調課走 week-modal 避免 rp-${id} 撞車
   let acts='';
-  if(e.isRescheduled)acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEvent('${id}')">看調課安排</button><button class="tc-act danger" onclick="event.stopPropagation();cancelReschedule('${id}')">取消調課</button>`;
+  if(e.courseId!=null){ // 系統課堂：請假已接系統儲存（第 2 刀）；調課待第 3 刀
+    if(e.isAbsent)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelAbs('${id}')">取消請假</button>`;
+    else if(e.isNoShow)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelNoShow('${id}')">取消曠課</button>`;
+    else acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndAbs('${id}')">🗓 標記請假</button>`;
+  }
+  else if(e.isRescheduled)acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEvent('${id}')">看調課安排</button><button class="tc-act danger" onclick="event.stopPropagation();cancelReschedule('${id}')">取消調課</button>`;
   else if(e.isAbsent)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelAbs('${id}')">取消請假</button>`;
   else if(e.isNoShow)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelNoShow('${id}')">取消曠課</button>`;
   else acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndAbs('${id}')">🗓 標記請假</button><button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndReschedule('${id}')">↔ 調課</button>`;
@@ -403,12 +444,13 @@ function tcardHtml(e){
       <div class="tcard2-av${avCls}">${esc(letter)}</div>
       <div class="tcard2-info">
         <div class="tcard2-name"><span class="tcard2-title${e.isFullAbsent?' struck':''}">${esc(e.origTitle)}</span>${badge}${mkBadge}${stat}${canAttend(e)?attBadgeHtml(e):''}${typeMismatchChip(e)}</div>
-        <div class="tcard2-sub">${e.classroom?esc(e.classroom)+' · ':''}${e.teacher?esc(e.teacher)+' · ':''}${roster.length} 人${e.type==='practice'?' · 自習':''}</div>
+        <div class="tcard2-sub">${e.classroom?esc(e.classroom)+' · ':''}${e.teacher?esc(e.teacher)+' · ':''}${roster.length} 人</div>
       </div>
       <div class="tcard2-time"><b>${fmtT(e.startDt)}</b><span>${fmtT(e.endDt)}</span></div>
       <span class="tcard2-chev">▾</span>
     </div>
     <div class="tcard2-actions">${acts}${attBtn}${rosterBtn}</div>
+    ${pracRosterHtml(e)}
     <div class="tcard2-roster" id="rost-${id}" style="display:none">${roster.length?esc(roster.join('、')):'（無名單）'}</div>
     <div class="att-panel" id="attp-${id}" style="display:none"></div>
   </div>`;

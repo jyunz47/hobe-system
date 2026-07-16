@@ -200,7 +200,7 @@ function signOut(){
   const t=gapi.client.getToken();
   if(t){google.accounts.oauth2.revoke(t.access_token);gapi.client.setToken(null);}
   calendarIds={};dayEvents=[];weekEvents=[];makeupList=[];
-  driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[]};
+  driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[],courses:[],teachers:[],absences:[]};
   firebase.auth().signOut();
   localStorage.removeItem('gtoken');
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='none');
@@ -229,7 +229,7 @@ var db=firebase.firestore();
 var SHARED_DOC=db.collection('sharedData').doc('main');
 
 async function loadFromFirestore(){
-  driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[],courses:[],teachers:[]};
+  driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[],courses:[],teachers:[],absences:[]};
   try{
     // 等 Firebase 從 localStorage 還原登入狀態（cmd+R 後 currentUser 起初是 null）
     if(!firebase.auth().currentUser){
@@ -252,6 +252,7 @@ async function loadFromFirestore(){
         courseSettings:d.courseSettings||[],
         courses:d.courses||[],           // 系統自有課程（2026-07-04 起）——漏讀會導致新增課程按「更新」後消失
         teachers:d.teachers||[],          // 老師檔（同上）
+        absences:d.absences||[],          // 系統請假紀錄（2026-07-17 起）——漏讀會導致請假標記消失、甚至被空陣列蓋掉
         enrollmentsMigratedAt:d.enrollmentsMigratedAt||null,
       };
     }

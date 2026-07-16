@@ -21,15 +21,15 @@ async function loadMakeup(silent=false){
       return(r.result.items||[]).map(e=>({...e,_calId:id,_calName:name}));}catch(e){return[];}
     }));
     const SUBJECTS=['數學','英文','理化','物理','化學','國文','生物','歷史','地理','社會','自然','寫作','作文'];
-    makeupList=all.flat()
+    const decorate=ev=>({...ev,
+      subject:ev.subject&&SUBJECTS.includes(ev.subject)?ev.subject:(SUBJECTS.find(s=>ev.origTitle.includes(s))||'其他'),
+      extraNote:(ev.desc||'').split('\n').slice(1).filter(Boolean).join(' · ')});
+    const calAbs=all.flat()
       .filter(e=>/^【.+?請假】/.test(e.summary||'')||/^【調課(?:[：:].*?)?】/.test(e.summary||'')||/^【[^】]*曠課】/.test(e.summary||''))
-      .map(e=>{
-        const ev=parseEv(e);
-        const subject=SUBJECTS.find(s=>ev.origTitle.includes(s))||'其他';
-        const extraNote=ev.desc.split('\n').slice(1).filter(Boolean).join(' · ');
-        return{...ev,subject,extraNote};
-      })
-      .sort((a,b)=>a.startDt-b.startDt);
+      .map(e=>decorate(parseEv(e)));
+    // 系統請假（driveData.absences，第 2 刀起）：展開成同形狀課堂物件一起進清單
+    const sysAbs=(typeof sysAbsenceEvents==='function'?sysAbsenceEvents():[]).map(decorate);
+    makeupList=[...calAbs,...sysAbs].sort((a,b)=>a.startDt-b.startDt);
     // Scan 補課 and 調課 calendars to match against absences
     const newMatchMap=new Map();
     for(const calName of['補課','調課']){
@@ -168,7 +168,8 @@ function renderMakeup(){
       </div>
       <div class="mk-list-actions">
         ${tutorB?`<button class="mk-btn-cancel" style="font-size:12px;padding:5px 10px;margin-left:0" onclick="event.stopPropagation();markMakeupSkip('${esc(e.id)}')">不補課</button>`:''}
-        <button class="mk-btn-arrange" onclick="event.stopPropagation();openSlotPicker('${esc(e.id)}','${mode}')">安排</button>
+        ${e.courseId!=null?`<span style="font-size:11px;color:var(--tx3)">排補課改版中</span>`
+          :`<button class="mk-btn-arrange" onclick="event.stopPropagation();openSlotPicker('${esc(e.id)}','${mode}')">安排</button>`}
       </div>
     </div>`;
   }
@@ -262,12 +263,26 @@ function renderMakeup(){
   c.innerHTML=html;
 }
 
+// 系統課堂的不補課標記：直接寫請假紀錄的 makeupSkip 欄
+function sysSetMakeupSkip(ev,skipNames){
+  const list=getAbsences().slice();
+  const rec=list.find(a=>a.occId===ev.id);if(!rec)return;
+  rec.makeupSkip=skipNames;
+  rec.updatedAt=new Date().toISOString();
+  saveAbsences(list);
+}
 // 標記「不補課」：把請假學生寫進事件隱藏欄位 makeupSkip → 退半堂、不算欠課、移出待安排
 async function markMakeupSkip(id){
   const ev=findEventById(id);if(!ev)return;
+  const skip=[...new Set([...(ev.makeupSkip||[]),...(ev.absentStudents||[])])];
+  if(ev.courseId!=null){
+    sysSetMakeupSkip(ev,skip);
+    toast('已標記不補課（退半堂）','ok');
+    await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
+    return;
+  }
   showL('標記不補課...');
   try{
-    const skip=[...new Set([...(ev.makeupSkip||[]),...(ev.absentStudents||[])])];
     await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:id,resource:{extendedProperties:{private:{makeupSkip:JSON.stringify(skip)}}}});
     invalidateEventCache();
     hideL();toast('已標記不補課（退半堂）','ok');
@@ -277,9 +292,15 @@ async function markMakeupSkip(id){
 // 改回補課：把這筆的請假學生從 makeupSkip 移除
 async function unmarkMakeupSkip(id){
   const ev=findEventById(id);if(!ev)return;
+  const skip=(ev.makeupSkip||[]).filter(s=>!(ev.absentStudents||[]).includes(s));
+  if(ev.courseId!=null){
+    sysSetMakeupSkip(ev,skip);
+    toast('已改為補課','ok');
+    await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
+    return;
+  }
   showL('改為補課...');
   try{
-    const skip=(ev.makeupSkip||[]).filter(s=>!(ev.absentStudents||[]).includes(s));
     await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:id,resource:{extendedProperties:{private:{makeupSkip:skip.length?JSON.stringify(skip):null}}}});
     invalidateEventCache();
     hideL();toast('已改為補課','ok');
@@ -328,6 +349,8 @@ function getEffectiveStudentCount(){
 function openSlotPicker(id,mode){
   const ev=findEventById(id);
   if(!ev)return;
+  // 系統課堂的排補課/調課待第 3 刀（時段空檔要改掃系統課表、補課要長回主頁）
+  if(ev.courseId!=null){toast('系統課的排補課改版中（下一批接上），請假紀錄已保存','inf');return;}
   const branch=ev.classroom==='石牌分校'?'石牌':'北投';
   slotPicker={ev,mode,date:null,time:null,room:null,avail:null,branch};
   const d=ev.startDt;

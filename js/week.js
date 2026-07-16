@@ -41,11 +41,8 @@ async function loadWeek(){
   const mon=currentMonday();
   const sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
   try{
-    const all=await Promise.all(Object.entries(calendarIds).map(async([name,id])=>{
-      try{const r=await cachedEventList({calendarId:id,timeMin:mon.toISOString(),timeMax:sun.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:500});
-      return(r.result.items||[]).map(e=>({...e,_calId:id,_calName:name}));}catch(e){return[];}
-    }));
-    weekEvents=all.flat().map(parseEv).sort((a,b)=>a.startDt-b.startDt);
+    // 改讀系統自有課表（不再撈 Google Calendar）：展開系統課程成本週課堂
+    weekEvents=expandCoursesForRange(mon,sun).sort((a,b)=>a.startDt-b.startDt);
     renderWeek(mon);
   }catch(err){console.error('loadWeek',err);}
 }
@@ -234,7 +231,8 @@ function selectWeekEvent(id){
         ${ev.isNoShow?`<button class="btn btns btnd" onclick="selectCard(this.closest('.cc'));cancelNoShow('${esc(ev.id)}')">取消曠課</button>`:''}
         ${ev.isRescheduled?`<button class="btn btns btnd" onclick="cancelReschedule('${esc(ev.id)}')">取消調課</button>`:''}
         ${!ev.isRescheduled?`<button class="btn btns" onclick="selectCard(this.closest('.cc'));toggleAbsPanelWeek('${esc(ev.id)}')">標記請假</button>`:''}
-        <button class="btn btns" onclick="toggleReschedulePanel('${esc(ev.id)}')">${ev.isRescheduled?(ev.rescheduleReason?'更新調課原因':'輸入調課原因'):'調課'}</button>
+        ${ev.courseId!=null?`<span style="font-size:12px;color:var(--tx3)">調課改版中（下一批接上）</span>`
+          :`<button class="btn btns" onclick="toggleReschedulePanel('${esc(ev.id)}')">${ev.isRescheduled?(ev.rescheduleReason?'更新調課原因':'輸入調課原因'):'調課'}</button>`}
       </div>
     </div>
     <div class="abs-panel" id="absp-w-${esc(ev.id)}">${buildAbsPanel(ev,'-w')}</div>

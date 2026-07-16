@@ -33,6 +33,8 @@ function buildCourseOverview(){
   const seen=new Set();
   [...(typeof weekEvents!=='undefined'?weekEvents:[]),...(typeof dayEvents!=='undefined'?dayEvents:[])]
     .forEach(e=>{
+      // 系統課堂（主頁改讀系統後 dayEvents/weekEvents 裝的是展開器產物）已由下方系統課入口涵蓋，跳過避免同課雙卡
+      if(e.courseId!=null)return;
       if(!e.origTitle||!SETTINGS_GRADE_CALS.includes(e.calName)||seen.has(e.id))return;
       seen.add(e.id);
       const c=get(e.origTitle);
@@ -125,7 +127,7 @@ function renderCoCard(c,daySess,wd,teacher){
   const gradeToggle=c.sys?`toggleSysNeedsGrade(${c.sys.id},this.checked)`:`toggleNeedsGrade(${tEsc},this.checked)`;
   return `<div class="co-card">
     <div class="co-card-hd" onclick="openCourseModal(${kEsc})">
-      <span class="co-card-title">${esc(c.title)}${c.sys?'<span class="co-card-sys">系統</span>':''}</span>
+      <span class="co-card-title">${esc(c.title)}</span>
       ${teacherLabel?`<span class="co-card-teacher">👤 ${esc(teacherLabel)}</span>`:''}
       ${times.length?`<span class="co-card-time">${times.join(' / ')}</span>`:''}
     </div>
