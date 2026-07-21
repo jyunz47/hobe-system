@@ -89,11 +89,13 @@ function _makeOccurrence(course,day,slotIdx,startDt,endDt,rosterNames,studentGro
   const ab=findAbsenceByOcc(occId);
   let abs={isAbsent:false,isPartialAbsent:false,isFullAbsent:false,
     absentWho:'',absType:'',absentStudents:[],
-    isNoShow:false,noShowStudents:[],absenceTiming:{},makeupSkip:[]};
+    isNoShow:false,noShowStudents:[],absenceTiming:{},makeupSkip:[],
+    isRescheduled:false,rescheduleReason:''};
   if(ab){
     const leaveNames=(ab.leave||[]).map(x=>x.name);
     const noShowNames=(ab.noShow||[]).map(x=>x.name);
     const teacherAbs=!!ab.teacherAbsent;
+    const resched=!!ab.resched;
     const isAbsent=teacherAbs||leaveNames.length>0;
     const total=rosterNames.length;
     const timing={};
@@ -101,13 +103,15 @@ function _makeOccurrence(course,day,slotIdx,startDt,endDt,rosterNames,studentGro
     noShowNames.forEach(n=>{timing[n]='C';});
     abs={
       isAbsent,
-      isPartialAbsent:isAbsent&&!teacherAbs&&total>0&&leaveNames.length<total,
-      isFullAbsent:teacherAbs||(isAbsent&&(total===0||leaveNames.length>=total)),
+      isPartialAbsent:isAbsent&&!teacherAbs&&!resched&&total>0&&leaveNames.length<total,
+      // 調課＝整堂移走（同 parseEv：isRescheduled 視為 full absent、absentStudents=全名冊）
+      isFullAbsent:resched||teacherAbs||(isAbsent&&(total===0||leaveNames.length>=total)),
       absentWho:teacherAbs?'老師':leaveNames.join('、'),
-      absType:teacherAbs?'老師請假':(isAbsent?'學生請假':''),
-      absentStudents:teacherAbs?[]:leaveNames,
+      absType:resched?'調課':(teacherAbs?'老師請假':(isAbsent?'學生請假':'')),
+      absentStudents:resched?rosterNames.slice():(teacherAbs?[]:leaveNames),
       isNoShow:noShowNames.length>0,noShowStudents:noShowNames,
       absenceTiming:timing,makeupSkip:(ab.makeupSkip||[]).slice(),
+      isRescheduled:resched,rescheduleReason:ab.reschedReason||'',
     };
   }
   return{
@@ -124,8 +128,6 @@ function _makeOccurrence(course,day,slotIdx,startDt,endDt,rosterNames,studentGro
     durMins:Math.round((endDt-startDt)/60000),
     calId:null,calName:_occCalName(course),
     courseId:course.id,          // 讓 eventRoster/eventRosterWithId 走 courseId 反查登記簿
-    // 調課仍待第 3 刀
-    isRescheduled:false,rescheduleReason:'',
     ...abs,
   };
 }
@@ -146,6 +148,40 @@ function sysAbsenceEvents(){
     const day=new Date(rec.date);
     const occ=courseOccurrencesInRange(co,day,day).find(o=>o.id===rec.occId);
     if(occ)out.push(occ);
+  });
+  return out;
+}
+
+// 已排補課/調課（makeupScheduled 紀錄）→ 課堂物件（第 3 刀起主頁直接長補課場次，不靠 Google Calendar）
+// 紀錄本身帶齊顯示所需（時段/教室/名單/原課名）；老師從原系統課反查（舊行事曆紀錄查無就留空）
+function expandMakeupForRange(start,end){
+  const out=[];
+  (driveData.makeupScheduled||[]).forEach(rec=>{
+    const sD=new Date(rec.scheduledDate),eD=new Date(rec.scheduledEnd);
+    if(!(sD>=start&&sD<=end))return;
+    const m=String(rec.originalId).match(/^sys:(\d+):/);
+    const co=m?findCourseById(Number(m[1])):null;
+    const students=(rec.absentStudents||[]).slice();
+    // 補課場次的課型看實到人數（團班一人請假的補課＝一對一），練習課補課維持練習課
+    const type=co&&co.type==='練習課'?'practice':(students.length>=3?'group':students.length===2?'pair':'one');
+    out.push({
+      id:'mk:'+rec.originalId,
+      title:rec.origTitle,origTitle:rec.origTitle,
+      desc:'',notes:'',
+      teacher:co?(teacherNameById(co.teacherId)||''):'',
+      classroom:rec.room||'',
+      subject:co?(co.subject||''):'',
+      type,students,studentGroups:[],
+      startDt:sD,endDt:eD,
+      durMins:Math.round((eD-sD)/60000),
+      calId:null,calName:rec.calName==='調課'?'調課':'補課',
+      courseId:null,               // 不走系統課請假路徑
+      isMakeupOcc:true,            // 主頁動作列不出請假/調課鈕（要改期→待補課清單取消安排重排）
+      makeupOriginalId:rec.originalId,
+      isAbsent:false,isPartialAbsent:false,isFullAbsent:false,isRescheduled:false,
+      rescheduleReason:'',absentWho:'',absType:'',absentStudents:[],
+      isNoShow:false,noShowStudents:[],absenceTiming:{},makeupSkip:[],
+    });
   });
   return out;
 }

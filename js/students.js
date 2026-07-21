@@ -456,6 +456,9 @@ function openStudentModal(id){
         <div class="stu-courses">${displayCourses.map(c=>`<span class="stu-course-tag">${esc(c)}</span>`).join('')}</div></div>`;
     }
   }
+  // 成績（課堂成績歷史＋段考登記）——資料按期別 lazy 載入，先佔位、載完填入
+  body+=`<div><div class="stu-modal-sec-lbl">成績（${period.label}）</div>
+    <div id="stu-grades-sec"><div style="font-size:12px;color:var(--tx3)">載入中…</div></div></div>`;
   // Individual absence records
   if(stats.pairs.length){
     body+=`<div><div class="stu-modal-sec-lbl">請假紀錄</div>`;
@@ -479,11 +482,77 @@ function openStudentModal(id){
   document.getElementById('stu-modal-body').innerHTML=body;
   if(isActive)renderStuAddCourse(s.id);
   document.getElementById('stu-modal-wrap').classList.add('open');
+  // 成績區：等 grades/exams 文件載完再填（已快取則立即）；載回時視窗可能已換人，比對 _stuModalId
+  Promise.all([loadGrades(),loadExams()]).then(()=>{
+    const el=document.getElementById('stu-grades-sec');
+    if(el&&_stuModalId===id)el.innerHTML=buildStuGradesSec(s);
+  });
 }
 
 function closeStudentModal(){
   document.getElementById('stu-modal-wrap').classList.remove('open');
   _stuModalId=null;_stuAC=null;
+}
+
+// ── 學生視窗成績區：課堂成績歷史（唯讀彙整）＋段考成績（手動登記）──
+var STU_EXAM_NAMES=['一段','二段','三段'];
+var _stuExamPick='一段'; // 段考次別選擇（跨重繪記住，連續登同一段考的多科不用重選）
+function buildStuGradesSec(s){
+  // 課堂成績：本期 grades 依 studentId 彙整，新的在上；課名從課堂合成 id 反查
+  const courseName=r=>{
+    const m=String(r.eventId).match(/^sys:(\d+):/);
+    const co=m?findCourseById(Number(m[1])):null;
+    return co?co.name:'課堂';
+  };
+  const recs=gradesBucket().records.filter(r=>r.studentId===s.id)
+    .sort((a,b)=>new Date(b.date)-new Date(a.date));
+  const classRows=recs.map(r=>{
+    const d=new Date(r.date);
+    return`<div class="stu-gr-row"><span class="stu-gr-date">${d.getMonth()+1}/${d.getDate()}</span><span class="stu-gr-course">${esc(courseName(r))}</span><span class="gr-chip">${esc(r.label||'成績')}${r.score!=null?` <b>${r.score}</b>`:''}</span></div>`;
+  }).join('')||`<div style="font-size:12px;color:var(--tx3)">本期還沒有課堂成績（在課程頁的課卡「✎ 成績」登記）</div>`;
+  // 段考：次別點選（一段/二段/三段），顯示按段考分組（一段一列）
+  const byExam=new Map();
+  getExams(s.id).forEach(x=>{
+    const n=x.examName||'未填';
+    if(!byExam.has(n))byExam.set(n,[]);
+    byExam.get(n).push(x);
+  });
+  const exOrder=n=>{const i=STU_EXAM_NAMES.indexOf(n);return i<0?99:i;};
+  const examRows=[...byExam.entries()].sort((a,b)=>exOrder(a[0])-exOrder(b[0])).map(([name,list])=>
+    `<div class="prac-grade-row"><span class="prac-grade">${esc(name)}</span><span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">${
+      list.map(x=>`<span class="gr-chip">${esc(x.subject||'成績')}${x.score!=null?` <b>${x.score}</b>`:''}<button class="gr-x" title="刪除" onclick="stuExamRemove(${x.id})">✕</button></span>`).join('')
+    }</span></div>`).join('');
+  const addRow=`<span class="gr-add" style="margin-left:0">
+    <select id="stu-exam-name" onchange="_stuExamPick=this.value">${STU_EXAM_NAMES.map(n=>`<option${n===_stuExamPick?' selected':''}>${n}</option>`).join('')}</select>
+    <input class="gr-lab" id="stu-exam-subj" style="width:72px" placeholder="科目" maxlength="8" autocomplete="off" name="search-examsubj">
+    <input class="gr-sc" id="stu-exam-score" type="number" inputmode="numeric" placeholder="分數" onkeydown="if(event.key==='Enter'){event.preventDefault();stuExamAdd(${s.id})}">
+    <button class="att-min ok" title="登記" onclick="stuExamAdd(${s.id})">✓</button></span>`;
+  return`<div class="stu-gr-lbl">課堂成績</div><div class="stu-gr-list">${classRows}</div>
+    <div class="stu-gr-lbl" style="margin-top:10px">段考成績</div>
+    ${examRows}<div style="margin-top:6px">${addRow}</div>`;
+}
+function _refreshStuGradesSec(){
+  const s=getStudentList().find(x=>x.id===_stuModalId);
+  const el=document.getElementById('stu-grades-sec');
+  if(el&&s)el.innerHTML=buildStuGradesSec(s);
+}
+function stuExamAdd(sid){
+  const name=(document.getElementById('stu-exam-name')?.value||'').trim()||_stuExamPick;
+  const subj=(document.getElementById('stu-exam-subj')?.value||'').trim();
+  const sc=(document.getElementById('stu-exam-score')?.value||'').trim();
+  if(!subj&&sc==='')return toast('至少填科目或分數','inf');
+  if(sc!==''&&isNaN(Number(sc)))return toast('分數要是數字','inf');
+  addExam(sid,name,subj,sc===''?null:Number(sc));
+  _refreshStuGradesSec();
+  document.getElementById('stu-exam-subj')?.focus(); // 同一次段考連續登下一科
+}
+function stuExamRemove(examId){
+  const rec=examsBucket().records.find(r=>r.id===examId);
+  if(!rec)return;
+  const label=`${rec.examName}${rec.subject?'・'+rec.subject:''}${rec.score!=null?' '+rec.score+' 分':''}`;
+  if(!confirm(`刪除段考成績「${label}」？`))return;
+  removeExam(examId);
+  _refreshStuGradesSec();
 }
 
 // ── 學生視窗：修課 tag 一顆 ──

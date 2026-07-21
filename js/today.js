@@ -7,9 +7,9 @@ async function loadToday(){
     const d=currentDate;
     const start=new Date(d.getFullYear(),d.getMonth(),d.getDate(),0,0,0);
     const end=new Date(d.getFullYear(),d.getMonth(),d.getDate(),23,59,59);
-    // 改讀系統自有課表（不再撈 Google Calendar）：展開系統課程成當日課堂
-    dayEvents=expandCoursesForRange(start,end).sort((a,b)=>a.startDt-b.startDt);
-    await loadAttendance();
+    // 改讀系統自有課表（不再撈 Google Calendar）：系統課程＋已排補課/調課場次
+    dayEvents=[...expandCoursesForRange(start,end),...expandMakeupForRange(start,end)].sort((a,b)=>a.startDt-b.startDt);
+    await Promise.all([loadAttendance(),loadGrades()]);
     hideErr('courses');
     renderTL();
     renderToday();
@@ -172,8 +172,69 @@ function renderToday(){
   });
   sum.innerHTML=sumHtml;
 
-  c.innerHTML=evs.map(tcardHtml).join('');
+  // 成績課在上、只點名的課在下（區內維持時間排序）；只有一種時不出區標題
+  const gradeEvs=evs.filter(evNeedsGrade);
+  const plainEvs=evs.filter(x=>!evNeedsGrade(x));
+  if(gradeEvs.length&&plainEvs.length){
+    c.innerHTML=`<div class="tsec-hd">📝 需登記成績</div>`+gradeEvs.map(tcardHtml).join('')
+      +`<div class="tsec-hd">只點名</div>`+plainEvs.map(tcardHtml).join('');
+  }else{
+    c.innerHTML=evs.map(tcardHtml).join('');
+  }
   renderTimeline(evs);
+}
+
+// ── 成績登記 ──
+// 這堂要不要登記成績：系統課看課程本體開關、行事曆課看 courseSettings
+function evNeedsGrade(e){
+  return e.courseId!=null?!!(findCourseById(e.courseId)?.needsGrade):courseNeedsGrade(e.origTitle);
+}
+function toggleGradePanel(id){
+  const p=document.getElementById('grp-'+id);if(!p)return;
+  if(p.style.display!=='none'){p.style.display='none';return;}
+  const e=findEventById(id);if(!e)return;
+  p.innerHTML=buildGradePanel(e);
+  p.style.display='block';
+}
+function refreshGradePanel(e){const p=document.getElementById('grp-'+e.id);if(p)p.innerHTML=buildGradePanel(e);}
+// 每生一列：既有成績（標籤＋分數）chips 可刪、行內新增（標籤＋分數＋✓）——每堂每生可多筆
+function buildGradePanel(e){
+  const roster=eventRosterWithId(e);
+  if(!roster.length)return'<div class="att-empty">這堂沒有名單</div>';
+  // 練習課：科目顯示在名字旁（同點名面板）
+  const subjOf=new Map();
+  (e.studentGroups||[]).forEach(g=>g.students.forEach(nm=>subjOf.set(nm,subjOf.has(nm)?subjOf.get(nm)+'、'+g.subject:g.subject)));
+  const subjTag=nm=>subjOf.has(nm)?`<span class="att-subj">${esc(subjOf.get(nm))}</span>`:'';
+  const eid=esc(e.id);
+  const rows=roster.map(r=>{
+    if(r.studentId==null)return`<div class="gr-row"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}</span><span class="att-hint">需對帳</span></div>`;
+    const sid=r.studentId;
+    const chips=getGrades(e.id,sid).map(g=>
+      `<span class="gr-chip">${esc(g.label||'成績')}${g.score!=null?` <b>${g.score}</b>`:''}<button class="gr-x" title="刪除這筆" onclick="event.stopPropagation();grRemove('${eid}',${g.id})">✕</button></span>`).join('');
+    return`<div class="gr-row"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}</span>
+      ${chips}
+      <span class="gr-add">
+        <input class="gr-lab" id="gr-lab-${eid}-${sid}" placeholder="標籤，如：課前考" maxlength="12" autocomplete="off" name="search-gradelabel" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();grAdd('${eid}',${sid})}">
+        <input class="gr-sc" id="gr-sc-${eid}-${sid}" type="number" inputmode="numeric" placeholder="分數" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();grAdd('${eid}',${sid})}">
+        <button class="att-min ok" title="登記" onclick="event.stopPropagation();grAdd('${eid}',${sid})">✓</button>
+      </span></div>`;
+  }).join('');
+  return`<div class="att-list">${rows}</div>`;
+}
+function grAdd(eventId,studentId){
+  const e=findEventById(eventId);if(!e)return;
+  const li=document.getElementById(`gr-lab-${eventId}-${studentId}`);
+  const si=document.getElementById(`gr-sc-${eventId}-${studentId}`);
+  const label=(li?.value||'').trim(),score=(si?.value||'').trim();
+  if(!label&&score==='')return toast('至少填標籤或分數其中一項','inf');
+  if(score!==''&&isNaN(Number(score)))return toast('分數要是數字','inf');
+  addGrade(e.id,e.startDt.toISOString(),studentId,label,score===''?null:Number(score));
+  refreshGradePanel(e);
+  document.getElementById(`gr-lab-${eventId}-${studentId}`)?.focus(); // 連續登記下一筆
+}
+function grRemove(eventId,gradeId){
+  removeGrade(gradeId);
+  const e=findEventById(eventId);if(e)refreshGradePanel(e);
 }
 
 function heroHtml(e,isNow){
@@ -229,7 +290,7 @@ function toggleTcard(id){
   document.querySelectorAll('.tcard2.tc-open').forEach(c=>{
     c.classList.remove('tc-open');
     c.querySelector('.abs-panel.open')?.classList.remove('open');
-    const ap=c.querySelector('.att-panel');if(ap)ap.style.display='none';
+    c.querySelectorAll('.att-panel').forEach(p=>p.style.display='none'); // 點名＋成績面板都收
   });
   if(willOpen)card.classList.add('tc-open');
 }
@@ -425,11 +486,7 @@ function tcardHtml(e){
   const mkBadge=(()=>{if(!e.isFullAbsent&&!e.isRescheduled)return'';const rec=findMakeupScheduledById(e.id);return rec?`<span class="tc-badge tc-badge-arr">✓ 已安排</span>`:`<span class="tc-badge tc-badge-un">未安排</span>`;})();
   // 動作列：請假內嵌（今日情境面板），調課走 week-modal 避免 rp-${id} 撞車
   let acts='';
-  if(e.courseId!=null){ // 系統課堂：請假已接系統儲存（第 2 刀）；調課待第 3 刀
-    if(e.isAbsent)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelAbs('${id}')">取消請假</button>`;
-    else if(e.isNoShow)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelNoShow('${id}')">取消曠課</button>`;
-    else acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndAbs('${id}')">🗓 標記請假</button>`;
-  }
+  if(e.isMakeupOcc)acts='';// 補課/調課場次：改期走待補課清單「取消安排」重排，卡上不出請假/調課鈕
   else if(e.isRescheduled)acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEvent('${id}')">看調課安排</button><button class="tc-act danger" onclick="event.stopPropagation();cancelReschedule('${id}')">取消調課</button>`;
   else if(e.isAbsent)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelAbs('${id}')">取消請假</button>`;
   else if(e.isNoShow)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelNoShow('${id}')">取消曠課</button>`;
@@ -437,6 +494,7 @@ function tcardHtml(e){
   // 能點名的課：點名面板已列出名冊，不再放「名單」鈕（避免重複）；
   // 不能點名的課（試聽/整堂請假/調課原課）沒有點名面板 → 保留「名單」鈕當唯一名冊入口
   const attBtn=canAttend(e)?`<button class="tc-act" onclick="event.stopPropagation();toggleAttPanel('${id}')">✓ 點名</button>`:'';
+  const gradeBtn=canAttend(e)&&evNeedsGrade(e)?`<button class="tc-act" onclick="event.stopPropagation();toggleGradePanel('${id}')">✎ 成績</button>`:'';
   const rosterBtn=canAttend(e)?'':`<button class="tc-act roster" onclick="event.stopPropagation();toggleRoster('${id}')">名單 <b>${roster.length}</b></button>`;
   const cls=`tcard2 t-${e.type}${e.status==='now'?' t-now':''}${e.status==='past'?' t-past':''}${e.isFullAbsent?' t-absent':''}${e.isRescheduled?' t-resched':''}`;
   return `<div class="${cls}" id="cc-${id}" style="--tcv:${tcv}">
@@ -449,9 +507,10 @@ function tcardHtml(e){
       <div class="tcard2-time"><b>${fmtT(e.startDt)}</b><span>${fmtT(e.endDt)}</span></div>
       <span class="tcard2-chev">▾</span>
     </div>
-    <div class="tcard2-actions">${acts}${attBtn}${rosterBtn}</div>
+    <div class="tcard2-actions">${acts}${attBtn}${gradeBtn}${rosterBtn}</div>
     ${pracRosterHtml(e)}
     <div class="tcard2-roster" id="rost-${id}" style="display:none">${roster.length?esc(roster.join('、')):'（無名單）'}</div>
     <div class="att-panel" id="attp-${id}" style="display:none"></div>
+    <div class="att-panel grade-panel" id="grp-${id}" style="display:none"></div>
   </div>`;
 }

@@ -168,8 +168,7 @@ function renderMakeup(){
       </div>
       <div class="mk-list-actions">
         ${tutorB?`<button class="mk-btn-cancel" style="font-size:12px;padding:5px 10px;margin-left:0" onclick="event.stopPropagation();markMakeupSkip('${esc(e.id)}')">不補課</button>`:''}
-        ${e.courseId!=null?`<span style="font-size:11px;color:var(--tx3)">排補課改版中</span>`
-          :`<button class="mk-btn-arrange" onclick="event.stopPropagation();openSlotPicker('${esc(e.id)}','${mode}')">安排</button>`}
+        <button class="mk-btn-arrange" onclick="event.stopPropagation();openSlotPicker('${esc(e.id)}','${mode}')">安排</button>
       </div>
     </div>`;
   }
@@ -349,8 +348,6 @@ function getEffectiveStudentCount(){
 function openSlotPicker(id,mode){
   const ev=findEventById(id);
   if(!ev)return;
-  // 系統課堂的排補課/調課待第 3 刀（時段空檔要改掃系統課表、補課要長回主頁）
-  if(ev.courseId!=null){toast('系統課的排補課改版中（下一批接上），請假紀錄已保存','inf');return;}
   const branch=ev.classroom==='石牌分校'?'石牌':'北投';
   slotPicker={ev,mode,date:null,time:null,room:null,avail:null,branch};
   const d=ev.startDt;
@@ -444,19 +441,11 @@ function buildSpDateSection(){
 async function selectSpDate(ds){
   if(slotPicker.date===ds)return;
   slotPicker={...slotPicker,date:ds,time:null,room:null,avail:null};
-  renderSpBody();
-  showL('讀取教室資料...');
   const [y,m,d]=ds.split('-').map(Number);
   const dayStart=new Date(y,m-1,d,0,0,0),dayEnd=new Date(y,m-1,d,23,59,59);
-  try{
-    const all=await Promise.all(Object.entries(calendarIds).map(async([name,id])=>{
-      try{const r=await cachedEventList({calendarId:id,timeMin:dayStart.toISOString(),timeMax:dayEnd.toISOString(),singleEvents:true,orderBy:'startTime'});
-      return(r.result.items||[]).map(e=>({...e,_calId:id,_calName:name}));}catch(e){return[];}}));
-    slotPicker.avail=all.flat().map(e=>parseEv(e));
-  }catch(e){slotPicker.avail=[];}
-  hideL();
+  // 空檔改掃系統課表（系統課程＋已排補課/調課場次），不再讀 Google Calendar
+  slotPicker.avail=[...expandCoursesForRange(dayStart,dayEnd),...expandMakeupForRange(dayStart,dayEnd)];
   renderSpBody();
-  setTimeout(()=>sec=>sec&&sec.scrollIntoView({behavior:'smooth',block:'nearest'}),50);
 }
 
 function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
@@ -648,46 +637,19 @@ function buildSpConfirm(){
   return sec;
 }
 
+// 確認排補課/調課：純寫系統紀錄（makeupScheduled），不再建 Google Calendar 事件（第 3 刀起）。
+// 主頁的補課/調課場次由展開器從紀錄直接長出（expandMakeupForRange）。
 async function confirmSlotPicker(){
   const ev=slotPicker.ev;
   const [y,m,d]=slotPicker.date.split('-').map(Number);
   const {h,mi}=slotPicker.time;
   const sS=new Date(y,m-1,d,h,mi),sE=new Date(y,m-1,d,h,0,0);sE.setMinutes(mi+getEffectiveDur());
   const room=slotPicker.room,mode=slotPicker.mode;
-  // Update description classroom
-  const lines=(ev.desc||'').split('\n');
-  const teacherOnly=(lines[0]||'').replace(/(小教室|大教室|108|208|309)\s*/g,'').trim();
-  lines[0]=room+(teacherOnly?' '+teacherOnly:'');
-  const newDesc=lines.join('\n');
-  showL(mode==='makeup'?'建立補課事件...':'更新課程...');
-  try{
-    if(mode==='makeup'){
-      const calId=calendarIds['補課'];
-      if(!calId)throw new Error('找不到補課行事曆');
-      const stuLabel=ev.absentStudents&&ev.absentStudents.length>0?ev.absentStudents.join('、'):'';
-      const evTitle=stuLabel?`【${stuLabel}補課】${ev.origTitle}`:`【補課】${ev.origTitle}`;
-      const resp=await gapi.client.calendar.events.insert({calendarId:calId,resource:{summary:evTitle,description:newDesc||'',extendedProperties:{private:{originalAbsenceId:ev.id}},start:{dateTime:sS.toISOString()},end:{dateTime:sE.toISOString()}}});
-      invalidateEventCache();
-      saveMakeupScheduled(ev,sS,sE,room,resp.result.id);
-      hideL();toast('補課已安排 🎉','ok');
-      closeSlotPicker();
-      renderMakeup();updateMakeupBadge();
-    }else{
-      const rcalId=calendarIds['調課'];
-      if(!rcalId)throw new Error('找不到調課行事曆');
-      const d=ev.startDt;
-      const evTitle=`【${d.getMonth()+1}/${d.getDate()}的調課】${ev.origTitle}`;
-      const reasonLine=ev.rescheduleReason?`調課原因：${ev.rescheduleReason}`:'';
-      const descParts=[newDesc,reasonLine].filter(Boolean);
-      const rescheduleDesc=descParts.join('\n');
-      const resp=await gapi.client.calendar.events.insert({calendarId:rcalId,resource:{summary:evTitle,description:rescheduleDesc,extendedProperties:{private:{originalAbsenceId:ev.id}},start:{dateTime:sS.toISOString()},end:{dateTime:sE.toISOString()}}});
-      invalidateEventCache();
-      saveMakeupScheduled(ev,sS,sE,room,resp.result.id,'調課');
-      hideL();toast('調課時段已安排 🎉','ok');
-      closeSlotPicker();
-      renderMakeup();updateMakeupBadge();
-    }
-  }catch(err){hideL();toast('操作失敗：'+(err.result?.error?.message||err.message),'err');}
+  saveMakeupScheduled(ev,sS,sE,room,null,mode==='makeup'?'補課':'調課');
+  toast(mode==='makeup'?'補課已安排 🎉':'調課時段已安排 🎉','ok');
+  closeSlotPicker();
+  await Promise.all([loadToday(),loadWeek()]); // 場次立即長回主頁課表
+  renderMakeup();updateMakeupBadge();
 }
 
 // ── 補課排程記錄 ──
@@ -706,6 +668,7 @@ function saveMakeupScheduled(ev,sS,sE,room,calEventId,calName='補課'){
 async function deleteMakeupScheduled(originalId){
   const rec=makeupMatchMap.get(originalId);
   const calName=rec?.calName||'補課';
+  // 舊紀錄（第 3 刀前建的）有對應 Calendar 事件才需要刪；純系統紀錄 calEventId=null 直接跳過
   if(rec?.calEventId&&calendarIds[calName]){
     try{await gapi.client.calendar.events.delete({calendarId:calendarIds[calName],eventId:rec.calEventId});invalidateEventCache();}
     catch(e){console.warn(`刪除${calName}事件失敗`,e);}
@@ -713,6 +676,7 @@ async function deleteMakeupScheduled(originalId){
   makeupMatchMap.delete(originalId);
   driveData.makeupScheduled=getMakeupScheduledLS().filter(x=>x.originalId!==originalId);
   scheduleDriveSave();
+  await Promise.all([loadToday(),loadWeek()]); // 場次從主頁課表移除
   renderMakeup();updateMakeupBadge();
 }
 

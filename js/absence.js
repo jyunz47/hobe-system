@@ -44,8 +44,7 @@ function buildAbsPanel(e, sfx=''){
     </div>
   </div>`;
   // 一對二（剛好兩人）：一人請假時，常傾向整堂一起調課以省老師成本 → 提供捷徑導向既有調課流程
-  // 系統課堂的調課待第 3 刀，捷徑先不顯示
-  if(e.type==='pair'&&e.students.length===2&&e.courseId==null){
+  if(e.type==='pair'&&e.students.length===2){
     html+=`<div style="margin:4px 0 10px;font-size:12px;color:var(--tx2)">
       一對二也可改為 <button class="btn btns" style="font-size:12px;padding:3px 10px" onclick="startWholeReschedule('${eid}')">🔄 整堂一起調課</button>（兩人都不缺課、不個別補課、維持原時長）
     </div>`;
@@ -312,7 +311,7 @@ async function doCancel(id,ev,cancelStudents){
       rec.leave=clearAll?[]:(rec.leave||[]).filter(x=>!cancelStudents.includes(x.name));
       rec.makeupSkip=(rec.makeupSkip||[]).filter(n=>(rec.leave||[]).some(x=>x.name===n)); // 不再請假的人不留不補課標記
       rec.updatedAt=new Date().toISOString();
-      if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length)list=list.filter(a=>a!==rec);
+      if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length&&!rec.resched)list=list.filter(a=>a!==rec);
       saveAbsences(list);
     }
     toast('已取消請假','ok');
@@ -396,7 +395,7 @@ async function doCancelNoShow(id,ev,cancelStudents){
     if(rec){
       rec.noShow=(cancelStudents.length===0)?[]:(rec.noShow||[]).filter(x=>!cancelStudents.includes(x.name));
       rec.updatedAt=new Date().toISOString();
-      if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length)list=list.filter(a=>a!==rec);
+      if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length&&!rec.resched)list=list.filter(a=>a!==rec);
       saveAbsences(list);
     }
     toast('已取消曠課','ok');

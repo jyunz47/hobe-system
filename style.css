@@ -978,6 +978,26 @@ body:has(#panel-login.active) .content{padding:0}
 .att-row:last-child{border-bottom:none}
 .att-nm{font-size:13px;color:var(--tx1);font-weight:500}
 .att-subj{font-size:11px;color:var(--tx3);font-weight:400;margin-left:6px}
+/* 今日課程分區標題（成績課在上／只點名在下），佔滿兩欄格線整列 */
+.tsec-hd{grid-column:1/-1;font-size:12px;font-weight:700;color:var(--tx3);letter-spacing:.5px;margin:6px 2px -2px;display:flex;align-items:center;gap:6px}
+/* 成績登記面板 */
+.gr-row{display:flex;align-items:center;gap:8px;padding:5px 0;flex-wrap:wrap;border-bottom:1px dashed #EFEBE0}
+.gr-row:last-child{border-bottom:none}
+.gr-chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--tx1);background:var(--sf2);border:1px solid var(--br);border-radius:7px;padding:2px 8px}
+.gr-chip b{font-family:'DM Mono',monospace;font-size:12.5px}
+.gr-x{border:none;background:none;cursor:pointer;color:var(--tx3);font-size:11px;padding:0 2px;line-height:1}
+.gr-x:hover{color:#C0504A}
+.gr-add{display:inline-flex;align-items:center;gap:5px;margin-left:auto}
+.gr-add input{border:1px solid var(--br);border-radius:7px;padding:3px 8px;font-size:12px;background:var(--sf)}
+.gr-add select{border:1px solid var(--br);border-radius:7px;padding:3px 6px;font-size:12px;background:var(--sf)}
+.gr-lab{width:110px}
+.gr-sc{width:58px}
+/* 學生視窗成績區 */
+.stu-gr-lbl{font-size:11px;font-weight:700;color:var(--tx3);letter-spacing:.5px;margin-bottom:4px}
+.stu-gr-list{display:flex;flex-direction:column;gap:2px;max-height:180px;overflow-y:auto}
+.stu-gr-row{display:flex;align-items:center;gap:8px;font-size:12.5px}
+.stu-gr-date{flex:none;width:38px;color:var(--tx3);font-family:'DM Mono',monospace;font-size:11.5px}
+.stu-gr-course{color:var(--tx2);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .att-nm.struck{text-decoration:line-through;color:var(--tx3);font-weight:400}
 .att-lock{font-size:11px;font-weight:700;color:#C16B36;background:#FBF4EA;padding:2px 8px;border-radius:7px}
 .att-hint{font-size:11px;color:var(--tx3);background:var(--sf2);padding:2px 8px;border-radius:7px}

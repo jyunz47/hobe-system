@@ -41,8 +41,8 @@ async function loadWeek(){
   const mon=currentMonday();
   const sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
   try{
-    // 改讀系統自有課表（不再撈 Google Calendar）：展開系統課程成本週課堂
-    weekEvents=expandCoursesForRange(mon,sun).sort((a,b)=>a.startDt-b.startDt);
+    // 改讀系統自有課表（不再撈 Google Calendar）：系統課程＋已排補課/調課場次
+    weekEvents=[...expandCoursesForRange(mon,sun),...expandMakeupForRange(mon,sun)].sort((a,b)=>a.startDt-b.startDt);
     renderWeek(mon);
   }catch(err){console.error('loadWeek',err);}
 }
@@ -227,12 +227,12 @@ function selectWeekEvent(id){
         </div>
       </div>
       <div class="cc-actions">
+        ${ev.isMakeupOcc?`<span style="font-size:12px;color:var(--tx3)">補課／調課場次——要改期請到待補課清單「取消安排」後重排</span>`:`
         ${ev.isAbsent?`<button class="btn btns btnd" onclick="selectCard(this.closest('.cc'));cancelAbs('${esc(ev.id)}')">取消請假</button>`:''}
         ${ev.isNoShow?`<button class="btn btns btnd" onclick="selectCard(this.closest('.cc'));cancelNoShow('${esc(ev.id)}')">取消曠課</button>`:''}
         ${ev.isRescheduled?`<button class="btn btns btnd" onclick="cancelReschedule('${esc(ev.id)}')">取消調課</button>`:''}
         ${!ev.isRescheduled?`<button class="btn btns" onclick="selectCard(this.closest('.cc'));toggleAbsPanelWeek('${esc(ev.id)}')">標記請假</button>`:''}
-        ${ev.courseId!=null?`<span style="font-size:12px;color:var(--tx3)">調課改版中（下一批接上）</span>`
-          :`<button class="btn btns" onclick="toggleReschedulePanel('${esc(ev.id)}')">${ev.isRescheduled?(ev.rescheduleReason?'更新調課原因':'輸入調課原因'):'調課'}</button>`}
+        <button class="btn btns" onclick="toggleReschedulePanel('${esc(ev.id)}')">${ev.isRescheduled?(ev.rescheduleReason?'更新調課原因':'輸入調課原因'):'調課'}</button>`}
       </div>
     </div>
     <div class="abs-panel" id="absp-w-${esc(ev.id)}">${buildAbsPanel(ev,'-w')}</div>
@@ -265,6 +265,23 @@ async function confirmReschedule(id){
   const ev=findEventById(id);if(!ev)return;
   const reason=(document.getElementById('rp-reason-'+id)?.value||'').trim();
   const newTitle=reason?`【調課：${reason}】${ev.origTitle}`:`【調課】${ev.origTitle}`;
+  // 系統課堂：調課旗標寫請假紀錄（同一筆紀錄、與請假/曠課並存）
+  if(ev.courseId!=null){
+    const list=getAbsences().slice();
+    let rec=list.find(a=>a.occId===id);
+    if(!rec){
+      rec={id:Date.now(),occId:id,courseId:ev.courseId,date:ev.startDt.toISOString(),
+        teacherAbsent:false,leave:[],noShow:[],makeupSkip:[],createdAt:new Date().toISOString()};
+      list.push(rec);
+    }
+    rec.resched=true;rec.reschedReason=reason;
+    rec.updatedAt=new Date().toISOString();
+    saveAbsences(list);
+    toast('已標記調課，請至待補課/調課清單安排新時段','ok');
+    closeWeekModal();
+    await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
+    return;
+  }
   showL('標記調課...');
   try{
     await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:ev.id,resource:{summary:newTitle}});
@@ -277,6 +294,22 @@ async function confirmReschedule(id){
 
 async function cancelReschedule(id){
   const ev=findEventById(id);if(!ev)return;
+  // 系統課堂：清調課旗標（已排的新時段一併取消），紀錄清空即刪
+  if(ev.courseId!=null){
+    let list=getAbsences().slice();
+    const rec=list.find(a=>a.occId===id);
+    if(rec){
+      rec.resched=false;rec.reschedReason='';
+      rec.updatedAt=new Date().toISOString();
+      if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length)list=list.filter(a=>a!==rec);
+      saveAbsences(list);
+    }
+    if(makeupMatchMap.has(id))await deleteMakeupScheduled(id);
+    toast('已取消調課','ok');
+    closeWeekModal();
+    await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
+    return;
+  }
   showL('取消調課...');
   try{
     await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:ev.id,resource:{summary:ev.origTitle}});
