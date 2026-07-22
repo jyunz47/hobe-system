@@ -8,7 +8,8 @@ var SCOPES='https://www.googleapis.com/auth/calendar';
 var DISCOVERY_DOC='https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
 var CAL_NAMES=['一般課程','補課','調課','試聽','練習課','加課'];
 var MAKEUP_CALS=['一般課程','調課','試聽','練習課','加課']; // exclude 補課
-var TL_ROOMS=['大教室','小教室','108','208','309'];
+var TL_ROOMS=['大教室','小教室','108','208','309']; // 北投教學教室（主頁時間軸一列一間）
+var COURSE_ROOMS=[...TL_ROOMS,'石牌分校']; // 課程可指定的教室：北投 5 間 + 石牌分校（石牌單一桶、不進北投時間軸）
 
 // ── 全域狀態 ──
 var tokenClient=null,gapiReady=false,gisReady=false;

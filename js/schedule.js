@@ -37,6 +37,23 @@ function _atTime(baseDate,hhmm){
   const d=new Date(baseDate);d.setHours(h||0,m||0,0,0);return d;
 }
 
+// 多段上課時間：schedule.slots＝起始段（課程建立起生效）；schedule.phases＝之後的換時段，各帶 from 日期。
+// 回傳依生效日排序的段清單，每段 {fromMs, slots}；起始段 fromMs=-Infinity（涵蓋最早）。
+function _schedulePhases(sched){
+  const extra=(sched.phases||[])
+    .filter(p=>p&&p.from&&Array.isArray(p.slots)&&p.slots.length)
+    .map(p=>{const[y,mo,dd]=String(p.from).split('-').map(Number);const d=new Date(y,(mo||1)-1,dd||1);d.setHours(0,0,0,0);return{fromMs:d.getTime(),slots:p.slots};})
+    .sort((a,b)=>a.fromMs-b.fromMs);
+  return[{fromMs:-Infinity,slots:sched.slots||[]},...extra];
+}
+// 某天生效的段＝ from<=該天 的最後一段
+function _activePhase(phases,day){
+  const t=new Date(day);t.setHours(0,0,0,0);const ms=t.getTime();
+  let cur=phases[0];
+  for(const p of phases){if(p.fromMs<=ms)cur=p;else break;}
+  return cur;
+}
+
 // 一門課在 [start,end]（含）範圍內的所有課堂
 function courseOccurrencesInRange(course,start,end){
   const sched=course&&course.schedule;
@@ -60,25 +77,28 @@ function courseOccurrencesInRange(course,start,end){
   const out=[];
   const s0=new Date(start);s0.setHours(0,0,0,0);
   const e0=new Date(end);e0.setHours(23,59,59,999);
-  sched.slots.forEach((slot,si)=>{
-    const dates=[];
-    if(sched.mode==='dates'){
+  if(sched.mode==='dates'){
+    // 指定日期（試聽等單場）：不分段
+    sched.slots.forEach((slot,si)=>{
       if(!slot.date)return;
       const[y,mo,dd]=String(slot.date).split('-').map(Number);
       const d=new Date(y,(mo||1)-1,dd||1);d.setHours(0,0,0,0);
-      if(d>=s0&&d<=e0)dates.push(d);
-    }else{ // weekly：掃範圍內每天，逢對應星期就長一堂
-      const wd=Number(slot.weekday);
-      const cur=new Date(s0);
-      while(cur<=e0){
-        if(cur.getDay()===wd)dates.push(new Date(cur));
-        cur.setDate(cur.getDate()+1);
-      }
-    }
-    dates.forEach(day=>{
-      out.push(_makeOccurrence(course,day,si,_atTime(day,slot.start),_atTime(day,slot.end),rosterNames,studentGroups));
+      if(d>=s0&&d<=e0)out.push(_makeOccurrence(course,d,si,_atTime(d,slot.start),_atTime(d,slot.end),rosterNames,studentGroups));
     });
-  });
+  }else{
+    // 每週重複：逐日掃，套用「當天生效的時段段落」（多段依日期自動切換）
+    const phases=_schedulePhases(sched);
+    const cur=new Date(s0);
+    while(cur<=e0){
+      const slots=_activePhase(phases,cur).slots;
+      for(let si=0;si<slots.length;si++){
+        const slot=slots[si];
+        if(Number(slot.weekday)===cur.getDay())
+          out.push(_makeOccurrence(course,new Date(cur),si,_atTime(cur,slot.start),_atTime(cur,slot.end),rosterNames,studentGroups));
+      }
+      cur.setDate(cur.getDate()+1);
+    }
+  }
   return out;
 }
 

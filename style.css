@@ -619,6 +619,18 @@ body.hide-todo-chip .stu-info-chip{display:none}
 .cf-slot-dash{color:var(--tx3)}
 .cf-add-slot{align-self:flex-start;padding:5px 10px;border:1px dashed var(--br);background:none;color:var(--tx2);border-radius:var(--rs);font-size:12px;font-family:inherit;cursor:pointer}
 .cf-add-slot:hover{border-color:var(--ac);color:var(--ac)}
+/* 換時段段落（多段上課時間） */
+.cf-phase{display:flex;flex-direction:column;gap:6px;margin-top:8px;padding:9px 10px;border:1.5px solid var(--brd);border-radius:var(--rs);background:var(--sf3)}
+.cf-phase-hd{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.cf-phase-lbl{font-size:12.5px;color:var(--tx2)}
+.cf-phase-date{padding:6px 8px;border:1.5px solid var(--br);border-radius:var(--rs);font-size:12.5px;font-family:inherit;color:var(--tx);background:#fff}
+.cf-phase-date:focus{outline:none;border-color:var(--ac)}
+.cf-phase-presets{display:flex;gap:4px;flex-wrap:wrap}
+.cf-term-btn{padding:3px 9px;border:1px solid var(--br);background:#fff;color:var(--tx2);border-radius:99px;font-size:11.5px;font-family:inherit;cursor:pointer}
+.cf-term-btn:hover{border-color:var(--ac);color:var(--ac)}
+.cf-phase-x{margin-left:auto}
+.cf-add-phase{align-self:flex-start;margin-top:8px;padding:6px 11px;border:1px dashed var(--brd);background:none;color:var(--tx2);border-radius:var(--rs);font-size:12px;font-family:inherit;cursor:pointer}
+.cf-add-phase:hover{border-color:var(--ac);color:var(--ac)}
 .cf-type-row{display:flex;gap:6px;flex-wrap:wrap}
 .cf-type-chip{padding:5px 12px;border:1.5px solid var(--br);border-radius:99px;background:var(--sf);color:var(--tx2);font-size:12.5px;font-family:inherit;cursor:pointer;transition:all .12s}
 .cf-type-chip:hover{border-color:var(--ac)}
@@ -638,8 +650,8 @@ body.hide-todo-chip .stu-info-chip{display:none}
 .ta-name:focus{outline:none;border-color:var(--ac);background:#fff}
 .ta-status{padding:3px 11px;border:1px solid var(--ac);background:var(--al);color:var(--ac);border-radius:99px;font-size:11.5px;font-family:inherit;cursor:pointer}
 .ta-status.off{border-color:var(--br);background:var(--sf2);color:var(--tx3)}
-.ta-count{flex:1;font-size:11.5px;color:var(--tx3)}
-.ta-courses{font-size:12px;color:var(--tx2);margin:4px 0 0 4px;line-height:1.5}
+.ta-courses{flex:1;font-size:12.5px;color:var(--tx2);line-height:1.4}
+.ta-count{font-size:11.5px;color:var(--tx3);margin:4px 0 0 4px}
 .ta-retired .ta-name{color:var(--tx3);font-weight:400}
 .ta-retired .ta-courses{color:var(--tx3)}
 #teacher-admin .co-add{max-width:520px}
@@ -647,6 +659,14 @@ body.hide-todo-chip .stu-info-chip{display:none}
 /* ── 兩層年級選擇器 ── */
 .cf-grade-pick{display:flex;gap:8px}
 .cf-grade-pick select{flex:1}
+/* 科目自訂下拉：點欄位列全部、打字過濾 */
+.cf-combo{position:relative}
+.cf-combo-menu{position:absolute;left:0;right:0;top:calc(100% + 3px);z-index:30;background:var(--sf);border:1.5px solid var(--brd);border-radius:var(--rs);box-shadow:0 6px 20px rgba(0,0,0,.10);max-height:240px;overflow-y:auto;padding:4px}
+.cf-combo-menu[hidden]{display:none}
+.cf-combo-opt{padding:8px 11px;font-size:13px;color:var(--tx);border-radius:var(--rs);cursor:pointer}
+.cf-combo-opt[hidden]{display:none}
+.cf-combo-opt:hover{background:var(--sf2)}
+.cf-combo-opt.cur{background:var(--al);color:var(--am)}
 
 /* ── 課程表單：現場建檔 / 同名消歧（cf-resolve）── */
 .cf-resolve{margin-top:10px;padding:11px 12px;background:var(--sf2);border:1px solid var(--br);border-radius:var(--rs)}

@@ -1,15 +1,16 @@
 // 學生管理 + 課表對帳（行事曆 vs 修課登記簿）+ 新增課程表單 + 學生編輯
 
-// 年級：國小分一~六年、國中/高中沿用舊值（國一…高三），末尾保留裸「國小」「大學」給舊資料
+// 年級：國小分一~六年、國中/高中沿用舊值（國一…高三），大學為頂層階段（無年級），末尾裸「國小」留給舊資料（未分年）
 // 顯示/分組順序＝這個陣列的順序
 var GRADES=['國小一','國小二','國小三','國小四','國小五','國小六','國一','國二','國三','高一','高二','高三','大學','國小'];
 
-// ── 兩層年級選擇器（先選階段國小/國中/高中，再選年）──
-var GRADE_SEG_YEARS={'國小':['一','二','三','四','五','六'],'國中':['一','二','三'],'高中':['一','二','三']};
-// 階段＋年 → 儲存字串（國中/高中維持舊格式「國一」「高二」，國小＝「國小三」）
-function gradeCompose(seg,yr){if(!seg||!yr)return'';if(seg==='國中')return'國'+yr;if(seg==='高中')return'高'+yr;return'國小'+yr;}
-// 儲存字串 → {seg,yr}；裸「國小」「大學」或空值拆不出（回空，走 legacy 顯示）
+// ── 兩層年級選擇器（先選階段國小/國中/高中/大學，再選年；大學無年級、選即定）──
+var GRADE_SEG_YEARS={'國小':['一','二','三','四','五','六'],'國中':['一','二','三'],'高中':['一','二','三'],'大學':[]};
+// 階段＋年 → 儲存字串（大學＝頂層無年級；國中/高中維持舊格式「國一」「高二」，國小＝「國小三」）
+function gradeCompose(seg,yr){if(seg==='大學')return'大學';if(!seg||!yr)return'';if(seg==='國中')return'國'+yr;if(seg==='高中')return'高'+yr;return'國小'+yr;}
+// 儲存字串 → {seg,yr}；裸「國小」或空值拆不出（回空，走 legacy 顯示）
 function gradeDecompose(g){
+  if(g==='大學')return{seg:'大學',yr:''};
   if(/^國小[一二三四五六]$/.test(g))return{seg:'國小',yr:g.slice(2)};
   if(/^國[一二三]$/.test(g))return{seg:'國中',yr:g.slice(1)};
   if(/^高[一二三]$/.test(g))return{seg:'高中',yr:g.slice(1)};
@@ -18,13 +19,14 @@ function gradeDecompose(g){
 // 產生「階段 select ＋ 年 select」HTML；onSeg/onYr 是各自 onchange 的 JS 字串
 function gradePickerHtml(seg,yr,onSeg,onYr){
   const years=GRADE_SEG_YEARS[seg]||[];
+  const noYear=seg&&!years.length;   // 頂層階段（大學）無年級
   return `<div class="cf-grade-pick">
     <select class="cm-input" onchange="${onSeg}">
       <option value="" ${!seg?'selected':''} disabled>階段…</option>
-      ${['國小','國中','高中'].map(s=>`<option ${seg===s?'selected':''}>${s}</option>`).join('')}
+      ${['國小','國中','高中','大學'].map(s=>`<option ${seg===s?'selected':''}>${s}</option>`).join('')}
     </select>
-    <select class="cm-input" onchange="${onYr}" ${seg?'':'disabled'}>
-      <option value="" ${!yr?'selected':''} disabled>年級…</option>
+    <select class="cm-input" onchange="${onYr}" ${seg&&!noYear?'':'disabled'}>
+      <option value="" ${!yr?'selected':''} disabled>${noYear?'—':'年級…'}</option>
       ${years.map(y=>`<option ${yr===y?'selected':''}>${y}</option>`).join('')}
     </select>
   </div>`;
@@ -269,7 +271,7 @@ function closeScanSection(){
 // 舊的學生管理行內快速表單（toggleAddStudentForm/addStudent）已由本表單取代（2026-07-04）
 var asState=null;
 function asBlank(){return{name:'',gradeSeg:'',grade:'',school:'',parentPhone:'',sourceChannel:'',note:'',dupAck:false};}
-function asSetSeg(v){asState.gradeSeg=v;if(gradeDecompose(asState.grade).seg!==v)asState.grade='';renderAddStudentForm();}
+function asSetSeg(v){asState.gradeSeg=v;if(!(GRADE_SEG_YEARS[v]||[]).length)asState.grade=gradeCompose(v);else if(gradeDecompose(asState.grade).seg!==v)asState.grade='';renderAddStudentForm();}
 function asSetYear(yr){asState.grade=gradeCompose(asState.gradeSeg,yr);}
 function initAddStudentPage(){asState=asBlank();renderAddStudentForm();}
 
@@ -803,7 +805,7 @@ function toggleStudentEdit(id){
   if(stuEditId===id){cancelStudentEdit();return;}
   stuEditId=id;
   _editEnrollments=getEnrollments({studentId:id,periodId:yearPeriodId()})
-    .map(en=>({id:en.id,courseTitle:en.courseTitle,price:en.price}));
+    .map(en=>({id:en.id,courseTitle:en.courseTitle,price:en.price,courseId:en.courseId}));
   renderStudents();
   requestAnimationFrame(()=>document.getElementById(`edit-name-${id}`)?.focus());
 }
@@ -851,7 +853,9 @@ function saveStudentEdit(id){
 
 function buildEditCoursesHtml(id){
   return _editEnrollments.map((r,i)=>{
-    const def=getCourseDefaultPrice(r.courseTitle);
+    // 系統課預設價在課程本體；行事曆課（無 courseId）才退回舊價目表。對齊加課盒與學生卡片
+    const co=r.courseId!=null?findCourseById(r.courseId):null;
+    const def=co?co.defaultPrice:getCourseDefaultPrice(r.courseTitle);
     const ph=def!=null?`預設 ${def}`:'未定價';
     return`<div class="stu-edit-enroll-row">
       <span class="stu-edit-course-tag">${esc(r.courseTitle)}<button class="rm-course-btn" onclick="removeEditCourse(${i},${id})">✕</button></span>
