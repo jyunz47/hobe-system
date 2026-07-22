@@ -10,6 +10,9 @@ function saveCourses(list){driveData.courses=list;scheduleDriveSave();}
 function getTeachers(){return driveData.teachers||[];}
 function saveTeachers(list){driveData.teachers=list;scheduleDriveSave();}
 function teacherNameById(id){const t=getTeachers().find(t=>t.id===id);return t?t.name:'';}
+// 課程老師（可多位）：新資料 teacherIds 陣列；舊資料單一 teacherId 自動相容
+function courseTeacherIds(co){return Array.isArray(co.teacherIds)?co.teacherIds:(co.teacherId!=null?[co.teacherId]:[]);}
+function courseTeacherNames(co){return courseTeacherIds(co).map(teacherNameById).filter(Boolean);}
 function findCourseById(id){return getCourses().find(c=>c.id===id);}
 
 // 週選項自帶一份，不在載入期依賴 settings.js 的 WEEK_ORDER/WEEK_LABEL（script 載入順序防呆）
@@ -36,7 +39,8 @@ function cfBlank(){
     subject:'',
     pinnedType:null,        // null＝自動判型；點類型 chip 鎖定覆蓋
     name:'',nameTouched:false,
-    teacherName:'',         // 老師以姓名輸入（自動完成）；存檔時對既有老師、對不到就建檔
+    teachers:[],            // 老師（可多位）：姓名字串陣列；存檔時對既有老師、對不到就建檔
+    teacherInput:'',        // 老師輸入框當前文字
     teacherRate:'',
     mode:'weekly',
     slots:[{weekday:1,start:'',end:'',date:''}], // 兩種 mode 共用欄位，存檔時只取需要的
@@ -54,7 +58,7 @@ function openCourseForm(courseId){
     if(!co)return;
     cfState={...cfBlank(),editId:co.id,subject:co.subject||'',
       pinnedType:co.type||null,name:co.name,nameTouched:true,
-      teacherName:teacherNameById(co.teacherId)||'',teacherRate:co.teacherRate??'',
+      teachers:courseTeacherNames(co),teacherInput:'',teacherRate:co.teacherRate??'',
       mode:co.schedule?.mode||'weekly',
       slots:(co.schedule?.slots||[]).map(s=>({weekday:s.weekday??1,start:s.start||'',end:s.end||'',date:s.date||''})),
       phases:(co.schedule?.phases||[]).map(p=>({from:p.from||'',slots:(p.slots||[]).map(s=>({weekday:s.weekday??1,start:s.start||'',end:s.end||''}))})),
@@ -197,7 +201,9 @@ function cfNameInput(v){
   if(v.trim()===''){cfState.nameTouched=false;cfState.name=cfAutoName();return;} // 清空＝回到自動命名
   cfState.name=v;cfState.nameTouched=true;
 }
-function cfTeacherInput(v){cfState.teacherName=v;}
+function cfTeacherInput(v){cfState.teacherInput=v;}
+function cfAddTeacher(){const n=(cfState.teacherInput||'').trim();if(!n)return;if(!cfState.teachers.includes(n))cfState.teachers.push(n);cfState.teacherInput='';renderCourseForm();}
+function cfDelTeacher(i){cfState.teachers.splice(i,1);renderCourseForm();}
 function cfRateInput(v){cfState.teacherRate=v;}
 function cfSetMode(m){if(cfState.mode!==m){cfState.mode=m;cfAfterTypeAffecting();}}
 function cfSlotSet(i,f,v){cfState.slots[i][f]=v;if(f==='weekday')cfSyncAutoName();}
@@ -353,18 +359,26 @@ function renderCourseForm(){
     ${st.mode==='weekly'&&st.phases.length?`<div class="cm-hint" style="margin-top:6px">同一門課不同期別時間不同時用「換時段」；系統依日期自動套用當天生效的時段。</div>`:''}
   </div>`;
 
-  // 老師：打字自動完成；查無此名 → 建立課程時一併建檔（與老師管理同一份 teachers）
+  // 老師（可多位）：chips 加入；查無此名 → 建立課程時一併建檔（與老師管理同一份 teachers）
   const teachers=getTeachers().filter(x=>(x.status||'在職')==='在職');
   const tDl=teachers.map(x=>`<option value="${esc(x.name)}">`).join('');
-  const tKnown=st.teacherName.trim()&&teachers.some(x=>x.name===st.teacherName.trim());
-  const tNewHint=st.teacherName.trim()&&!tKnown?`<div class="cm-hint">「${esc(st.teacherName.trim())}」不在系統，建立課程時會自動建檔為新老師。</div>`:'';
+  const tChips=st.teachers.map((nm,i)=>{
+    const unknown=!teachers.some(x=>x.name===nm);
+    return`<span class="cf-chip">${esc(nm)}${unknown?'<span class="cf-chip-new">新</span>':''}<button class="co-stu-x" title="移除" onclick="cfDelTeacher(${i})">✕</button></span>`;
+  }).join('');
+  const tNewHint=st.teachers.some(nm=>!teachers.some(x=>x.name===nm))
+    ?`<div class="cm-hint">標「新」的老師不在系統，建立課程時會自動建檔。</div>`:'';
   const rateSec=t==='練習課'
     ?`<div class="cm-hint">練習課輔導老師薪資走打卡制，不在系統內設費率。</div>`
     :`<div class="cm-lbl" style="margin-top:12px">老師費率（薪資表用，可先空著）</div>
       <div class="cm-price-row"><input type="number" class="cm-input cm-price" min="0" inputmode="numeric" placeholder="未定" value="${st.teacherRate===''?'':esc(String(st.teacherRate))}" oninput="cfRateInput(this.value)"><span class="cm-unit">${cfRateUnit(t)}</span></div>`;
-  const teacherSec=`<div class="cm-sec"><div class="cm-lbl">老師${t==='練習課'?'（預設輔導老師，當堂可換）':''}</div>
-    <input class="cm-input" name="search-teacher" autocomplete="off" list="cf-teachers-dl" placeholder="輸入老師姓名…" value="${esc(st.teacherName)}" oninput="cfTeacherInput(this.value)" onchange="renderCourseForm()">
-    <datalist id="cf-teachers-dl">${tDl}</datalist>
+  const teacherSec=`<div class="cm-sec"><div class="cm-lbl">老師${t==='練習課'?'（預設輔導老師，當堂可換）':''}${st.teachers.length>1?`<span class="cm-count">${st.teachers.length}</span>`:''}</div>
+    ${tChips?`<div class="cf-chips">${tChips}</div>`:''}
+    <div class="co-add">
+      <input class="co-add-sel" name="search-teacher" autocomplete="off" list="cf-teachers-dl" placeholder="輸入老師姓名…" value="${esc(st.teacherInput)}" oninput="cfTeacherInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();cfAddTeacher()}">
+      <datalist id="cf-teachers-dl">${tDl}</datalist>
+      <button class="co-add-btn" onclick="cfAddTeacher()">＋ 加入</button>
+    </div>
     ${tNewHint}
     ${rateSec}
   </div>`;
@@ -420,9 +434,11 @@ function renderCourseForm(){
 // ── 存檔 ──
 function cfSubmit(){
   const st=cfState,t=cfType();
-  // 老師：以姓名對既有；查無此名 → 稍後建檔
-  const tname=(st.teacherName||'').trim();
-  if(!tname)return toast('請輸入老師','err');
+  // 老師（可多位）：收 chips ＋ 尚未按加入的輸入框文字；至少一位
+  const tnames=st.teachers.map(s=>s.trim()).filter(Boolean);
+  const pendingT=(st.teacherInput||'').trim();
+  if(pendingT&&!tnames.includes(pendingT))tnames.push(pendingT);
+  if(!tnames.length)return toast('請至少加入一位老師','err');
   const name=(st.name||'').trim()||cfAutoName().trim();
   if(!name)return toast('課名不能是空的（選學生或填科目讓系統命名，或直接輸入）','err');
   // 時段：只收完整的
@@ -443,17 +459,19 @@ function cfSubmit(){
     :[];
   for(const p of phases)for(const s of p.slots)if(s.end<=s.start)return toast('換時段的結束時間要晚於開始時間','err');
 
-  let teacher=getTeachers().find(x=>x.name===tname);
-  let teacherId=teacher?teacher.id:null;
-  if(!teacher){
-    const nt={id:Date.now(),name:tname,status:'在職'};
-    saveTeachers([...getTeachers(),nt]);
-    teacherId=nt.id;
-  }
+  // 逐一解析成 id；查無此名就建檔（一次可建多位，id 用 Date.now()+序避免同毫秒撞號）
+  const tlist=getTeachers().slice();
+  const teacherIds=[];let tCreated=false,created=0;
+  tnames.forEach(nm=>{
+    let tt=tlist.find(x=>x.name===nm);
+    if(!tt){tt={id:Date.now()+created,name:nm,status:'在職'};tlist.push(tt);created++;tCreated=true;}
+    if(!teacherIds.includes(tt.id))teacherIds.push(tt.id);
+  });
+  if(tCreated)saveTeachers(tlist);
   const noFee=(t==='練習課'||t==='試聽');
   const rec={
     id:st.editId??Date.now(),
-    name,type:t,teacherId,
+    name,type:t,teacherIds,
     teacherRate:t==='練習課'?null:(String(st.teacherRate).trim()===''?null:Math.max(0,parseInt(st.teacherRate,10)||0)),
     schedule:{mode:st.mode,slots,phases},
     room:st.room||'',
@@ -531,12 +549,12 @@ function goAddCourse(){switchPanel('add');switchAddTab('course');}
 function goAddStudent(){switchPanel('add');switchAddTab('student');}
 
 // ── 老師管理（設定頁）──
-// 老師檔只有 id/姓名/狀態；「教哪些課」存在課程側（courses.teacherId），這裡反查顯示
+// 老師檔只有 id/姓名/狀態；「教哪些課」存在課程側（courses.teacherIds，可多位），這裡反查顯示
 function renderTeacherAdmin(){
   const box=document.getElementById('teacher-admin');
   if(!box)return;
   const rows=getTeachers().map(t=>{
-    const used=getCourses().filter(c=>c.teacherId===t.id);
+    const used=getCourses().filter(c=>courseTeacherIds(c).includes(t.id));
     const retired=(t.status||'在職')==='離職';
     const courseList=used.length?used.map(c=>c.name).join('、'):'（尚未指派課程）';
     return`<div class="ta-row${retired?' ta-retired':''}">
@@ -590,7 +608,7 @@ function taToggleStatus(id){
 function taDelete(id){
   const t=getTeachers().find(x=>x.id===id);
   if(!t)return;
-  const used=getCourses().filter(c=>c.teacherId===id);
+  const used=getCourses().filter(c=>courseTeacherIds(c).includes(id));
   if(used.length)return toast(`不能刪：${t.name} 還有 ${used.length} 門課掛著（${used.map(c=>c.name).join('、')}）。先在那些課的編輯裡改指老師、或刪除課程。`,'err');
   if(!confirm(`刪除老師「${t.name}」？此操作無法復原。`))return;
   saveTeachers(getTeachers().filter(x=>x.id!==id));
@@ -617,7 +635,7 @@ function sysCourseSessions(co){
     }
     const[h,mi]=(sl.start||'0:0').split(':').map(Number);
     d.setHours(h||0,mi||0,0,0);
-    return{date:d,students:[],groups:[],classroom:co.room,teacher:teacherNameById(co.teacherId)};
+    return{date:d,students:[],groups:[],classroom:co.room,teacher:courseTeacherNames(co).join('、')};
   });
 }
 
@@ -683,7 +701,7 @@ function renderSysCourseModal(ctx){
   document.getElementById('course-modal-title').textContent=co.name;
   const noFee=(co.type==='練習課'||co.type==='試聽');
   const isPractice=co.type==='練習課';
-  const meta=[co.type,'👤 '+(teacherNameById(co.teacherId)||'未指定'),sysSlotLabel(co),co.room||''].filter(Boolean).join('　·　');
+  const meta=[co.type,'👤 '+(courseTeacherNames(co).join('、')||'未指定'),sysSlotLabel(co),co.room||''].filter(Boolean).join('　·　');
 
   const info=`<div class="cm-sec"><div class="cm-lbl">費用與薪資</div>
     <div class="cf-info-row">每堂收費：${noFee?'不收費（不進學費結算）':(co.defaultPrice!=null?co.defaultPrice+' 元/堂':'未定價')}</div>

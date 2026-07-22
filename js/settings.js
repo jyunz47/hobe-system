@@ -53,7 +53,7 @@ function buildCourseOverview(){
   const sysBucket={'一對一':'one','一對二':'pair','團班':'group','練習課':'practice','試聽':'trial'};
   const sys=getCourses().map(co=>({
     title:co.name,type:sysBucket[co.type]||'group',sys:co,
-    teachers:new Set([teacherNameById(co.teacherId)].filter(Boolean)),
+    teachers:new Set(courseTeacherNames(co)),
     sessions:sysCourseSessions(co),
     enrolled:getEnrollments({periodId:pid}).filter(en=>en.courseId===co.id),
   }));

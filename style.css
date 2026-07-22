@@ -631,6 +631,7 @@ body.hide-todo-chip .stu-info-chip{display:none}
 .cf-phase-x{margin-left:auto}
 .cf-add-phase{align-self:flex-start;margin-top:8px;padding:6px 11px;border:1px dashed var(--brd);background:none;color:var(--tx2);border-radius:var(--rs);font-size:12px;font-family:inherit;cursor:pointer}
 .cf-add-phase:hover{border-color:var(--ac);color:var(--ac)}
+.cf-chip-new{margin-left:5px;padding:0 5px;border-radius:99px;background:var(--al);color:var(--am);font-size:10px}
 .cf-type-row{display:flex;gap:6px;flex-wrap:wrap}
 .cf-type-chip{padding:5px 12px;border:1.5px solid var(--br);border-radius:99px;background:var(--sf);color:var(--tx2);font-size:12.5px;font-family:inherit;cursor:pointer;transition:all .12s}
 .cf-type-chip:hover{border-color:var(--ac)}
