@@ -1,7 +1,7 @@
 {
-  "name": "HOBE 日檢視",
-  "short_name": "日檢視",
-  "description": "補習班單日課表 · Apple 風時間軸",
+  "name": "HOBE 桌面日曆",
+  "short_name": "桌面日曆",
+  "description": "補習班單日課表 · 浮在桌面上的日曆視窗",
   "start_url": "./補習班排程系統.html?app=dayview",
   "scope": "./",
   "display": "standalone",

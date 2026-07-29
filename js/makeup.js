@@ -14,59 +14,15 @@ async function loadMakeup(silent=false){
   if(!gapi.client.getToken())return;
   if(!silent)showL('讀取待補課/調課清單...');
   try{
-    const y=getSchoolYear(),past=new Date(y,8,1),future=new Date(y+1,7,31,23,59,59);
-    const calEntries=Object.entries(calendarIds).filter(([name])=>MAKEUP_CALS.includes(name));
-    const all=await Promise.all(calEntries.map(async([name,id])=>{
-      try{const r=await cachedEventList({calendarId:id,timeMin:past.toISOString(),timeMax:future.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:2500});
-      return(r.result.items||[]).map(e=>({...e,_calId:id,_calName:name}));}catch(e){return[];}
-    }));
     const SUBJECTS=['數學','英文','理化','物理','化學','國文','生物','歷史','地理','社會','自然','寫作','作文'];
     const decorate=ev=>({...ev,
       subject:ev.subject&&SUBJECTS.includes(ev.subject)?ev.subject:(SUBJECTS.find(s=>ev.origTitle.includes(s))||'其他'),
       extraNote:(ev.desc||'').split('\n').slice(1).filter(Boolean).join(' · ')});
-    const calAbs=all.flat()
-      .filter(e=>/^【.+?請假】/.test(e.summary||'')||/^【調課(?:[：:].*?)?】/.test(e.summary||'')||/^【[^】]*曠課】/.test(e.summary||''))
-      .map(e=>decorate(parseEv(e)));
-    // 系統請假（driveData.absences，第 2 刀起）：展開成同形狀課堂物件一起進清單
-    const sysAbs=(typeof sysAbsenceEvents==='function'?sysAbsenceEvents():[]).map(decorate);
-    makeupList=[...calAbs,...sysAbs].sort((a,b)=>a.startDt-b.startDt);
-    // Scan 補課 and 調課 calendars to match against absences
-    const newMatchMap=new Map();
-    for(const calName of['補課','調課']){
-      const calId=calendarIds[calName];if(!calId)continue;
-      try{
-        const mr=await cachedEventList({calendarId:calId,timeMin:past.toISOString(),timeMax:future.toISOString(),singleEvents:true,orderBy:'startTime',maxResults:2500});
-        (mr.result.items||[]).forEach(calEv=>{
-          const desc=cleanDesc(calEv.description||'');
-          const sD=new Date(calEv.start.dateTime||calEv.start.date);
-          const eD=new Date(calEv.end.dateTime||calEv.end.date);
-          const extId=calEv.extendedProperties?.private?.originalAbsenceId?.trim();
-          const descId=desc.split('\n').find(l=>/^originalId:/.test(l))?.match(/^originalId:(.+)/)?.[1]?.trim();
-          const absId=extId||descId;
-          const firstLine=desc.split('\n')[0]||'';
-          const roomMatch=firstLine.match(/(小教室|大教室|108|208|309|石牌分校)/);
-          const room=roomMatch?roomMatch[1]:'';
-          const origTitle=(calEv.summary||'').replace(/^【.+?】/,'').trim();
-          const entry={calEventId:calEv.id,scheduledDate:sD.toISOString(),scheduledEnd:eD.toISOString(),room,origTitle,absentStudents:[],calName};
-          if(absId){
-            newMatchMap.set(absId,entry);
-          }else{
-            // Fallback: match by title
-            const titleMatch=calName==='補課'
-              ?(calEv.summary||'').match(/^【(.+?)補課[（(].*?[）)]】(.+)$/)
-              :(calEv.summary||'').match(/^【.+?的調課】(.+)$/);
-            if(titleMatch){
-              const matchOrigTitle=(calName==='補課'?titleMatch[2]:titleMatch[1]).trim();
-              const candidate=makeupList.find(a=>a.origTitle===matchOrigTitle&&!newMatchMap.has(a.id)&&a.absType===(calName==='補課'?'學生請假':'調課'));
-              if(candidate)newMatchMap.set(candidate.id,{...entry,origTitle:matchOrigTitle});
-            }
-          }
-        });
-      }catch(e){console.warn(`${calName}行事曆掃描失敗`,e);}
-    }
-    // Merge localStorage records as fallback for unmatched
-    getMakeupScheduledLS().forEach(rec=>{if(!newMatchMap.has(rec.originalId))newMatchMap.set(rec.originalId,{...rec,calName:rec.calName||'補課'});});
-    makeupMatchMap=newMatchMap;
+    // 清單來源＝系統請假紀錄（driveData.absences）：系統課堂的請假/曠課/調課，
+    // 以及第 4 刀從舊行事曆搬進來的快照紀錄。不再掃 Google Calendar。
+    makeupList=sysAbsenceEvents().map(decorate).sort((a,b)=>a.startDt-b.startDt);
+    // 已排的補課/調課＝系統紀錄本身（第 3 刀起排補課只寫紀錄、不建 Calendar 事件）
+    makeupMatchMap=new Map(getMakeupScheduledLS().map(rec=>[rec.originalId,{...rec,calName:rec.calName||'補課'}]));
     if(!silent){hideErr('makeup');populateMkFilters();renderMakeup();}
     const pendingCount=updateMakeupBadge();
     if(!silent)toast(`找到 ${pendingCount} 筆待安排`,'ok');
@@ -274,37 +230,17 @@ function sysSetMakeupSkip(ev,skipNames){
 async function markMakeupSkip(id){
   const ev=findEventById(id);if(!ev)return;
   const skip=[...new Set([...(ev.makeupSkip||[]),...(ev.absentStudents||[])])];
-  if(ev.courseId!=null){
-    sysSetMakeupSkip(ev,skip);
-    toast('已標記不補課（退半堂）','ok');
-    await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
-    return;
-  }
-  showL('標記不補課...');
-  try{
-    await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:id,resource:{extendedProperties:{private:{makeupSkip:JSON.stringify(skip)}}}});
-    invalidateEventCache();
-    hideL();toast('已標記不補課（退半堂）','ok');
-    await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
-  }catch(e){hideL();toast('操作失敗：'+(e.result?.error?.message||e.message),'err');}
+  sysSetMakeupSkip(ev,skip);
+  toast('已標記不補課（退半堂）','ok');
+  await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
 }
 // 改回補課：把這筆的請假學生從 makeupSkip 移除
 async function unmarkMakeupSkip(id){
   const ev=findEventById(id);if(!ev)return;
   const skip=(ev.makeupSkip||[]).filter(s=>!(ev.absentStudents||[]).includes(s));
-  if(ev.courseId!=null){
-    sysSetMakeupSkip(ev,skip);
-    toast('已改為補課','ok');
-    await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
-    return;
-  }
-  showL('改為補課...');
-  try{
-    await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:id,resource:{extendedProperties:{private:{makeupSkip:skip.length?JSON.stringify(skip):null}}}});
-    invalidateEventCache();
-    hideL();toast('已改為補課','ok');
-    await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
-  }catch(e){hideL();toast('操作失敗：'+(e.result?.error?.message||e.message),'err');}
+  sysSetMakeupSkip(ev,skip);
+  toast('已改為補課','ok');
+  await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
 }
 
 async function gotoMakeupEvent(id, ts){
@@ -663,13 +599,6 @@ function saveMakeupScheduled(ev,sS,sE,room,calEventId,calName='補課'){
 }
 
 async function deleteMakeupScheduled(originalId){
-  const rec=makeupMatchMap.get(originalId);
-  const calName=rec?.calName||'補課';
-  // 舊紀錄（第 3 刀前建的）有對應 Calendar 事件才需要刪；純系統紀錄 calEventId=null 直接跳過
-  if(rec?.calEventId&&calendarIds[calName]){
-    try{await gapi.client.calendar.events.delete({calendarId:calendarIds[calName],eventId:rec.calEventId});invalidateEventCache();}
-    catch(e){console.warn(`刪除${calName}事件失敗`,e);}
-  }
   makeupMatchMap.delete(originalId);
   driveData.makeupScheduled=getMakeupScheduledLS().filter(x=>x.originalId!==originalId);
   scheduleDriveSave();

@@ -2,18 +2,34 @@
 // 注意：因為這個檔依賴所有其他子系統的函式（loadToday、renderMakeup...），
 // HTML 載入順序中 init.js 必須擺最後。
 
-// ── App 模式：?app=dayview 開的獨立桌面視窗（openDayViewWindow）——藏側邊欄/工具列、登入後直達日檢視 ──
+// ── App 模式：?app=dayview 開的桌面日曆視窗（openDayViewWindow）——藏側邊欄/工具列、登入後直達日曆 ──
 function isDayApp(){return new URLSearchParams(location.search).get('app')==='dayview';}
 
-// ── PWA 一鍵安裝：攔 beforeinstallprompt 存起來，讓「安裝到桌面」鈕直接觸發原生安裝視窗（Chrome/Edge）──
+// ── 是不是已經在「桌面視窗」裡？＝已安裝的 App，或 ?win=1 開出來的桌面系統視窗。
+// 決定設定頁給哪顆鈕：分頁裡給「開啟桌面系統」，桌面視窗裡給「開啟桌面日曆」。──
+function isDesktopWin(){
+  return isStandalone()||new URLSearchParams(location.search).get('win')==='1';
+}
+
+// ── PWA 安裝：攔 beforeinstallprompt 存起來，讓設定頁的「安裝系統到桌面」鈕直接跳原生安裝視窗。
+// 事件只在「這個瀏覽器還沒裝過」時才發，所以 .ready 同時當作「還沒裝」的訊號＝鈕才顯示。──
 var installPromptEvent=null;
-window.addEventListener('beforeinstallprompt',(e)=>{e.preventDefault();installPromptEvent=e;const b=document.querySelector('.dv-installbtn');if(b)b.classList.add('ready');});
-window.addEventListener('appinstalled',()=>{installPromptEvent=null;if(typeof toast==='function')toast('已安裝到桌面！之後從 Launchpad／Dock 開啟','ok');});
+window.addEventListener('beforeinstallprompt',(e)=>{
+  e.preventDefault();
+  installPromptEvent=e;
+  const b=document.querySelector('.dv-installbtn');if(b)b.classList.add('ready');
+});
+window.addEventListener('appinstalled',()=>{
+  installPromptEvent=null;
+  const b=document.querySelector('.dv-installbtn');if(b)b.classList.remove('ready');
+  if(typeof toast==='function')toast('已安裝到桌面！之後從 Launchpad／Dock 開啟','ok');
+});
 
 // ── Page load ──
 window.addEventListener('load',()=>{
   if(isDayApp())document.body.classList.add('dv-app'); // manifest 換版＋標題已在 <head> 內處理
-  if(isStandalone())document.body.classList.add('dv-standalone'); // 已安裝的獨立視窗：不再顯示安裝/彈窗鈕
+  if(isStandalone())document.body.classList.add('dv-standalone'); // 已安裝的 App 視窗：不再顯示安裝鈕
+  if(isDesktopWin())document.body.classList.add('dv-deskwin');    // 已在桌面視窗：設定頁改給「開啟桌面日曆」
   const ck=setInterval(()=>{if(window.google&&window.gapi){clearInterval(ck);initAPIs();}},100);
   setDateDisplay(currentDate);
   document.getElementById('date-picker').value=toDateStr(currentDate);
@@ -225,9 +241,8 @@ async function onSignedIn(){
   try{const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+gapi.client.getToken().access_token}}).then(r=>r.json());setUSt('ok',info.email||'已登入','Google 帳號');if(info.email)localStorage.setItem('ghint',info.email);}catch(e){setUSt('ok','已登入','Google 帳號');}
   await loadFromFirestore();
   migrateCoursesToEnrollments();
-  await fetchCalIds();
+  await fetchCalIds();   // 只剩「舊請假搬進系統」一次性工具要用（該工具刪掉時一併移除）
   showPanel('courses');
-  openAddCourse();
   await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
   updateWeekTitle();
   if(isDayApp()){showPanel('dayview');renderDayView();} // 桌面視窗：登入後直達日檢視（dayEvents 已由 loadToday 備妥）

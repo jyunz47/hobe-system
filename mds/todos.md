@@ -44,7 +44,11 @@
    2. ✅ 第 2 刀（2026-07-17，老闆已驗收）：標記請假／曠課改寫系統（`driveData.absences`，studentId＋名字雙存）＋待補課清單納入系統請假
    3. ✅ 成績登記面板（2026-07-17）：每堂每生多筆 label+score、讀寫 `grades_<期別>`、今日課程分「成績課上／只點名下」兩區　← **待老闆驗收**
    4. ✅ 第 3 刀（2026-07-17）：排補課／調課純系統——確認只寫紀錄不建 Calendar 事件、空檔改掃系統課表、場次長回主頁（可點名）、系統課調課開放　← **待老闆驗收**
-   5. ⏳ 第 4 刀：**先搬遷再拆**——(a) 一次性把未完成的舊待補課（Calendar 掃出的請假/調課，以名字記）轉成系統請假紀錄、名字對回重建後的新學生；(b) 拔掉整層讀 Calendar 的舊碼（＝下方 ② 的批 2：loadMakeup 掃描、課表對帳、getStudentStats、價目表、courseSettings、行事曆課 modal、GIS/gapi Calendar token）　← **下一個開發動作**
+   5. 第 4 刀：**先搬遷再拆**
+      - ✅ (a) 搬遷工具（2026-07-29）：課程管理頁「舊請假搬進系統」，老闆已執行
+      - ✅ (b) 拔碼（2026-07-29）：loadMakeup 掃描、absence/week/makeup 的 Calendar 分支、課表對帳、舊「新增課程」面板、課程總覽掃行事曆——全部移除　← **待老闆驗收**
+      - ⏳ (c) **收尾一刀**：刪掉「舊請假搬進系統」一次性工具（`js/migrate-absences.js` ＋ HTML 卡片/modal ＋ 測試檔），連同它撐著的 Calendar 殘骸——`fetchCalIds`／`calendarIds`／`cachedEventList`／`CAL_NAMES`／`MAKEUP_CALS`／`js/parse.js`、GIS token 的 Calendar scope、登入頁「僅需讀取你的 Google 行事曆」文案。**做之前先確認老闆不會再需要跑一次搬遷**
+      - 註：`getStudentStats` 不用改——它讀的是 `makeupList`，(b) 停掉掃描後已自動變純系統
    - ⚠️ cutover 清空工具的「整份重寫」白名單**不含 absences**——工具已完成使命待刪（批 1），千萬別再按一次
 2. **② Cutover 重建** — ✅ 清空已執行（2026-07-16 前老闆按下）；重建＝**等第 1 刀驗收過**就可開始：用「新增課程/學生」頁建**真實暑期課表**（學生現場建檔長回來、名字打得跟以前一樣讓待補課清單對回）
 3. **①收尾**（開放改課名、練習課考卷上傳/派卷/列印、練習課名單收進系統）
@@ -80,8 +84,10 @@
   - 清空工具在**課程管理頁底部「Cutover 清空重建」**：列出將刪各項筆數，打「清空重建」四字才執行。**徹底清雲端（07-14 老闆加碼確認）**：主文件整份重寫（歷史殘留欄位一併消失）＋ `sharedData` 附屬文件（`attendance_*` 點名測試紀錄）全刪；保留欄位（`makeupScheduled`）以清空當下的雲端值為準。先寫雲端成功才動本機（寫失敗＝資料未動）。Google 行事曆與登入白名單完全不動。
   - 清完 → 「新增課程/學生」頁重建**暑期課表**（學生用表單的「查無此人現場建檔」長回來；**名字要打得跟以前一樣**，待補課清單、學生統計靠名字自動對回）。
   - **程式碼清理分兩批（07-14 老闆要求）**：
-    - **批 1（重建完成後即可刪）**：cutover 工具本身（settings.js 區塊＋HTML 卡片/modal）、一次性轉換 migrateCoursesToEnrollments＋marker、學生卡 `s.courses` 舊紀錄 fallback 顯示（清空後全系統不再有這欄）
-    - **批 2（等「全頁改讀系統」完成才能刪）**：整層讀 Calendar 的舊機制——備註解析名單 fallback、課表對帳、價目表（coursePrices）、courseSettings、行事曆課 modal 等。**現在刪主頁會直接壞**（主頁還在讀 Calendar 顯示課表）
+    - **批 1（重建完成後即可刪）**：cutover 工具本身（settings.js 區塊＋HTML 卡片/modal）、一次性轉換 migrateCoursesToEnrollments＋marker、學生卡 `s.courses` 舊紀錄 fallback 顯示（清空後全系統不再有這欄）、**舊請假搬遷工具**（`js/migrate-absences.js` 整檔＋HTML 卡片/modal＋測試檔，等第 4 刀 (a) 執行完且 (b) 做完再刪）
+    - ~~**批 2**~~：2026-07-29 第 4 刀 (b) 已執行大部分（課表對帳、Calendar 分支、舊新增課程面板、課程總覽掃描）。**剩下兩塊刻意沒動**：
+      - **價目表（`coursePrices`）＋ `courseSettings`**：不是讀 Calendar 的程式，是行事曆課的舊資料欄位；`effectivePrice()` 的學費地雷（見下方 ③）也在這裡。**跟學費系統一起做、單獨一刀**（牽扯到錢）
+      - **Calendar 登入殘骸**：見上方 ① 第 4 刀 (c)，等搬遷工具刪掉時一起收
   - 舊註記（過渡期殘影，重建後自然消失）：課程總覽行事曆課名單為空。
 
 - [ ] ⏳ **③ 學費系統：計算 + 學費條 + 收據**（前置：①②）

@@ -1,10 +1,7 @@
 // 設定頁：課程總覽（後台）
 // 把系統認得的每一門課攤開：類型、老師、單價、需登記成績；展開看登記名單／練習課每堂名單+科目。
-// 資料來源三路聯集：已載入課表（一般課程/練習課/加課三本）∪ 本期登記簿 ∪ 價目表。
-// 「需登記成績」開關存進 driveData.courseSettings（見 enrollment.js）。
-
-// 會算學費/成績的三本行事曆（同 students.js SCAN_CALS）；試聽/補課/調課不在內
-var SETTINGS_GRADE_CALS=['一般課程','練習課','加課'];
+// 資料來源（2026-07-29 第 4 刀後）：系統自有課程（driveData.courses）∪ 本期登記簿 ∪ 價目表。
+// 「需登記成績」開關：系統課存課程本體（courses.needsGrade），舊行事曆課存 driveData.courseSettings（見 enrollment.js）。
 
 // 課名正規化：去前後空白，避免同一門課因尾端空白被當兩門（parse.js origTitle 無標記時不 trim）
 function normTitle(t){return (t||'').trim();}
@@ -29,20 +26,8 @@ function buildCourseOverview(){
   const map=new Map();
   const get=t=>{const k=normTitle(t);if(!map.has(k))map.set(k,{title:k,type:null,teachers:new Set(),sessions:[],enrolled:[]});return map.get(k);};
 
-  // 已載入課表：本日 + 本週，去重（同一堂可能同時在兩個陣列），只取三本
-  const seen=new Set();
-  [...(typeof weekEvents!=='undefined'?weekEvents:[]),...(typeof dayEvents!=='undefined'?dayEvents:[])]
-    .forEach(e=>{
-      // 系統課堂（主頁改讀系統後 dayEvents/weekEvents 裝的是展開器產物）已由下方系統課入口涵蓋，跳過避免同課雙卡
-      if(e.courseId!=null)return;
-      if(!e.origTitle||!SETTINGS_GRADE_CALS.includes(e.calName)||seen.has(e.id))return;
-      seen.add(e.id);
-      const c=get(e.origTitle);
-      if(e.type==='practice'||e.calName==='練習課')c.type='practice';
-      else if(!c.type)c.type=e.type;
-      if(e.teacher)c.teachers.add(e.teacher);
-      c.sessions.push({date:e.startDt,students:e.students||[],groups:e.studentGroups||[],classroom:e.classroom,teacher:e.teacher});
-    });
+  // 註：原本這裡會掃 dayEvents/weekEvents 撈「行事曆課」建卡，2026-07-29 第 4 刀移除——
+  // 主頁改讀系統後這兩個陣列只剩系統課堂（走下面的系統課入口）與補課/調課場次（不建課卡）。
 
   // 本期登記簿（一般課程的固定名單）；有 courseId 的是系統課登記，走下面的系統課入口
   getEnrollments({periodId:pid}).forEach(en=>{if(en.courseId!=null)return;get(en.courseTitle).enrolled.push(en);});
@@ -349,8 +334,8 @@ async function confirmCutover(){
   hideL();
   closeCutoverModal();
   closeCourseModal();
-  // 清掉頁面暫存並全頁重繪（課程卡名單清空後 fallback 回備註名字）
-  stuEditId=null;_editEnrollments=[];scanData=null;_recon=null;
+  // 清掉頁面暫存並全頁重繪
+  stuEditId=null;_editEnrollments=[];
   renderSettings();
   renderStudents();
   renderTeacherAdmin();

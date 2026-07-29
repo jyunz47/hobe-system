@@ -158,61 +158,8 @@ function migrateCoursesToEnrollments(){
   console.log(`[enrollment] 一次性轉換完成：${added} 筆 student.courses → 修課登記簿（${pid}）`);
 }
 
-// ── 掃描帶入：只補不刪 ──
-// 掃描更新 student.courses 時順手補登記簿缺的課；刪除交給之後的對帳工具
-// （自動刪會弄丟個人覆蓋價，且掃描結果不一定比登記簿正確）
-function ensureEnrollments(studentId,courseTitles){
-  const pid=yearPeriodId();
-  const ens=driveData.enrollments||[];
-  let added=0;
-  (courseTitles||[]).filter(t=>!/^【調課】/.test(t)).forEach(title=>{
-    if(ens.some(en=>en.studentId===studentId&&en.courseTitle===title&&en.periodId===pid))return;
-    ens.push(makeEnrollment({studentId,courseTitle:title,periodId:pid}));
-    added++;
-  });
-  if(added){driveData.enrollments=ens;scheduleDriveSave();refreshCourseCards();}
-  return added;
-}
-
-// ── 課表對帳：行事曆掃描結果 vs 修課登記簿 ──
-// 純函式，只比對、不寫任何資料；動手與否由 UI 上的使用者逐條決定。
-// entries：掃描解析後的 [{name, gradeHint, courses:[課名]}]（gradeHint 來自備註年級標注，可為 null）
-// 回傳分桶：
-//   unknown   查無此人（未建檔）          [{name, gradeHint, courses}]
-//   ambiguous 同名無法區分                [{name, gradeHint, courses, matches}]
-//   alumni    歷屆生出現在課表            [{stu, courses}]
-//   diffs     已建檔在學生的差異          [{stu, missing:[課名], extra:[enrollment]}]
-//             missing＝行事曆有、登記簿沒有（候選補登）；extra＝登記簿有、行事曆沒有（候選退課）
-//   okCount   完全一致的在學生人數
-function computeReconciliation(entries,students,enrollments,pid){
-  const unknown=[],ambiguous=[],alumni=[],diffs=[];
-  // 先把掃描結果歸戶到學生 id（同一學生可能以「小明」「（國二）小明」兩種寫法出現）
-  const calByStu=new Map(); // stuId → Set(課名)
-  entries.forEach(en=>{
-    const matches=en.gradeHint
-      ?students.filter(s=>s.name===en.name&&s.grade===en.gradeHint)
-      :students.filter(s=>s.name===en.name);
-    if(!matches.length){unknown.push({name:en.name,gradeHint:en.gradeHint,courses:[...en.courses]});return;}
-    if(matches.length>1){ambiguous.push({name:en.name,gradeHint:en.gradeHint,courses:[...en.courses],matches});return;}
-    const stu=matches[0];
-    if((stu.status||'在學')!=='在學'){alumni.push({stu,courses:[...en.courses]});return;}
-    if(!calByStu.has(stu.id))calByStu.set(stu.id,new Set());
-    en.courses.forEach(c=>calByStu.get(stu.id).add(c));
-  });
-  // 逐位在學生比對（含「登記簿有修課但整期沒出現在行事曆」的學生）
-  let okCount=0;
-  students.filter(s=>(s.status||'在學')==='在學').forEach(stu=>{
-    const calSet=calByStu.get(stu.id)||new Set();
-    const ledger=enrollments.filter(e=>e.studentId===stu.id&&e.periodId===pid);
-    if(!calSet.size&&!ledger.length)return; // 跟這期完全無關的學生不列
-    const ledgerTitles=new Set(ledger.map(e=>e.courseTitle));
-    const missing=[...calSet].filter(c=>!ledgerTitles.has(c));
-    const extra=ledger.filter(e=>!calSet.has(e.courseTitle));
-    if(!missing.length&&!extra.length){okCount++;return;}
-    diffs.push({stu,missing,extra});
-  });
-  return{unknown,ambiguous,alumni,diffs,okCount};
-}
+// 註：課表對帳（computeReconciliation / ensureEnrollments）於 2026-07-29 第 4 刀移除——
+// 它的唯一輸入是 Google 行事曆備註的名字，系統改自有課表後名冊由登記簿正向建立，無可對之帳。
 
 // ── 價目表編輯 modal ──
 // 列出「價目表已有的 + 本期登記簿出現過的」所有課名；空白價格 = 未定價

@@ -27,26 +27,47 @@ function _dvAP(d){
   return m?`${h}:${String(m).padStart(2,'0')}${ap}`:`${h}${ap}`;
 }
 
-// 一鍵安裝成桌面 App：有原生安裝事件就直接跳；沒有（已裝／Safari／尚未就緒）給手動指引
+// 把 HOBE 系統安裝成桌面 App。桌面上只該有這一個 App——桌面日曆是從它裡面開的視窗，
+// 不再另外安裝（以前那個「HOBE 日檢視」App 就是這樣多出來的）。
+// 這顆鈕平常藏著，只有瀏覽器真的發了安裝事件（＝還沒裝過）才加 .ready 冒出來。
 function dvInstall(){
   if(installPromptEvent){
     installPromptEvent.prompt();
-    installPromptEvent.userChoice.finally(()=>{installPromptEvent=null;});
+    installPromptEvent.userChoice.finally(()=>{
+      installPromptEvent=null;
+      const b=document.querySelector('.dv-installbtn');if(b)b.classList.remove('ready');
+    });
     return;
   }
-  if(typeof toast==='function')toast('若沒跳出安裝視窗：Chrome 點網址列右邊「安裝」圖示；Safari 用「檔案 → 加入 Dock」','inf',true);
+  if(typeof toast==='function')toast('沒跳出安裝視窗：Chrome 點網址列右邊的安裝圖示（顯示「Open in app」＝已經裝過了）；Safari 用「檔案 → 加入 Dock」','inf');
 }
 
-// 彈出獨立桌面視窗（快速全螢幕入口）；正式「放桌面」建議走 PWA 安裝
-function openDayViewWindow(){
+// 開一個置中的獨立視窗（沒有網址列／分頁列）。同 origin 沿用登入，不用重登。
+function _dvOpenWin(query,name){
   const w=Math.min(1240,(screen.availWidth||1440)-80);
   const h=Math.min(900,(screen.availHeight||900)-80);
   const left=Math.round(((screen.availWidth||1440)-w)/2);
   const top=Math.round(((screen.availHeight||900)-h)/2);
-  const win=window.open(location.pathname+'?app=dayview','hobe-dayview',`popup=yes,width=${w},height=${h},left=${left},top=${top}`);
-  if(!win){if(typeof toast==='function')toast('視窗被瀏覽器擋下，請允許此網站的彈出視窗','err');return;}
-  win.focus();
+  const win=window.open(location.pathname+query,name,`popup=yes,width=${w},height=${h},left=${left},top=${top}`);
+  if(!win){if(typeof toast==='function')toast('視窗被瀏覽器擋下，請允許此網站的彈出視窗','err');return null;}
+  win.focus();return win;
 }
+
+// 兩層桌面流程：
+//   瀏覽器分頁 →「🖥 開啟桌面系統」→ 完整系統的桌面視窗（?win=1）
+//   桌面系統視窗／已安裝的 App → 設定 →「⧉ 開啟桌面日曆」→ 滿版日曆浮窗（?app=dayview）
+// 分頁裡不給「開啟桌面日曆」：老闆的用法是先進桌面系統，日曆從那裡開。
+//
+// ⚠️ 網頁「無法」用程式叫起已安裝的 App——那是網址列「Open in app」的權限，瀏覽器刻意不開放給 JS
+//（否則任何網站都能亂開你電腦上的 App）。所以這顆鈕做次好的事：
+//   還沒安裝 → 直接跳原生安裝視窗，裝完 Chrome 會自己用 App 視窗開起來
+//   已經安裝 → 開一個外觀相同的桌面視窗，並提示「Open in app → 一律用 App 開啟」可以一勞永逸
+function openSystemWindow(){
+  if(installPromptEvent){dvInstall();return;} // 還沒裝：裝了就直接有 App 視窗
+  _dvOpenWin('?win=1','hobe-app');
+  if(typeof toast==='function')toast('要用桌面上那個 App 開：點網址列右邊「Open in app」，勾「一律用應用程式開啟」，之後這個網址會自動進 App','inf');
+}
+function openDayViewWindow(){_dvOpenWin('?app=dayview','hobe-dayview');}
 
 // 導覽：設定日期並重載（loadToday 尾端會 renderDayView；未登入時直接重畫）
 function dvNav(d){

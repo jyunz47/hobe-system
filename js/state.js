@@ -61,8 +61,8 @@ function findMakeupScheduledById(originalId){
 
 // ── Calendar API 快取 ──
 // 同一 timeRange 在 TTL 內重複查同一行事曆 → 直接用上次的結果，省一次網路請求
-// 切換日期/週次、開 slot picker 都會大量受益
-// 寫操作（patch/insert/delete）後務必呼叫 invalidateEventCache()，否則會看到過時資料
+// ⚠️ 2026-07-29 第 4 刀後，系統已不再讀寫 Google Calendar；這層只剩「舊請假搬進系統」
+// 一次性工具在用（js/migrate-absences.js），該工具刪掉時整段連同 calendarIds/CAL_NAMES 一併移除。
 var _eventListCache=new Map();
 var EVENT_CACHE_TTL_MS=30000; // 30 秒
 async function cachedEventList(params){

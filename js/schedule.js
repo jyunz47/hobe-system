@@ -115,38 +115,41 @@ function courseOccurrencesInRange(course,start,end){
   return out;
 }
 
-function _makeOccurrence(course,day,slotIdx,startDt,endDt,rosterNames,studentGroups){
-  // 穩定合成 id：同一堂重載後不變（點名/請假紀錄以此為鍵）。sys: 前綴標明「系統課堂」非 Calendar 事件
-  const occId=`sys:${course.id}:${toDateStr(day)}:${slotIdx}`;
-  // 疊加請假狀態（第 2 刀）：查系統請假紀錄，欄位語意對齊 parseEv 的標題解析結果
-  const ab=findAbsenceByOcc(occId);
-  let abs={isAbsent:false,isPartialAbsent:false,isFullAbsent:false,
+// 請假紀錄 + 該堂名冊 → 課堂物件的請假欄位（語意對齊 parseEv 的標題解析結果）。
+// 系統課堂（_makeOccurrence）與舊行事曆搬遷的快照紀錄（_snapshotOccurrence）共用同一套判斷。
+function _absFields(ab,rosterNames){
+  if(!ab)return{isAbsent:false,isPartialAbsent:false,isFullAbsent:false,
     absentWho:'',absType:'',absentStudents:[],
     isNoShow:false,noShowStudents:[],absenceTiming:{},makeupSkip:[],
     isRescheduled:false,rescheduleReason:''};
-  if(ab){
-    const leaveNames=(ab.leave||[]).map(x=>x.name);
-    const noShowNames=(ab.noShow||[]).map(x=>x.name);
-    const teacherAbs=!!ab.teacherAbsent;
-    const resched=!!ab.resched;
-    const isAbsent=teacherAbs||leaveNames.length>0;
-    const total=rosterNames.length;
-    const timing={};
-    (ab.leave||[]).forEach(x=>{timing[x.name]=x.timing||'B';});
-    noShowNames.forEach(n=>{timing[n]='C';});
-    abs={
-      isAbsent,
-      isPartialAbsent:isAbsent&&!teacherAbs&&!resched&&total>0&&leaveNames.length<total,
-      // 調課＝整堂移走（同 parseEv：isRescheduled 視為 full absent、absentStudents=全名冊）
-      isFullAbsent:resched||teacherAbs||(isAbsent&&(total===0||leaveNames.length>=total)),
-      absentWho:teacherAbs?'老師':leaveNames.join('、'),
-      absType:resched?'調課':(teacherAbs?'老師請假':(isAbsent?'學生請假':'')),
-      absentStudents:resched?rosterNames.slice():(teacherAbs?[]:leaveNames),
-      isNoShow:noShowNames.length>0,noShowStudents:noShowNames,
-      absenceTiming:timing,makeupSkip:(ab.makeupSkip||[]).slice(),
-      isRescheduled:resched,rescheduleReason:ab.reschedReason||'',
-    };
-  }
+  const leaveNames=(ab.leave||[]).map(x=>x.name);
+  const noShowNames=(ab.noShow||[]).map(x=>x.name);
+  const teacherAbs=!!ab.teacherAbsent;
+  const resched=!!ab.resched;
+  const isAbsent=teacherAbs||leaveNames.length>0;
+  const total=rosterNames.length;
+  const timing={};
+  (ab.leave||[]).forEach(x=>{timing[x.name]=x.timing||'B';});
+  noShowNames.forEach(n=>{timing[n]='C';});
+  return{
+    isAbsent,
+    isPartialAbsent:isAbsent&&!teacherAbs&&!resched&&total>0&&leaveNames.length<total,
+    // 調課＝整堂移走（同 parseEv：isRescheduled 視為 full absent、absentStudents=全名冊）
+    isFullAbsent:resched||teacherAbs||(isAbsent&&(total===0||leaveNames.length>=total)),
+    absentWho:teacherAbs?'老師':leaveNames.join('、'),
+    absType:resched?'調課':(teacherAbs?'老師請假':(isAbsent?'學生請假':'')),
+    absentStudents:resched?rosterNames.slice():(teacherAbs?[]:leaveNames),
+    isNoShow:noShowNames.length>0,noShowStudents:noShowNames,
+    absenceTiming:timing,makeupSkip:(ab.makeupSkip||[]).slice(),
+    isRescheduled:resched,rescheduleReason:ab.reschedReason||'',
+  };
+}
+
+function _makeOccurrence(course,day,slotIdx,startDt,endDt,rosterNames,studentGroups){
+  // 穩定合成 id：同一堂重載後不變（點名/請假紀錄以此為鍵）。sys: 前綴標明「系統課堂」非 Calendar 事件
+  const occId=`sys:${course.id}:${toDateStr(day)}:${slotIdx}`;
+  // 疊加請假狀態（第 2 刀）：查系統請假紀錄
+  const abs=_absFields(findAbsenceByOcc(occId),rosterNames);
   // 課名依課堂日期取（namePhases：某日起改叫別的，名單期中變動時用）
   const occName=courseNameOn(course,day);
   return{
@@ -174,11 +177,34 @@ function expandCoursesForRange(start,end){
   return out;
 }
 
+// 舊行事曆搬遷來的請假紀錄（第 4 刀）：課程本身已不存在系統裡，紀錄自帶 snapshot
+// （課名/時段/教室/老師/名單），直接照快照長出課堂物件，不需要 findCourseById。
+function _snapshotOccurrence(rec){
+  const sn=rec.snapshot||{};
+  const startDt=new Date(sn.start),endDt=new Date(sn.end);
+  const roster=(sn.students||[]).slice();
+  return{
+    id:rec.occId,
+    title:sn.title||'',origTitle:sn.title||'',
+    desc:'',notes:sn.notes||'',
+    teacher:sn.teacher||'',classroom:sn.classroom||'',subject:sn.subject||'',
+    type:sn.type||'group',
+    students:roster,studentGroups:sn.studentGroups||[],
+    startDt,endDt,
+    durMins:Math.round((endDt-startDt)/60000),
+    calId:null,calName:sn.calName||'一般課程',
+    courseId:null,               // 沒有對應的系統課
+    isLegacyAbsence:true,        // 標記來源：走系統寫入路徑，但不長在今日/本週（那門課早已不排）
+    ..._absFields(rec,roster),
+  };
+}
+
 // 系統請假紀錄 → 課堂物件（供待補課清單/學生統計）：
 // 每筆紀錄重建它那一堂（含請假疊加），課程已刪的紀錄跳過（deleteCourse 會清，這裡防呆）
 function sysAbsenceEvents(){
   const out=[];
   getAbsences().forEach(rec=>{
+    if(rec.snapshot){out.push(_snapshotOccurrence(rec));return;}
     const co=findCourseById(rec.courseId);if(!co)return;
     const day=new Date(rec.date);
     const occ=courseOccurrencesInRange(co,day,day).find(o=>o.id===rec.occId);
@@ -186,6 +212,11 @@ function sysAbsenceEvents(){
   });
   return out;
 }
+
+// 這堂課的請假/調課/不補課要寫進系統（driveData.absences）還是 Google Calendar？
+// 系統課堂有 courseId；舊行事曆搬遷的快照紀錄沒有 courseId 但一樣走系統路徑。
+// 第 4 刀拔掉 Calendar 分支後，這個判斷會整個消失（屆時全部都走系統）。
+function isSysEvent(ev){return !!ev&&(ev.courseId!=null||ev.isLegacyAbsence===true);}
 
 // 已排補課/調課（makeupScheduled 紀錄）→ 課堂物件（第 3 刀起主頁直接長補課場次，不靠 Google Calendar）
 // 紀錄本身帶齊顯示所需（時段/教室/名單/原課名）；老師從原系統課反查（舊行事曆紀錄查無就留空）

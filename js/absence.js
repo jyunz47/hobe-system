@@ -213,25 +213,10 @@ async function confirmAbs(id,sfx){
   // Close panels
   const panel=document.getElementById('absp-'+id);if(panel)panel.classList.remove('open');
   const panelW=document.getElementById('absp-w-'+id);if(panelW)panelW.classList.remove('open');
-  // 系統課堂：寫 driveData.absences，不碰 Google Calendar
-  if(ev.courseId!=null){
-    sysApplyAbsence(ev,state);
-    toast('已標記：'+newTitle,'ok');
-    await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
-    if(selectedWeekEvent===id) closeWeekModal();
-    return;
-  }
-  showL('更新 Google Calendar...');
-  try{
-    // 把每位學生的請假時機 map 存進隱藏欄位，供日後學費系統讀（老師請假清掉）
-    const resource={summary:newTitle};
-    resource.extendedProperties={private:{absenceTiming:res.timing&&Object.keys(res.timing).length?JSON.stringify(res.timing):null}};
-    await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:id,resource});
-    invalidateEventCache();
-    hideL();toast('已標記：'+newTitle,'ok');
-    await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
-    if(selectedWeekEvent===id) closeWeekModal();
-  }catch(err){hideL();toast('更新失敗：'+(err.result?.error?.message||err.message),'err');}
+  sysApplyAbsence(ev,state);
+  toast('已標記：'+newTitle,'ok');
+  await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
+  if(selectedWeekEvent===id) closeWeekModal();
 }
 
 // ── 取消請假流程 ──
@@ -288,48 +273,22 @@ async function confirmCancel(id){
   doCancel(id,ev,toCancel);
 }
 
-// 組標題＋修剪後的時機 map（保留指定的請假/曠課名單），供取消流程共用
-function rebuildAbsTitle(ev,leaveArr,noShowArr){
-  let title='';
-  if(leaveArr.length)title+=`【${leaveArr.join('、')}請假】`;
-  if(noShowArr.length)title+=`【${noShowArr.join('、')}曠課】`;
-  title+=ev.origTitle;
-  const keep=new Set([...leaveArr,...noShowArr]);
-  const timing={};
-  Object.entries(ev.absenceTiming||{}).forEach(([k,v])=>{if(keep.has(k))timing[k]=v;});
-  return{title,extProp:{private:{absenceTiming:Object.keys(timing).length?JSON.stringify(timing):null}}};
-}
-
+// 取消請假：從請假紀錄移除（保留曠課群組），紀錄清空即刪整筆
 async function doCancel(id,ev,cancelStudents){
-  // 系統課堂：從請假紀錄移除（保留曠課群組），紀錄清空即刪整筆
-  if(ev.courseId!=null){
-    const clearAll=(cancelStudents.length===0||ev.type==='one');
-    let list=getAbsences().slice();
-    const rec=list.find(a=>a.occId===id);
-    if(rec){
-      rec.teacherAbsent=clearAll?false:rec.teacherAbsent;
-      rec.leave=clearAll?[]:(rec.leave||[]).filter(x=>!cancelStudents.includes(x.name));
-      rec.makeupSkip=(rec.makeupSkip||[]).filter(n=>(rec.leave||[]).some(x=>x.name===n)); // 不再請假的人不留不補課標記
-      rec.updatedAt=new Date().toISOString();
-      if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length&&!rec.resched)list=list.filter(a=>a!==rec);
-      saveAbsences(list);
-    }
-    toast('已取消請假','ok');
-    await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
-    closeWeekModal();
-    return;
+  const clearAll=(cancelStudents.length===0||ev.type==='one');
+  let list=getAbsences().slice();
+  const rec=list.find(a=>a.occId===id);
+  if(rec){
+    rec.teacherAbsent=clearAll?false:rec.teacherAbsent;
+    rec.leave=clearAll?[]:(rec.leave||[]).filter(x=>!cancelStudents.includes(x.name));
+    rec.makeupSkip=(rec.makeupSkip||[]).filter(n=>(rec.leave||[]).some(x=>x.name===n)); // 不再請假的人不留不補課標記
+    rec.updatedAt=new Date().toISOString();
+    if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length&&!rec.resched)list=list.filter(a=>a!==rec);
+    saveAbsences(list);
   }
-  showL('恢復課程標題...');
-  try{
-    // 取消請假：清掉指定（或全部）請假學生，保留既有曠課群組
-    const remaining=(cancelStudents.length===0||ev.type==='one')?[]:ev.absentStudents.filter(s=>!cancelStudents.includes(s));
-    const {title,extProp}=rebuildAbsTitle(ev,remaining,ev.noShowStudents||[]);
-    await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:id,resource:{summary:title,extendedProperties:extProp}});
-    invalidateEventCache();
-    hideL();toast('已取消請假','ok');
-    await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
-    closeWeekModal();
-  }catch(err){hideL();toast('操作失敗：'+(err.result?.error?.message||err.message),'err');}
+  toast('已取消請假','ok');
+  await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
+  closeWeekModal();
 }
 
 // ── 取消曠課流程（與取消請假對稱）：單人直接取消、多人跳選人 picker，只動曠課群組 ──
@@ -387,32 +346,17 @@ async function confirmCancelNoShow(id){
   doCancelNoShow(id,ev,toCancel);
 }
 
+// 取消曠課：從曠課群組移除（保留請假群組），紀錄清空即刪整筆
 async function doCancelNoShow(id,ev,cancelStudents){
-  // 系統課堂：從曠課群組移除（保留請假群組），紀錄清空即刪整筆
-  if(ev.courseId!=null){
-    let list=getAbsences().slice();
-    const rec=list.find(a=>a.occId===id);
-    if(rec){
-      rec.noShow=(cancelStudents.length===0)?[]:(rec.noShow||[]).filter(x=>!cancelStudents.includes(x.name));
-      rec.updatedAt=new Date().toISOString();
-      if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length&&!rec.resched)list=list.filter(a=>a!==rec);
-      saveAbsences(list);
-    }
-    toast('已取消曠課','ok');
-    await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
-    closeWeekModal();
-    return;
+  let list=getAbsences().slice();
+  const rec=list.find(a=>a.occId===id);
+  if(rec){
+    rec.noShow=(cancelStudents.length===0)?[]:(rec.noShow||[]).filter(x=>!cancelStudents.includes(x.name));
+    rec.updatedAt=new Date().toISOString();
+    if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length&&!rec.resched)list=list.filter(a=>a!==rec);
+    saveAbsences(list);
   }
-  showL('取消曠課...');
-  try{
-    // 取消曠課：清掉指定（或全部）曠課學生，保留既有請假群組
-    const remaining=(cancelStudents.length===0)?[]:(ev.noShowStudents||[]).filter(s=>!cancelStudents.includes(s));
-    const leave=ev.isAbsent&&ev.absType!=='老師請假'?ev.absentStudents:[];
-    const {title,extProp}=rebuildAbsTitle(ev,leave,remaining);
-    await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:id,resource:{summary:title,extendedProperties:extProp}});
-    invalidateEventCache();
-    hideL();toast('已取消曠課','ok');
-    await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
-    closeWeekModal();
-  }catch(err){hideL();toast('操作失敗：'+(err.result?.error?.message||err.message),'err');}
+  toast('已取消曠課','ok');
+  await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
+  closeWeekModal();
 }

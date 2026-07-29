@@ -6,11 +6,12 @@
 <title>補習班排程系統</title>
 <link rel="manifest" href="manifest.json" id="manifest-link">
 <script>
-// 日檢視 App 模式（?app=dayview）：在 <head> 解析階段就換成專屬 manifest，
-// 讓 Chrome/Safari 的「安裝／加入 Dock」裝出的是「直接開日檢視的獨立視窗」（非主系統首頁）。
+// 桌面日曆模式（?app=dayview）：在 <head> 解析階段就換成專屬 manifest，
+// 讓這個視窗有自己的名字「HOBE 桌面日曆」（設定頁的「⧉ 開啟桌面日曆」開的就是它）。
+// 注意：系統只該有「HOBE 補習班排程系統」一個安裝到桌面的 App，桌面日曆是它開出來的視窗，不另外安裝。
 if(new URLSearchParams(location.search).get('app')==='dayview'){
   var _ml=document.getElementById('manifest-link');if(_ml)_ml.href='manifest-dayview.json';
-  document.title='HOBE 日檢視';
+  document.title='HOBE 桌面日曆';
 }
 </script>
 <meta name="theme-color" content="#1F1C19">
@@ -135,9 +136,8 @@ if ('serviceWorker' in navigator) {
         </div>
       </div>
 
-      <!-- C+D: 今日課程卡 + 新增課程
-           新增課程面板 2026-05-28 暫時隱藏（使用頻率太低）。
-           恢復方式：拿掉下方 ac-inline-panel 的 hidden、拿掉這層 courses-layout 的 inline style -->
+      <!-- C: 今日課程卡（原並排的舊「新增課程」行內面板 2026-07-29 第 4 刀移除，
+           它直接寫 Google Calendar；建課走「新增課程/學生」頁）-->
       <div class="courses-layout" style="grid-template-columns:1fr">
         <div class="today-panel">
           <div class="today-panel-hd">
@@ -161,81 +161,6 @@ if ('serviceWorker' in navigator) {
             </div>
             <div class="tsum" id="today-summary"></div>
             <div class="tgrid" id="clist-today"><div class="empty" style="grid-column:1/-1">載入中...</div></div>
-          </div>
-        </div>
-
-        <!-- Inline Add Course Panel -->
-        <div class="ac-inline-panel" hidden>
-          <div class="ac-panel-hd">新增課程</div>
-          <div class="ac-panel-body">
-            <div class="ac-row">
-              <label class="ac-lbl">課程名稱</label>
-              <input id="ac-name" class="ac-input" placeholder="例：國二理化班">
-            </div>
-            <div class="ac-row2">
-              <div>
-                <label class="ac-lbl">行事曆</label>
-                <select id="ac-cal" class="ac-select">
-                  <option value="一般課程">一般課程</option>
-                  <option value="試聽">試聽</option>
-                  <option value="練習課">練習課</option>
-                  <option value="加課">加課</option>
-                </select>
-              </div>
-              <div>
-                <label class="ac-lbl">重複</label>
-                <div class="ac-radios">
-                  <label><input type="radio" name="ac-repeat" value="once" checked> 單次</label>
-                  <label><input type="radio" name="ac-repeat" value="weekly"> 每週</label>
-                </div>
-              </div>
-            </div>
-            <div class="ac-row">
-              <label class="ac-lbl">日期</label>
-              <input id="ac-date" class="ac-input" type="date">
-            </div>
-            <div class="ac-row2">
-              <div>
-                <label class="ac-lbl">開始</label>
-                <input id="ac-start" class="ac-input" type="time">
-              </div>
-              <div>
-                <label class="ac-lbl">結束</label>
-                <input id="ac-end" class="ac-input" type="time">
-              </div>
-            </div>
-            <div class="ac-row2">
-              <div>
-                <label class="ac-lbl">教室</label>
-                <select id="ac-room" class="ac-select">
-                  <option value="">不指定</option>
-                  <option>小教室</option>
-                  <option>大教室</option>
-                  <option>108</option>
-                  <option>208</option>
-                  <option>309</option>
-                </select>
-              </div>
-              <div>
-                <label class="ac-lbl">老師</label>
-                <input id="ac-teacher" class="ac-input" placeholder="老師姓名">
-              </div>
-            </div>
-            <div class="ac-row">
-              <label class="ac-lbl">學生</label>
-              <div class="ac-chips-wrap" onclick="document.getElementById('ac-stu-input').focus()">
-                <div class="ac-chips" id="ac-chips">
-                  <input id="ac-stu-input" class="ac-stu-input" placeholder="輸入姓名按 Enter 新增" onkeydown="acStuKeydown(event)">
-                </div>
-              </div>
-              <div class="ac-disambig" id="ac-disambig" style="display:none">
-                <div class="ac-disambig-title" id="ac-disambig-title"></div>
-                <div class="ac-disambig-opts" id="ac-disambig-opts"></div>
-              </div>
-            </div>
-          </div>
-          <div class="ac-panel-ft">
-            <button class="btn btnp" style="width:100%" onclick="submitAddCourse()">新增課程</button>
           </div>
         </div>
       </div>
@@ -264,8 +189,12 @@ if ('serviceWorker' in navigator) {
       .dv-seg-b.on{background:#4a4642;color:#fff}
       .dv-actbtn{border:1px solid #3a3630;background:#2c2a27;color:#e6e2db;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;margin-left:8px}
       .dv-actbtn:hover{background:#38342f}
-      .dv-installbtn{display:none}
-      .dv-installbtn.ready{background:#3a5c47;border-color:#4a7059;color:#eaf3ee}
+      .dv-setcard{margin-bottom:14px}
+      .dv-setcard .set-card-sub{margin-bottom:0}  /* 卡片裡沒有其他內容，不留下方空白 */
+      .dv-installbtn{display:none}          /* 只在瀏覽器真的可以安裝時才冒出來（加 .ready）*/
+      .dv-installbtn.ready{display:inline-block}
+      /* 預設＝瀏覽器分頁：給「開啟桌面系統」 */
+      .dv-popbtn,.dv-sub-desk{display:none}
       .dv-body{display:flex;min-height:560px}
       .dv-left{flex:1;min-width:0;display:flex;flex-direction:column;padding:0 18px 18px}
       .dv-header{padding:16px 2px 4px}
@@ -316,12 +245,29 @@ if ('serviceWorker' in navigator) {
       body.dv-app .main{margin-left:0}
       body.dv-app .content{padding:0}
       body.dv-app .dv-wrap{border:none;border-radius:0;min-height:100vh}
-      body.dv-app .dv-installbtn{display:inline-block}  /* ?app=dayview 分頁：顯示安裝鈕（裝的是日檢視 App）*/
-      body.dv-app .dv-popbtn{display:none}
-      body.dv-standalone .dv-installbtn,body.dv-standalone .dv-popbtn{display:none} /* 已安裝的獨立視窗：兩鈕都收 */
+      /* 桌面日曆視窗本身：整張設定卡收起來（已經是它了，也不該再裝成第二個 App）*/
+      body.dv-app .dv-setcard{display:none}
+      /* 已在桌面視窗（已安裝 App 或 ?win=1）：換成「開啟桌面日曆」，不再叫他開桌面系統 */
+      body.dv-deskwin .dv-popbtn{display:inline-block}
+      body.dv-deskwin .dv-sub-desk{display:block}
+      body.dv-deskwin .dv-sub-web,body.dv-deskwin .dv-sysbtn{display:none}
+      /* 已安裝的系統 App 視窗：不必再顯示安裝鈕 */
+      body.dv-standalone .dv-installbtn{display:none!important}
       @media(max-width:820px){.dv-side{display:none}}
     </style>
     <div id="panel-dayview" class="panel" style="display:none">
+      <!-- 設定卡：按鈕放這裡，不壓在日曆上。兩層流程——
+           瀏覽器分頁 →「開啟桌面系統」；桌面視窗（已安裝 App 或 ?win=1）→「開啟桌面日曆」。
+           桌面日曆視窗（?app=dayview）裡整張卡收起來。 -->
+      <div class="set-card dv-setcard">
+        <div class="sec-hd">桌面視窗<span class="sec-hd-line"></span>
+          <button class="btn btns dv-installbtn" style="flex-shrink:0" onclick="dvInstall()" title="把 HOBE 系統安裝成桌面 App">📥 安裝系統到桌面</button>
+          <button class="btn btns btnp dv-sysbtn" style="flex-shrink:0" onclick="openSystemWindow()">🖥 開啟桌面系統</button>
+          <button class="btn btns btnp dv-popbtn" style="flex-shrink:0" onclick="openDayViewWindow()">⧉ 開啟桌面日曆</button>
+        </div>
+        <p class="set-card-sub dv-sub-web">把整個系統開成一個<b>桌面視窗</b>（沒有網址列、沒有分頁列）。開起來之後再進「設定」，這裡就會變成「⧉ 開啟桌面日曆」，按下去就有一個浮在桌面上的單日課表。<br>想直接用桌面上那個 App 開：點網址列右邊的 <b>Open in app</b> → 勾「一律用應用程式開啟」，之後這個網址都會自動進 App（網頁本身沒有權限叫起 App，這是瀏覽器的設定）。</p>
+        <p class="set-card-sub dv-sub-desk">把下面這份單日課表開成一個<b>浮在桌面上的日曆視窗</b>，沒有網址列，關掉就沒了——不會在桌面多裝一個 App。</p>
+      </div>
       <div class="dv-wrap">
         <div class="dv-top">
           <div class="dv-top-l"></div>
@@ -331,10 +277,7 @@ if ('serviceWorker' in navigator) {
             <button class="dv-seg-b" onclick="dvSegMsg()">Month</button>
             <button class="dv-seg-b" onclick="dvSegMsg()">Year</button>
           </div>
-          <div class="dv-top-r">
-            <button class="dv-actbtn dv-installbtn" onclick="dvInstall()" title="把日檢視安裝成獨立桌面 App（Chrome/Edge 直接跳安裝視窗）">📥 安裝到桌面</button>
-            <button class="dv-actbtn dv-popbtn" onclick="openDayViewWindow()" title="彈出獨立桌面視窗（浮在桌面上）">⧉ 桌面視窗</button>
-          </div>
+          <div class="dv-top-r"></div>
         </div>
         <div class="dv-body">
           <div class="dv-left">
@@ -366,11 +309,9 @@ if ('serviceWorker' in navigator) {
           <button class="btn btns" id="btn-toggle-todo-chip" onclick="toggleTodoChipVisibility()" title="切換顯示/隱藏「待補資料」提示">🔕 待補提示</button>
           <button class="btn btns" onclick="batchPromoteGrade()" title="國一~高二 +1、國三→高一、高三→畢業；國小/大學跳過">📅 升年級</button>
           <button class="btn btns" onclick="openPriceModal()" title="每門課的預設每堂單價；個別學生的優惠價在學生編輯裡設定">💰 價目表</button>
-          <button class="btn btns" onclick="scanStudentsFromCalendar()" title="比對行事曆備注與修課登記簿，列出差異讓你逐條決定；不會自動改任何資料">🧾 課表對帳</button>
           <button class="btn btns btnp" onclick="goAddStudent()" title="到「新增課程/學生」頁建檔">＋ 新增學生</button>
         </div>
       </div>
-      <div id="stu-scan-sec" style="display:none"></div>
       <div id="stu-list"></div>
     </div>
 
@@ -416,6 +357,12 @@ if ('serviceWorker' in navigator) {
         <div class="sec-hd">課程總覽<span class="sec-hd-line"></span><button class="btn btns btnp" style="flex-shrink:0" onclick="goAddCourse()" title="到「新增課程/學生」頁建課">＋ 新增課程</button></div>
         <p class="set-card-sub">系統目前認得的每一門課：類型、老師、單價、是否需登記成績。點一門課開啟視窗：調整單價、加退學生（練習課名單唯讀）。標「系統」的是系統自有課程（不在 Google 行事曆），點開可編輯與刪除。批次調價也可到「學生管理 → 價目表」。</p>
         <div id="co-list"></div>
+      </div>
+      <!-- 舊請假搬遷：一次性工具（全頁改讀系統第 4 刀），搬完＋拔掉讀行事曆的程式後整段移除 -->
+      <div class="set-card" style="margin-top:14px;border:1px solid #C3D4E4">
+        <div class="sec-hd" style="color:#3E6B99">舊請假搬進系統<span class="sec-hd-line"></span></div>
+        <p class="set-card-sub">系統要跟 Google 行事曆分家的最後一步。行事曆上「還沒排補課」的舊請假／調課／曠課只存在 Calendar 標題裡，先抄一份進系統，之後拔掉讀行事曆的程式才不會整批消失。<b>只新增系統紀錄，不動任何 Google 事件</b>；會先列出要搬哪幾筆給你看過再寫。</p>
+        <button class="btn btns" style="color:#3E6B99;border-color:#C3D4E4" onclick="openMigrateAbsModal()">🔍 盤點要搬的舊請假…</button>
       </div>
       <!-- Cutover 一次性工具：系統轉自有課表用，重建完成後移除 -->
       <div class="set-card" style="margin-top:14px;border:1px solid #E4C7C3">
@@ -472,22 +419,23 @@ if ('serviceWorker' in navigator) {
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://apis.google.com/js/api.js" async defer></script>
 <!-- 應用程式分模組（順序：state → utils → 解析 → 各 panel → init 最後）-->
-<script src="js/state.js?v=10"></script>
+<script src="js/state.js?v=11"></script>
 <script src="js/utils.js?v=6"></script>
 <script src="js/parse.js?v=5"></script>
-<script src="js/schedule.js?v=5"></script>
+<script src="js/schedule.js?v=6"></script>
 <script src="js/today.js?v=24"></script>
-<script src="js/week.js?v=11"></script>
-<script src="js/dayview.js?v=5"></script>
-<script src="js/absence.js?v=9"></script>
-<script src="js/makeup.js?v=8"></script>
-<script src="js/enrollment.js?v=10"></script>
-<script src="js/students.js?v=15"></script>
+<script src="js/week.js?v=13"></script>
+<script src="js/dayview.js?v=9"></script>
+<script src="js/absence.js?v=11"></script>
+<script src="js/makeup.js?v=10"></script>
+<script src="js/migrate-absences.js?v=1"></script>
+<script src="js/enrollment.js?v=11"></script>
+<script src="js/students.js?v=16"></script>
 <script src="js/attendance.js?v=2"></script>
 <script src="js/grades.js?v=3"></script>
-<script src="js/settings.js?v=19"></script>
+<script src="js/settings.js?v=20"></script>
 <script src="js/courses.js?v=15"></script>
-<script src="js/init.js?v=17"></script>
+<script src="js/init.js?v=21"></script>
 
 <div class="stu-modal-wrap" id="stu-modal-wrap">
   <div class="stu-modal-overlay" onclick="closeStudentModal()"></div>
@@ -519,6 +467,23 @@ if ('serviceWorker' in navigator) {
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
         <button class="btn btns" onclick="closeStatusModal()">取消</button>
         <button class="btn btns btnp" onclick="confirmStatusChange()">儲存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="stu-modal-wrap" id="migabs-modal-wrap">
+  <div class="stu-modal-overlay" onclick="closeMigrateAbsModal()"></div>
+  <div class="stu-modal" style="max-width:620px">
+    <div class="stu-modal-hd">
+      <div class="stu-modal-title"><span style="font-size:16px;font-weight:700;color:#3E6B99">🔍 舊請假搬進系統</span></div>
+      <button class="stu-modal-close" onclick="closeMigrateAbsModal()">✕</button>
+    </div>
+    <div class="stu-modal-body">
+      <div id="migabs-modal-info" style="font-size:13.5px;color:var(--tx2);line-height:1.7"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn btns" onclick="closeMigrateAbsModal()">取消</button>
+        <button class="btn btns btnp" id="migabs-go" onclick="confirmMigrateAbs()">確認搬遷</button>
       </div>
     </div>
   </div>

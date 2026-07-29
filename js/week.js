@@ -261,62 +261,38 @@ function toggleReschedulePanel(id){
   if(show)document.getElementById('rp-reason-'+id)?.focus();
 }
 
+// 標記調課：寫請假紀錄的調課旗標（同一筆紀錄、與請假/曠課並存）
 async function confirmReschedule(id){
   const ev=findEventById(id);if(!ev)return;
   const reason=(document.getElementById('rp-reason-'+id)?.value||'').trim();
-  const newTitle=reason?`【調課：${reason}】${ev.origTitle}`:`【調課】${ev.origTitle}`;
-  // 系統課堂：調課旗標寫請假紀錄（同一筆紀錄、與請假/曠課並存）
-  if(ev.courseId!=null){
-    const list=getAbsences().slice();
-    let rec=list.find(a=>a.occId===id);
-    if(!rec){
-      rec={id:Date.now(),occId:id,courseId:ev.courseId,date:ev.startDt.toISOString(),
-        teacherAbsent:false,leave:[],noShow:[],makeupSkip:[],createdAt:new Date().toISOString()};
-      list.push(rec);
-    }
-    rec.resched=true;rec.reschedReason=reason;
-    rec.updatedAt=new Date().toISOString();
-    saveAbsences(list);
-    toast('已標記調課，請至待補課/調課清單安排新時段','ok');
-    closeWeekModal();
-    await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
-    return;
+  const list=getAbsences().slice();
+  let rec=list.find(a=>a.occId===id);
+  if(!rec){
+    rec={id:Date.now(),occId:id,courseId:ev.courseId,date:ev.startDt.toISOString(),
+      teacherAbsent:false,leave:[],noShow:[],makeupSkip:[],createdAt:new Date().toISOString()};
+    list.push(rec);
   }
-  showL('標記調課...');
-  try{
-    await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:ev.id,resource:{summary:newTitle}});
-    invalidateEventCache();
-    hideL();toast('已標記調課，請至待補課/調課清單安排新時段','ok');
-    closeWeekModal();
-    await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
-  }catch(e){hideL();toast('操作失敗：'+e.message,'err');}
+  rec.resched=true;rec.reschedReason=reason;
+  rec.updatedAt=new Date().toISOString();
+  saveAbsences(list);
+  toast('已標記調課，請至待補課/調課清單安排新時段','ok');
+  closeWeekModal();
+  await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
 }
 
+// 取消調課：清調課旗標（已排的新時段一併取消），紀錄清空即刪
 async function cancelReschedule(id){
   const ev=findEventById(id);if(!ev)return;
-  // 系統課堂：清調課旗標（已排的新時段一併取消），紀錄清空即刪
-  if(ev.courseId!=null){
-    let list=getAbsences().slice();
-    const rec=list.find(a=>a.occId===id);
-    if(rec){
-      rec.resched=false;rec.reschedReason='';
-      rec.updatedAt=new Date().toISOString();
-      if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length)list=list.filter(a=>a!==rec);
-      saveAbsences(list);
-    }
-    if(makeupMatchMap.has(id))await deleteMakeupScheduled(id);
-    toast('已取消調課','ok');
-    closeWeekModal();
-    await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
-    return;
+  let list=getAbsences().slice();
+  const rec=list.find(a=>a.occId===id);
+  if(rec){
+    rec.resched=false;rec.reschedReason='';
+    rec.updatedAt=new Date().toISOString();
+    if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length)list=list.filter(a=>a!==rec);
+    saveAbsences(list);
   }
-  showL('取消調課...');
-  try{
-    await gapi.client.calendar.events.patch({calendarId:ev.calId,eventId:ev.id,resource:{summary:ev.origTitle}});
-    invalidateEventCache();
-    if(makeupMatchMap.has(id))await deleteMakeupScheduled(id);
-    hideL();toast('已取消調課','ok');
-    closeWeekModal();
-    await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
-  }catch(e){hideL();toast('操作失敗：'+e.message,'err');}
+  if(makeupMatchMap.has(id))await deleteMakeupScheduled(id);
+  toast('已取消調課','ok');
+  closeWeekModal();
+  await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
 }
