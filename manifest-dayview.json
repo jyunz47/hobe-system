@@ -1,0 +1,31 @@
+{
+  "name": "HOBE 日檢視",
+  "short_name": "日檢視",
+  "description": "補習班單日課表 · Apple 風時間軸",
+  "start_url": "./補習班排程系統.html?app=dayview",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#E4E0D6",
+  "theme_color": "#1F1C19",
+  "lang": "zh-TW",
+  "icons": [
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

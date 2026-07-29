@@ -1,0 +1,265 @@
+<!-- @dsCard group="電腦版・行事曆" width="1440" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>單日檢視 · Apple 風格行事曆（深色）</title>
+<style>
+  :root{
+    --page:#181818; --panel:#1e1e1e; --bar:#2a2a2a; --line:#333230;
+    --tx:#f2f2f2; --tx2:#a0a09a; --tx3:#727270;
+    --pill:#48484a;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0; background:var(--page); color:var(--tx);
+    font-family:-apple-system,"SF Pro Text","SF Pro Display","Noto Sans TC","PingFang TC",sans-serif;
+    -webkit-font-smoothing:antialiased; overflow:hidden;
+  }
+  .app{display:flex;flex-direction:column;height:100vh}
+
+  /* ── 頂部工具列 ── */
+  .toolbar{
+    height:52px;flex:0 0 52px;display:flex;align-items:center;
+    padding:0 16px;background:var(--page);border-bottom:1px solid var(--line);
+    position:relative;
+  }
+  .tb-left{display:flex;align-items:center;gap:6px}
+  .tb-btn{
+    width:34px;height:30px;border-radius:8px;display:grid;place-items:center;
+    color:var(--tx2);cursor:pointer;border:none;background:transparent;
+  }
+  .tb-btn:hover{background:#2c2c2c;color:var(--tx)}
+  .tb-btn svg{width:19px;height:19px}
+  .seg{
+    position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+    display:flex;background:#2c2c2c;border-radius:8px;padding:2px;gap:2px;
+  }
+  .seg button{
+    border:none;background:transparent;color:var(--tx2);
+    font-size:13px;font-weight:500;padding:5px 15px;border-radius:6px;cursor:pointer;
+    font-family:inherit;
+  }
+  .seg button.on{background:var(--pill);color:#fff;box-shadow:0 1px 2px rgba(0,0,0,.35)}
+  .tb-right{margin-left:auto;display:flex;align-items:center;gap:6px}
+
+  /* ── 主體 ── */
+  .body{flex:1;display:flex;min-height:0}
+  .cal{flex:1;display:flex;flex-direction:column;min-width:0;border-right:1px solid var(--line)}
+
+  .cal-head{padding:14px 20px 2px;display:flex;align-items:baseline;gap:8px}
+  .cal-head .d{font-size:30px;font-weight:700;letter-spacing:-.5px}
+  .cal-head .y{font-size:30px;font-weight:400;color:var(--tx2)}
+  .cal-wd{padding:0 20px 8px;font-size:19px;color:var(--tx2);font-weight:400}
+
+  /* ── 時間軸 ── */
+  .timeline{flex:1;overflow-y:auto;position:relative;border-top:1px solid var(--line)}
+  .grid{position:relative}
+  .hour{position:relative;border-top:1px solid var(--line)}
+  .hour:first-child{border-top:none}
+  .hour-lbl{
+    position:absolute;top:-8px;left:0;width:48px;text-align:right;
+    font-size:11px;color:var(--tx3);padding-right:8px;
+  }
+  .hour-lbl small{font-size:9px;text-transform:uppercase}
+  .events{position:absolute;top:0;left:56px;right:14px;bottom:0}
+
+  .ev{
+    position:absolute;border-radius:5px;border-left:3.5px solid;
+    padding:3px 7px;overflow:hidden;cursor:pointer;
+    box-shadow:inset 0 0 0 .5px rgba(255,255,255,.04);
+  }
+  .ev-title{font-size:12.5px;font-weight:600;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ev-meta{font-size:11px;line-height:1.3;margin-top:1px;opacity:.85;display:flex;align-items:center;gap:3px}
+  .ev-rep{position:absolute;top:4px;right:5px;font-size:10px;opacity:.7}
+  .ev.short{padding-top:1px}
+  .ev.short .ev-title{font-size:11.5px}
+
+  /* ── 右側欄 ── */
+  .side{width:340px;flex:0 0 340px;background:var(--page);display:flex;flex-direction:column}
+  .side-top{padding:14px 22px 10px;display:flex;align-items:center;justify-content:space-between}
+  .mm-nav{display:flex;align-items:center;gap:2px}
+  .mm-nav button{background:transparent;border:none;color:var(--tx2);cursor:pointer;padding:4px;border-radius:6px;display:grid;place-items:center}
+  .mm-nav button:hover{background:#2c2c2c}
+  .mm-today{font-size:13px;color:var(--tx);background:#2c2c2c;border:none;border-radius:8px;padding:5px 12px;cursor:pointer;font-family:inherit}
+  .mini{padding:0 18px}
+  .mini-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px;text-align:center}
+  .mini-dow{font-size:11px;color:var(--tx3);padding:4px 0;font-weight:500}
+  .mini-day{
+    font-size:13px;color:var(--tx);aspect-ratio:1;display:grid;place-items:center;
+    border-radius:50%;cursor:pointer;
+  }
+  .mini-day:hover{background:#2c2c2c}
+  .mini-day.mute{color:#4a4a48}
+  .mini-day.today{background:#e0483d;color:#fff;font-weight:600}
+  .no-event{flex:1;display:grid;place-items:center;color:var(--tx3);font-size:15px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- 工具列 -->
+  <header class="toolbar">
+    <div class="tb-left">
+      <button class="tb-btn" title="行事曆">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="3.5" y="4.5" width="17" height="16" rx="2.5"/><path d="M3.5 9h17M8 3v3M16 3v3"/></svg>
+      </button>
+      <button class="tb-btn" title="收件匣">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M3.5 13h4l1.5 2.5h6L16.5 13h4M3.5 13 6 5.5h12L20.5 13v5a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2Z"/></svg>
+      </button>
+      <button class="tb-btn" title="新增">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><path d="M12 5v14M5 12h14"/></svg>
+      </button>
+    </div>
+    <div class="seg">
+      <button>Day</button><button class="on">Day</button><button>Week</button><button>Month</button><button>Year</button>
+    </div>
+    <div class="tb-right">
+      <button class="tb-btn" title="搜尋">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <div class="body">
+    <!-- 主行事曆 -->
+    <main class="cal">
+      <div class="cal-head"><span class="d">July 23,</span><span class="y">2026</span></div>
+      <div class="cal-wd">Thursday</div>
+
+      <!-- 時間軸 -->
+      <div class="timeline" id="timeline">
+        <div class="grid" id="grid"></div>
+      </div>
+    </main>
+
+    <!-- 右側迷你月曆 -->
+    <aside class="side">
+      <div class="side-top">
+        <div class="mm-nav">
+          <button><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 6-6 6 6 6"/></svg></button>
+          <button class="mm-today">Today</button>
+          <button><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m9 6 6 6-6 6"/></svg></button>
+        </div>
+      </div>
+      <div class="mini">
+        <div class="mini-grid" id="miniGrid"></div>
+      </div>
+      <div class="no-event">No Event Selected</div>
+    </aside>
+  </div>
+</div>
+
+<script>
+/* ============ 顏色（深色主題事件） ============ */
+const C = {
+  blue:   {bar:'#3b8dff', tx:'#8fbcff', bg:'rgba(38,92,190,.30)'},
+  gold:   {bar:'#c9a83a', tx:'#e2c86a', bg:'rgba(120,96,24,.40)'},
+  purple: {bar:'#cf52cf', tx:'#eb96eb', bg:'rgba(128,36,128,.34)'},
+};
+
+/* ============ 時間軸事件（用你截圖的實際課程） ============ */
+// s/e = "HH:MM" 24 小時制；sub = 副標時間；room = 地點；rep = 重複
+const events = [
+  // 下午（3 欄）
+  {t:'國三會考衝刺班', s:'13:00', e:'17:00', c:'gold',   sub:'1–5PM', rep:true},
+  {t:'高一數學先修',   s:'14:00', e:'17:00', c:'blue',   sub:'2–5PM'},
+  {t:'岑安數學練習',   s:'15:00', e:'16:00', c:'purple', sub:'3–4PM'},
+  // 傍晚短家教（進 4 欄的前段）
+  {t:'冠羽數學家教',   s:'17:30', e:'18:00', c:'blue', rep:true},
+  {t:'瑜蔓數學家教',   s:'17:30', e:'18:00', c:'blue', rep:true},
+  {t:'泓宇數學家教',   s:'17:30', e:'18:00', c:'blue', rep:true},
+  // 晚上（4 欄）
+  {t:'國中數學練習',   s:'18:00', e:'21:00', c:'purple', rep:true},
+  {t:'唯歆數學家教',   s:'18:00', e:'19:00', c:'blue', rep:true},
+  {t:'富叡數學家教',   s:'18:00', e:'19:00', c:'blue'},
+  {t:'國小妘芸數學家教', s:'18:00', e:'18:30', c:'blue'},
+  {t:'假竑箴化學家教', s:'18:30', e:'20:00', c:'blue', room:'石牌分校', sub:'6:30–8PM', rep:true},
+  {t:'國三數學班 孟哲', s:'19:00', e:'21:00', c:'blue', sub:'7–9PM', rep:true},
+  {t:'國三理化班',     s:'19:00', e:'21:00', c:'blue', sub:'7–9PM', rep:true},
+  {t:'子晉數學家教',   s:'20:00', e:'21:00', c:'blue', sub:'7:30–9PM', rep:true},
+];
+
+const START = 13, END = 22, HOUR_H = 90;   // 1PM–10PM
+const toMin = s => { const [h,m]=s.split(':').map(Number); return h*60+m; };
+
+/* ---- 畫小時格線 ---- */
+const grid = document.getElementById('grid');
+grid.style.height = (END-START)*HOUR_H + 'px';
+for(let h=START; h<=END; h++){
+  const row = document.createElement('div');
+  row.className='hour'; row.style.height = HOUR_H+'px';
+  const ampm = h<12?'AM':'PM'; const disp = ((h+11)%12)+1;
+  row.innerHTML = `<div class="hour-lbl">${disp} <small>${ampm}</small></div>`;
+  grid.appendChild(row);
+}
+const layer = document.createElement('div');
+layer.className='events'; grid.appendChild(layer);
+
+/* ---- 重疊分欄（cluster + greedy column packing） ---- */
+events.forEach(ev=>{ ev.sm=toMin(ev.s); ev.em=toMin(ev.e); });
+events.sort((a,b)=> a.sm-b.sm || b.em-a.em);
+
+let clusters=[], cur=[], curEnd=-1;
+for(const ev of events){
+  if(cur.length && ev.sm >= curEnd){ clusters.push(cur); cur=[]; curEnd=-1; }
+  cur.push(ev); curEnd=Math.max(curEnd, ev.em);
+}
+if(cur.length) clusters.push(cur);
+
+for(const cl of clusters){
+  const colEnd=[];
+  for(const ev of cl){
+    let placed=false;
+    for(let i=0;i<colEnd.length;i++){
+      if(ev.sm >= colEnd[i]){ ev.col=i; colEnd[i]=ev.em; placed=true; break; }
+    }
+    if(!placed){ ev.col=colEnd.length; colEnd.push(ev.em); }
+  }
+  cl.forEach(ev=> ev.ncols=colEnd.length);
+}
+
+/* ---- 畫事件 ---- */
+for(const ev of events){
+  const col = C[ev.c];
+  const top = (ev.sm - START*60)/60*HOUR_H;
+  const hgt = (ev.em - ev.sm)/60*HOUR_H;
+  const w = 100/ev.ncols;
+  const gap = 3;
+  const box = document.createElement('div');
+  box.className = 'ev' + (hgt<34?' short':'');
+  box.style.cssText =
+    `top:${top}px;height:${hgt-2}px;left:${ev.col*w}%;width:calc(${w}% - ${gap}px);`+
+    `border-left-color:${col.bar};background:${col.bg};color:${col.tx};`;
+  let meta = '';
+  if(ev.room) meta += `<div class="ev-meta">◷ ${ev.room}</div>`;
+  if(ev.sub && hgt>=40) meta += `<div class="ev-meta">◷ ${ev.sub}</div>`;
+  box.innerHTML =
+    `${ev.rep?`<div class="ev-rep" style="color:${col.bar}">↻</div>`:''}`+
+    `<div class="ev-title">${ev.t}</div>${meta}`;
+  layer.appendChild(box);
+}
+// 開場捲到 1PM 附近
+document.getElementById('timeline').scrollTop = 0;
+
+/* ============ 迷你月曆（July 2026） ============ */
+const mg = document.getElementById('miniGrid');
+['S','M','T','W','T','F','S'].forEach(d=>{
+  const c=document.createElement('div'); c.className='mini-dow'; c.textContent=d; mg.appendChild(c);
+});
+// 7/1/2026 = 週三；前置 6/28..6/30，後置 8/1..8/8
+const cells = [
+  ...[28,29,30].map(n=>({n,mute:1})),
+  ...Array.from({length:31},(_,i)=>({n:i+1})),
+  ...[1,2,3,4,5,6,7,8].map(n=>({n,mute:1})),
+];
+cells.forEach(c=>{
+  const d=document.createElement('div');
+  d.className='mini-day'+(c.mute?' mute':'')+(!c.mute&&c.n===23?' today':'');
+  d.textContent=c.n; mg.appendChild(d);
+});
+</script>
+</body>
+</html>

@@ -2,8 +2,18 @@
 // 注意：因為這個檔依賴所有其他子系統的函式（loadToday、renderMakeup...），
 // HTML 載入順序中 init.js 必須擺最後。
 
+// ── App 模式：?app=dayview 開的獨立桌面視窗（openDayViewWindow）——藏側邊欄/工具列、登入後直達日檢視 ──
+function isDayApp(){return new URLSearchParams(location.search).get('app')==='dayview';}
+
+// ── PWA 一鍵安裝：攔 beforeinstallprompt 存起來，讓「安裝到桌面」鈕直接觸發原生安裝視窗（Chrome/Edge）──
+var installPromptEvent=null;
+window.addEventListener('beforeinstallprompt',(e)=>{e.preventDefault();installPromptEvent=e;const b=document.querySelector('.dv-installbtn');if(b)b.classList.add('ready');});
+window.addEventListener('appinstalled',()=>{installPromptEvent=null;if(typeof toast==='function')toast('已安裝到桌面！之後從 Launchpad／Dock 開啟','ok');});
+
 // ── Page load ──
 window.addEventListener('load',()=>{
+  if(isDayApp())document.body.classList.add('dv-app'); // manifest 換版＋標題已在 <head> 內處理
+  if(isStandalone())document.body.classList.add('dv-standalone'); // 已安裝的獨立視窗：不再顯示安裝/彈窗鈕
   const ck=setInterval(()=>{if(window.google&&window.gapi){clearInterval(ck);initAPIs();}},100);
   setDateDisplay(currentDate);
   document.getElementById('date-picker').value=toDateStr(currentDate);
@@ -220,6 +230,7 @@ async function onSignedIn(){
   openAddCourse();
   await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
   updateWeekTitle();
+  if(isDayApp()){showPanel('dayview');renderDayView();} // 桌面視窗：登入後直達日檢視（dayEvents 已由 loadToday 備妥）
 }
 
 // ── Firebase / Firestore ──
@@ -281,6 +292,7 @@ function switchPanel(id){
   if(!gapi.client.getToken())return;
   showPanel(id);
   if(id==='courses')Promise.all([loadToday(),loadWeek()]);
+  if(id==='dayview')loadToday(); // 共用 dayEvents；載完 loadToday 尾端會 renderDayView
   if(id==='makeup')loadMakeup();
   if(id==='students')renderStudents();
   if(id==='teachers')renderTeacherAdmin();
@@ -290,14 +302,14 @@ function switchPanel(id){
 
 function showPanel(id){
   currentPanel=id;
-  ['courses','makeup','students','teachers','add','settings','login'].forEach(p=>{
+  ['courses','dayview','makeup','students','teachers','add','settings','login'].forEach(p=>{
     const el=document.getElementById('panel-'+p);
     if(p==='login')el.classList.toggle('active',p===id);
     else el.style.display=p===id?'block':'none';
   });
   document.querySelectorAll('.ni').forEach(el=>el.classList.remove('active'));
   const nav=document.getElementById('nav-'+id);if(nav)nav.classList.add('active');
-  const meta={courses:['課程','今日與本週課程'],makeup:['待補課/調課清單','找出需要安排補課或調課的課程'],students:['學生管理','請假、補課、欠課紀錄'],teachers:['老師管理','老師名單：改名、在職/離職、刪除'],add:['新增課程/學生','建檔工作站：直接輸入、送出即清空可連續建檔'],settings:['課程管理','系統課程總覽：類型、老師、單價、需登記成績']};
+  const meta={courses:['課程','今日與本週課程'],dayview:['設定','單日課表檢視'],makeup:['待補課/調課清單','找出需要安排補課或調課的課程'],students:['學生管理','請假、補課、欠課紀錄'],teachers:['老師管理','老師名單：改名、在職/離職、刪除'],add:['新增課程/學生','建檔工作站：直接輸入、送出即清空可連續建檔'],settings:['課程管理','系統課程總覽：類型、老師、單價、需登記成績']};
   const[t,s]=meta[id]||['',''];
   document.getElementById('tbt').textContent=t;
   document.getElementById('tbs').textContent=s;

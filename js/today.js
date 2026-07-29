@@ -13,6 +13,7 @@ async function loadToday(){
     hideErr('courses');
     renderTL();
     renderToday();
+    if(currentPanel==='dayview')renderDayView(); // 日檢視共用 dayEvents，換日/更新後同步重畫
     setUSt('ok',document.getElementById('uname').textContent,fmtDT(new Date())+' 更新');
   }catch(err){showErr('courses','讀取失敗：'+(err.result?.error?.message||err.message));}
   finally{hideL();}

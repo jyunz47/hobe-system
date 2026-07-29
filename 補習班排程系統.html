@@ -4,7 +4,15 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>補習班排程系統</title>
-<link rel="manifest" href="manifest.json">
+<link rel="manifest" href="manifest.json" id="manifest-link">
+<script>
+// 日檢視 App 模式（?app=dayview）：在 <head> 解析階段就換成專屬 manifest，
+// 讓 Chrome/Safari 的「安裝／加入 Dock」裝出的是「直接開日檢視的獨立視窗」（非主系統首頁）。
+if(new URLSearchParams(location.search).get('app')==='dayview'){
+  var _ml=document.getElementById('manifest-link');if(_ml)_ml.href='manifest-dayview.json';
+  document.title='HOBE 日檢視';
+}
+</script>
 <meta name="theme-color" content="#1F1C19">
 <link rel="icon" type="image/svg+xml" href="icons/favicon.svg?v=4">
 <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png?v=4">
@@ -14,7 +22,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HOBE">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=38">
+<link rel="stylesheet" href="style.css?v=39">
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -50,6 +58,10 @@ if ('serviceWorker' in navigator) {
     <button class="ni" id="nav-add" data-m="新增" onclick="switchPanel('add')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
       <span class="ni-txt">新增課程/學生</span>
+    </button>
+    <button class="ni nav-bottom" id="nav-dayview" data-m="設定" onclick="switchPanel('dayview')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 11-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 110-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 114 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 110 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+      <span class="ni-txt">設定</span>
     </button>
   </nav>
   <div class="sf">
@@ -240,6 +252,112 @@ if ('serviceWorker' in navigator) {
       <div class="wfocus" id="wfocus"><div class="empty">載入中...</div></div>
     </div>
 
+    <!-- Day View（日檢視：Apple 風單日時間軸）-->
+    <style>
+      /* 日檢視＝深色 Apple 風（不吃系統亮色 tokens，整塊自帶深色）*/
+      .dv-wrap{background:#1b1a19;color:#f2efe9;border:1px solid #34302c;border-radius:16px;overflow:hidden;display:flex;flex-direction:column;font-family:-apple-system,'SF Pro Text','Noto Sans TC',sans-serif}
+      .dv-top{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-bottom:1px solid #33302c}
+      .dv-top-l,.dv-top-r{flex:1;display:flex;align-items:center}
+      .dv-top-r{justify-content:flex-end}
+      .dv-seg{display:inline-flex;background:#2c2a27;border-radius:9px;padding:3px;gap:2px}
+      .dv-seg-b{border:none;background:transparent;color:#a8a29a;font:inherit;font-size:13px;font-weight:500;padding:5px 16px;border-radius:6px;cursor:pointer}
+      .dv-seg-b.on{background:#4a4642;color:#fff}
+      .dv-actbtn{border:1px solid #3a3630;background:#2c2a27;color:#e6e2db;border-radius:8px;padding:6px 12px;font-size:12px;cursor:pointer;margin-left:8px}
+      .dv-actbtn:hover{background:#38342f}
+      .dv-installbtn{display:none}
+      .dv-installbtn.ready{background:#3a5c47;border-color:#4a7059;color:#eaf3ee}
+      .dv-body{display:flex;min-height:560px}
+      .dv-left{flex:1;min-width:0;display:flex;flex-direction:column;padding:0 18px 18px}
+      .dv-header{padding:16px 2px 4px}
+      .dv-h-date{font-size:28px;font-weight:700;letter-spacing:-.5px;color:#fff}
+      .dv-h-yr{font-weight:400;color:#9d968d}
+      .dv-h-wd{font-size:18px;color:#9d968d;margin-top:2px}
+      .dv-grid{position:relative;margin-top:16px}
+      .dv-hours{position:absolute;inset:0}
+      .dv-hour{position:relative;border-top:1px solid #302d29}
+      .dv-hour:first-child{border-top:none}
+      .dv-hour-lbl{position:absolute;top:-8px;left:0;width:44px;text-align:right;padding-right:9px;font-size:11px;color:#726d66}
+      .dv-events{position:absolute;left:52px;right:6px;top:0;bottom:0}
+      .dv-ev{position:absolute;border-radius:7px;border-left:3px solid;padding:4px 9px;overflow:hidden;cursor:pointer;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.05)}
+      .dv-ev:hover{filter:brightness(1.09)}
+      .dv-ev-title{font-size:12.5px;font-weight:600;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .dv-ev-meta{font-size:11px;opacity:.82;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .dv-short{padding-top:2px}
+      .dv-short .dv-ev-title{font-size:11.5px}
+      .dv-faded{opacity:.55}
+      .dv-ev-title.struck{text-decoration:line-through}
+      .dv-past{opacity:.6}
+      .dv-now{box-shadow:inset 0 0 0 1px rgba(255,255,255,.28)}
+      .dv-ev-rep{position:absolute;top:4px;right:6px;font-size:11px;opacity:.75}
+      .dv-ev-badge{display:inline-block;margin-left:5px;font-size:10px;font-weight:600;padding:0 5px;border-radius:5px;background:rgba(255,255,255,.14);color:#e6e2db;vertical-align:middle}
+      .dv-now-line{position:absolute;left:-6px;right:0;height:2px;background:#e0483d;z-index:5;pointer-events:none}
+      .dv-now-line::before{content:'';position:absolute;left:-3px;top:-3px;width:8px;height:8px;border-radius:50%;background:#e0483d}
+      .dv-empty{padding:60px 24px;text-align:center;color:#726d66;font-size:14px}
+      /* 右側迷你月曆 */
+      .dv-side{width:300px;flex-shrink:0;border-left:1px solid #33302c;padding:16px 18px;display:flex;flex-direction:column}
+      .dv-mini-top{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+      .dv-mini-label{margin-right:auto;font-size:13px;font-weight:600;color:#f2efe9}
+      .dv-mini-nav{width:26px;height:26px;border:none;background:transparent;color:#a8a29a;border-radius:7px;cursor:pointer;font-size:16px;line-height:1}
+      .dv-mini-nav:hover{background:#2c2a27}
+      .dv-mini-today{border:none;background:#2c2a27;color:#f2efe9;border-radius:8px;padding:5px 12px;font-size:12px;cursor:pointer}
+      .dv-mini-today:hover{background:#38342f}
+      .dv-mini{display:grid;grid-template-columns:repeat(7,1fr);gap:2px;text-align:center}
+      .dv-mini-dow{font-size:11px;color:#726d66;padding:3px 0;font-weight:500}
+      .dv-mini-day{font-size:12.5px;color:#e6e2db;aspect-ratio:1;display:flex;align-items:center;justify-content:center;border-radius:50%;cursor:pointer}
+      .dv-mini-day:hover{background:#2c2a27}
+      .dv-mini-day.mute{color:#59554f}
+      .dv-mini-day.today{background:#e0483d;color:#fff;font-weight:600}
+      .dv-mini-day.sel{background:rgba(255,255,255,.16);color:#fff;font-weight:600}
+      .dv-noevt{flex:1;display:flex;align-items:center;justify-content:center;color:#726d66;font-size:14px;min-height:120px}
+      /* ── App 模式：獨立桌面視窗（?app=dayview）——藏系統側邊欄＋工具列、滿版深色 ── */
+      body.dv-app{background:#1b1a19}
+      body.dv-app .sidebar{display:none}
+      body.dv-app .topbar{display:none}
+      body.dv-app .main{margin-left:0}
+      body.dv-app .content{padding:0}
+      body.dv-app .dv-wrap{border:none;border-radius:0;min-height:100vh}
+      body.dv-app .dv-installbtn{display:inline-block}  /* ?app=dayview 分頁：顯示安裝鈕（裝的是日檢視 App）*/
+      body.dv-app .dv-popbtn{display:none}
+      body.dv-standalone .dv-installbtn,body.dv-standalone .dv-popbtn{display:none} /* 已安裝的獨立視窗：兩鈕都收 */
+      @media(max-width:820px){.dv-side{display:none}}
+    </style>
+    <div id="panel-dayview" class="panel" style="display:none">
+      <div class="dv-wrap">
+        <div class="dv-top">
+          <div class="dv-top-l"></div>
+          <div class="dv-seg">
+            <button class="dv-seg-b on">Day</button>
+            <button class="dv-seg-b" onclick="dvSegMsg()">Week</button>
+            <button class="dv-seg-b" onclick="dvSegMsg()">Month</button>
+            <button class="dv-seg-b" onclick="dvSegMsg()">Year</button>
+          </div>
+          <div class="dv-top-r">
+            <button class="dv-actbtn dv-installbtn" onclick="dvInstall()" title="把日檢視安裝成獨立桌面 App（Chrome/Edge 直接跳安裝視窗）">📥 安裝到桌面</button>
+            <button class="dv-actbtn dv-popbtn" onclick="openDayViewWindow()" title="彈出獨立桌面視窗（浮在桌面上）">⧉ 桌面視窗</button>
+          </div>
+        </div>
+        <div class="dv-body">
+          <div class="dv-left">
+            <div class="dv-header">
+              <div class="dv-h-date"><span class="dv-h-md" id="dv-h-md">—</span> <span class="dv-h-yr" id="dv-h-yr"></span></div>
+              <div class="dv-h-wd" id="dv-h-wd"></div>
+            </div>
+            <div class="dv-grid" id="dv-grid"><div class="dv-empty">載入中...</div></div>
+          </div>
+          <aside class="dv-side">
+            <div class="dv-mini-top">
+              <span class="dv-mini-label" id="dv-mini-label"></span>
+              <button class="dv-mini-nav" onclick="dvShiftMonth(-1)" aria-label="上個月">‹</button>
+              <button class="dv-mini-today" onclick="goToday()">Today</button>
+              <button class="dv-mini-nav" onclick="dvShiftMonth(1)" aria-label="下個月">›</button>
+            </div>
+            <div class="dv-mini" id="dv-mini"></div>
+            <div class="dv-noevt">No Event Selected</div>
+          </aside>
+        </div>
+      </div>
+    </div>
+
     <!-- Students -->
     <div id="panel-students" class="panel" style="display:none">
       <div class="stu-panel-hd">
@@ -354,21 +472,22 @@ if ('serviceWorker' in navigator) {
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 <script src="https://apis.google.com/js/api.js" async defer></script>
 <!-- 應用程式分模組（順序：state → utils → 解析 → 各 panel → init 最後）-->
-<script src="js/state.js?v=9"></script>
+<script src="js/state.js?v=10"></script>
 <script src="js/utils.js?v=6"></script>
 <script src="js/parse.js?v=5"></script>
 <script src="js/schedule.js?v=5"></script>
 <script src="js/today.js?v=24"></script>
 <script src="js/week.js?v=11"></script>
+<script src="js/dayview.js?v=5"></script>
 <script src="js/absence.js?v=9"></script>
-<script src="js/makeup.js?v=7"></script>
+<script src="js/makeup.js?v=8"></script>
 <script src="js/enrollment.js?v=10"></script>
 <script src="js/students.js?v=15"></script>
 <script src="js/attendance.js?v=2"></script>
 <script src="js/grades.js?v=3"></script>
 <script src="js/settings.js?v=19"></script>
 <script src="js/courses.js?v=15"></script>
-<script src="js/init.js?v=12"></script>
+<script src="js/init.js?v=17"></script>
 
 <div class="stu-modal-wrap" id="stu-modal-wrap">
   <div class="stu-modal-overlay" onclick="closeStudentModal()"></div>

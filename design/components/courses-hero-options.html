@@ -1,0 +1,667 @@
+<!-- @dsCard group="電腦版・課程頁" width="1280" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>進行中多堂 · 五種做法比較</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* ══ 這張卡跟其他卡不一樣：它是「決策用」的，不是現況快照 ══
+
+     問題：同時進行的課一多，courses-page.html 態 E 實測 →
+     右欄 hero 疊成 1040px 高塔，左邊時間軸只有 235px，中間破一個約 800px 的洞。
+
+     根因三條（全部指向「這個右欄當初照 1 堂設計」）：
+       today.js:129   nowEvs.map(e=>heroHtml(e,true)) —— 幾堂就吐幾張，沒上限沒摺疊
+       style.css:281  #today-hero .thero{flex:1;min-width:280px;margin-bottom:0}
+                      —— flex:1 + min-width 是「橫排」的寫法，但 #today-hero 從沒被設成
+                         display:flex → flex:1 是死碼；margin-bottom:0 讓卡黏在一起
+       style.css:720  .tl-b{overflow-y:auto} 沒有 max-height → 永遠不會捲
+
+     ── 五個 screen＝同一份資料（週五 19:10、四堂並行）的五種做法 ──
+       0 現況　　　 對照組，就是現在線上的樣子
+       1 等高捲動　 最小改：右欄限高、自己捲
+       2 全寬橫排　 把 style.css:281 的死碼救活（原作者本來的意圖）
+       3 摘要列　　 1 堂大卡 / 多堂改一行一堂
+       4 時間軸接管 右欄整個拿掉，進行中直接在時間軸上高亮
+
+     ⚠️ 方案 0 是實錄；方案 1～4 都是「還不存在的東西」。
+     下面 style 區塊裡標【提案】的規則就是那些方案要新增的樣式，
+     它們刻意只寫在這張卡裡，還沒進 style.css。選定哪個方案才把它搬進去。 */
+
+  body{background:#EFECE4;margin:0;padding:28px;font-family:'Noto Sans TC',sans-serif}
+  .screens{display:flex;flex-direction:column;gap:34px;max-width:1224px;margin:0 auto}
+
+  .screen-lbl{display:flex;align-items:baseline;gap:9px;margin:0 0 4px;font-size:13px;font-weight:700;color:var(--tx)}
+  .screen-lbl .n{display:inline-flex;align-items:center;justify-content:center;width:21px;height:21px;border-radius:50%;
+                 background:var(--tx);color:#fff;font-size:11px;font-weight:700;flex-shrink:0;align-self:center}
+  .screen-lbl .tag{font-size:10px;font-weight:700;padding:1px 7px;border-radius:6px;background:var(--dl);color:var(--dg)}
+  .screen-lbl .tag.prop{background:var(--al);color:var(--am)}
+  .verdict{margin:0 0 10px 30px;font-size:12px;color:var(--tx2);line-height:1.65;max-width:900px}
+  .verdict b{color:var(--tx)}
+  .verdict .con{color:var(--dg)}
+  .verdict .pro{color:var(--am)}
+
+  .screen{position:relative;overflow:hidden;border:1px solid var(--brs);border-radius:var(--r);
+          background:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.06)}
+  .page{padding:24px}
+  .page .wrap{max-width:1160px}
+  .cut{margin:2px 0 0;padding:9px 0 0;border-top:1px dashed var(--brd);font-size:11px;color:var(--tx3)}
+
+  /* ── 方案 1【提案】右欄限高自己捲 ──
+     現在的 .tl-b 有 overflow-y:auto 卻沒有 max-height，所以永遠捲不動。
+     補一個高度上限，右欄就不會再把左邊拖出一個洞。 */
+  .opt-scroll .tl-b{max-height:262px;overflow-y:auto}
+
+  /* ── 方案 2【提案】全寬橫排 ──
+     時間軸吃滿寬、hero 移到它下面排成一列。
+     這裡沒有新樣式，只是把 #today-hero 真的變成 flex 容器——
+     style.css:281 早就寫好的 flex:1 + min-width:280px 立刻活過來，
+     4 張 × 280px + 3 個 gap ≈ 1156px，正好塞進 1160 的版心。第 5 張自動換行。 */
+  .opt-row .tl-ab-box{grid-template-columns:1fr}
+  .opt-row #today-hero{display:flex;gap:12px;flex-wrap:wrap;margin:12px 0 14px}
+
+  /* ── 方案 3【提案】摘要列 ──
+     右欄留著、寬度不變，但多堂時每堂只給一行：色條＋課名＋教室＋剩幾分＋細進度條。 */
+  .now-list{background:var(--sf);border:1px solid var(--ac);border-radius:var(--r);overflow:hidden}
+  .now-list-hd{display:flex;align-items:center;gap:6px;padding:10px 13px 8px;font-size:12px;font-weight:700;color:var(--tx2)}
+  .now-list-hd b{font-family:'DM Mono',monospace;color:var(--ac);font-size:13px}
+  .now-row{display:grid;grid-template-columns:3px 1fr auto;gap:8px;align-items:center;
+           padding:9px 13px;border-top:1px solid #F0ECE2;cursor:pointer}
+  .now-row:hover{background:var(--sf2)}
+  .now-bar{width:3px;height:26px;border-radius:2px;grid-row:span 2}
+  .now-nm{font-size:12.5px;font-weight:600;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .now-left{font-size:11px;font-family:'DM Mono',monospace;color:var(--wn);font-weight:600;white-space:nowrap}
+  .now-sub{grid-column:2/4;display:flex;align-items:center;gap:7px;margin-top:2px}
+  .now-rm{font-size:10.5px;color:var(--tx3);white-space:nowrap}
+  .now-prog{flex:1;height:2.5px;border-radius:2px;background:#E8E4DA;overflow:hidden}
+  .now-prog span{display:block;height:100%;background:var(--ac);border-radius:2px}
+
+  /* ── 方案 4【提案】時間軸接管 ──
+     右欄整個消失、時間軸吃滿寬（block 因此更寬，塞得下「課名 · 剩 N 分」）。
+     進行中的 block 加外框＋光暈，被 now 線穿過的那幾條就是「現在在上的課」。
+     注意 style.css:1051 的 .tl-track 只有 30px 高、1055 的 .tl-block-t 是 display:none，
+     所以一個 block 只放得下一行字——這是這個方案的資訊上限。 */
+  .opt-tl .tl-ab-box{grid-template-columns:1fr}
+  .opt-tl .tl-block-now{outline:2px solid var(--ac);outline-offset:1px;
+                        box-shadow:0 0 0 5px rgba(107,143,122,.16);z-index:2}
+  .opt-tl .tl-block-now .tl-block-nm::after{content:attr(data-left);font-weight:500;opacity:.85;margin-left:6px;
+                                            font-family:'DM Mono',monospace;font-size:10px}
+</style>
+</head>
+<body>
+<div class="screens">
+
+  <!-- ═══ 0 · 現況 ═══ -->
+  <div>
+    <div class="screen-lbl"><span class="n">0</span>現況<span class="tag">實錄</span></div>
+    <p class="verdict">右欄 <b>1040px</b> vs 時間軸 <b>235px</b> → 左邊 <span class="con"><b>約 800px 的空洞</b></span>，今日課程被推到洞底下。
+      尖峰時段打開系統，第一眼是一片空地加一座綠塔。</p>
+    <div class="screen">
+      <div class="page"><div class="wrap">
+        <div class="tl-ab-box">
+          <div class="tl-a">
+            <div class="tl-a-hd">教室時段</div>
+            <div class="tl-a-body"><div class="tl-wrap">
+              <div class="tl-corner"></div>
+              <div class="tl-hdr">
+                <span class="tl-tick" style="left:0%">13:00</span><span class="tl-tick" style="left:12.5%">14:00</span>
+                <span class="tl-tick" style="left:25%">15:00</span><span class="tl-tick" style="left:37.5%">16:00</span>
+                <span class="tl-tick" style="left:50%">17:00</span><span class="tl-tick" style="left:62.5%">18:00</span>
+                <span class="tl-tick" style="left:75%">19:00</span><span class="tl-tick" style="left:87.5%">20:00</span>
+                <span class="tl-tick" style="left:100%">21:00</span>
+                <span class="tl-now-hdr-lbl" style="left:77.08%">▾</span>
+              </div>
+              <div class="tl-room-lbl">大教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:12.5%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">高一數學班</div></div>
+                <div class="tl-block" style="left:50%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">國二數學班</div></div>
+                <div class="tl-block" style="left:75%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">國二理化班</div></div>
+              </div>
+              <div class="tl-room-lbl">小教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:56.25%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">新力、晨宇理化</div></div>
+              </div>
+              <div class="tl-room-lbl">208</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:62.5%;width:18.75%;background:var(--cal-general)"><div class="tl-block-nm">高三物理</div></div>
+              </div>
+              <div class="tl-room-lbl">301教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:25%;width:25%;background:var(--cal-practice)"><div class="tl-block-nm">國三理化練習</div></div>
+                <div class="tl-block" style="left:75%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">國一英文班</div></div>
+              </div>
+            </div></div>
+          </div>
+          <div class="tl-b">
+            <div id="today-hero">
+              <div class="thero">
+                <div class="thero-bar" style="background:var(--cal-general)"></div>
+                <div class="thero-hd"><span class="thero-tag"><span class="ndot"></span>進行中</span><span class="tpill t-pair"><span class="pdot"></span>一對二</span>
+                  <div class="thero-time">17:30 – 19:30<span class="sub">2 小時</span></div></div>
+                <div class="thero-title">新力、晨宇理化</div>
+                <div class="thero-meta"><span><span class="lbl">授課</span><b>陳老師</b></span><span><span class="lbl">教室</span><b>小教室</b></span>
+                  <span><span class="lbl">學生</span><b>2 人</b> <span class="stu-rest">新力、晨宇</span></span></div>
+                <div class="thero-prog"><div class="thero-prog-bar"><div class="thero-prog-fill" style="width:83%"></div></div>
+                  <div class="thero-prog-txt"><span class="prog-elap">已進行 100 分</span><span class="prog-remain">剩 20 分</span></div></div>
+              </div>
+              <div class="thero">
+                <div class="thero-bar" style="background:var(--cal-general)"></div>
+                <div class="thero-hd"><span class="thero-tag"><span class="ndot"></span>進行中</span><span class="tpill t-one"><span class="pdot"></span>一對一</span>
+                  <div class="thero-time">18:00 – 19:30<span class="sub">1.5 小時</span></div></div>
+                <div class="thero-title">高三物理</div>
+                <div class="thero-meta"><span><span class="lbl">授課</span><b>郭老師</b></span><span><span class="lbl">教室</span><b>208</b></span>
+                  <span><span class="lbl">學生</span><b>張志強</b></span></div>
+                <div class="thero-prog"><div class="thero-prog-bar"><div class="thero-prog-fill" style="width:78%"></div></div>
+                  <div class="thero-prog-txt"><span class="prog-elap">已進行 70 分</span><span class="prog-remain">剩 20 分</span></div></div>
+              </div>
+              <div class="thero">
+                <div class="thero-bar" style="background:var(--cal-general)"></div>
+                <div class="thero-hd"><span class="thero-tag"><span class="ndot"></span>進行中</span><span class="tpill t-regular"><span class="pdot"></span>一般課程</span>
+                  <div class="thero-time">19:00 – 21:00<span class="sub">2 小時</span></div></div>
+                <div class="thero-title">國一英文班</div>
+                <div class="thero-meta"><span><span class="lbl">授課</span><b>黃老師</b></span><span><span class="lbl">教室</span><b>301教室</b></span>
+                  <span><span class="lbl">學生</span><b>6 人</b> <span class="stu-rest">林佳蓉、鄭凱文、可茵…</span></span></div>
+                <div class="thero-prog"><div class="thero-prog-bar"><div class="thero-prog-fill" style="width:8%"></div></div>
+                  <div class="thero-prog-txt"><span class="prog-elap">已進行 10 分</span><span class="prog-remain">剩 110 分</span></div></div>
+              </div>
+              <div class="thero">
+                <div class="thero-bar" style="background:var(--cal-general)"></div>
+                <div class="thero-hd"><span class="thero-tag"><span class="ndot"></span>進行中</span><span class="tpill t-regular"><span class="pdot"></span>一般課程</span>
+                  <div class="thero-time">19:00 – 21:00<span class="sub">2 小時</span></div></div>
+                <div class="thero-title">國二理化班</div>
+                <div class="thero-meta"><span><span class="lbl">授課</span><b>林老師</b></span><span><span class="lbl">教室</span><b>大教室</b></span>
+                  <span><span class="lbl">學生</span><b>8 人</b> <span class="stu-rest">王小明、陳大華、李小美…</span></span></div>
+                <div class="thero-prog"><div class="thero-prog-bar"><div class="thero-prog-fill" style="width:8%"></div></div>
+                  <div class="thero-prog-txt"><span class="prog-elap">已進行 10 分</span><span class="prog-remain">剩 110 分</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="courses-layout" style="grid-template-columns:1fr"><div class="today-panel">
+          <div class="today-panel-hd"><span class="today-panel-title">今日課程</span>
+            <div class="date-nav"><div class="date-title">7/4（週五）</div><button class="dbtn">‹ 前一天</button><button class="dbtn">今天</button><button class="dbtn">後一天 ›</button></div></div>
+          <div class="today-panel-body">
+            <div class="tsum"><span>共 <b>7</b> 堂</span><span>已完成 <b>3</b></span><span>進行中 <b style="color:var(--ac)">4</b></span></div>
+            <div class="tgrid">
+              <div class="tcard2 t-regular t-past" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">數</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">高一數學班</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">大教室 · 林老師 · 5 人</div></div><div class="tcard2-time"><b>14:00</b><span>16:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-practice t-past" style="--tcv:var(--cal-practice)"><div class="tcard2-head"><div class="tcard2-av av-practice">練</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國三理化練習</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">301教室 · 4 人 · 自習</div></div><div class="tcard2-time"><b>15:00</b><span>17:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-past" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">數</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國二數學班</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">大教室 · 王老師 · 8 人</div></div><div class="tcard2-time"><b>17:00</b><span>19:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-pair t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">理</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">新力、晨宇理化</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">小教室 · 陳老師 · 2 人</div></div><div class="tcard2-time"><b>17:30</b><span>19:30</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-one t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">物</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">高三物理</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">208 · 郭老師 · 1 人</div></div><div class="tcard2-time"><b>18:00</b><span>19:30</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">英</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國一英文班</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">301教室 · 黃老師 · 6 人</div></div><div class="tcard2-time"><b>19:00</b><span>21:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">理</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國二理化班</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">大教室 · 林老師 · 8 人</div></div><div class="tcard2-time"><b>19:00</b><span>21:00</span></div><span class="tcard2-chev">▾</span></div></div>
+            </div>
+          </div>
+        </div></div>
+        <p class="cut">↓ 以下「本週課程」區不受這題影響，五個方案都一樣，省略。</p>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ═══ 1 · 等高捲動 ═══ -->
+  <div>
+    <div class="screen-lbl"><span class="n">1</span>等高捲動<span class="tag prop">提案</span></div>
+    <p class="verdict"><b>一行 CSS</b>：`.tl-b{max-height:262px}`——現有的 `overflow-y:auto` 就活了。
+      <span class="pro">洞補起來、版面立刻正常</span>，
+      但 <span class="con">第 2 堂以後被藏進捲軸</span>：尖峰時段你反而只看得到 1.5 堂，比現在更看不到全部。治版面，不治問題。</p>
+    <div class="screen opt-scroll">
+      <div class="page"><div class="wrap">
+        <div class="tl-ab-box">
+          <div class="tl-a">
+            <div class="tl-a-hd">教室時段</div>
+            <div class="tl-a-body"><div class="tl-wrap">
+              <div class="tl-corner"></div>
+              <div class="tl-hdr">
+                <span class="tl-tick" style="left:0%">13:00</span><span class="tl-tick" style="left:12.5%">14:00</span>
+                <span class="tl-tick" style="left:25%">15:00</span><span class="tl-tick" style="left:37.5%">16:00</span>
+                <span class="tl-tick" style="left:50%">17:00</span><span class="tl-tick" style="left:62.5%">18:00</span>
+                <span class="tl-tick" style="left:75%">19:00</span><span class="tl-tick" style="left:87.5%">20:00</span>
+                <span class="tl-tick" style="left:100%">21:00</span>
+                <span class="tl-now-hdr-lbl" style="left:77.08%">▾</span>
+              </div>
+              <div class="tl-room-lbl">大教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:12.5%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">高一數學班</div></div>
+                <div class="tl-block" style="left:50%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">國二數學班</div></div>
+                <div class="tl-block" style="left:75%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">國二理化班</div></div>
+              </div>
+              <div class="tl-room-lbl">小教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:56.25%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">新力、晨宇理化</div></div>
+              </div>
+              <div class="tl-room-lbl">208</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:62.5%;width:18.75%;background:var(--cal-general)"><div class="tl-block-nm">高三物理</div></div>
+              </div>
+              <div class="tl-room-lbl">301教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:25%;width:25%;background:var(--cal-practice)"><div class="tl-block-nm">國三理化練習</div></div>
+                <div class="tl-block" style="left:75%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">國一英文班</div></div>
+              </div>
+            </div></div>
+          </div>
+          <div class="tl-b">
+            <div id="today-hero">
+              <div class="thero">
+                <div class="thero-bar" style="background:var(--cal-general)"></div>
+                <div class="thero-hd"><span class="thero-tag"><span class="ndot"></span>進行中</span><span class="tpill t-pair"><span class="pdot"></span>一對二</span>
+                  <div class="thero-time">17:30 – 19:30<span class="sub">2 小時</span></div></div>
+                <div class="thero-title">新力、晨宇理化</div>
+                <div class="thero-meta"><span><span class="lbl">授課</span><b>陳老師</b></span><span><span class="lbl">教室</span><b>小教室</b></span>
+                  <span><span class="lbl">學生</span><b>2 人</b> <span class="stu-rest">新力、晨宇</span></span></div>
+                <div class="thero-prog"><div class="thero-prog-bar"><div class="thero-prog-fill" style="width:83%"></div></div>
+                  <div class="thero-prog-txt"><span class="prog-elap">已進行 100 分</span><span class="prog-remain">剩 20 分</span></div></div>
+              </div>
+              <div class="thero">
+                <div class="thero-bar" style="background:var(--cal-general)"></div>
+                <div class="thero-hd"><span class="thero-tag"><span class="ndot"></span>進行中</span><span class="tpill t-one"><span class="pdot"></span>一對一</span>
+                  <div class="thero-time">18:00 – 19:30<span class="sub">1.5 小時</span></div></div>
+                <div class="thero-title">高三物理</div>
+                <div class="thero-meta"><span><span class="lbl">授課</span><b>郭老師</b></span><span><span class="lbl">教室</span><b>208</b></span>
+                  <span><span class="lbl">學生</span><b>張志強</b></span></div>
+                <div class="thero-prog"><div class="thero-prog-bar"><div class="thero-prog-fill" style="width:78%"></div></div>
+                  <div class="thero-prog-txt"><span class="prog-elap">已進行 70 分</span><span class="prog-remain">剩 20 分</span></div></div>
+              </div>
+              <div class="thero">
+                <div class="thero-bar" style="background:var(--cal-general)"></div>
+                <div class="thero-hd"><span class="thero-tag"><span class="ndot"></span>進行中</span><span class="tpill t-regular"><span class="pdot"></span>一般課程</span>
+                  <div class="thero-time">19:00 – 21:00<span class="sub">2 小時</span></div></div>
+                <div class="thero-title">國一英文班</div>
+                <div class="thero-meta"><span><span class="lbl">授課</span><b>黃老師</b></span><span><span class="lbl">教室</span><b>301教室</b></span>
+                  <span><span class="lbl">學生</span><b>6 人</b></span></div>
+                <div class="thero-prog"><div class="thero-prog-bar"><div class="thero-prog-fill" style="width:8%"></div></div>
+                  <div class="thero-prog-txt"><span class="prog-elap">已進行 10 分</span><span class="prog-remain">剩 110 分</span></div></div>
+              </div>
+              <div class="thero">
+                <div class="thero-bar" style="background:var(--cal-general)"></div>
+                <div class="thero-hd"><span class="thero-tag"><span class="ndot"></span>進行中</span><span class="tpill t-regular"><span class="pdot"></span>一般課程</span>
+                  <div class="thero-time">19:00 – 21:00<span class="sub">2 小時</span></div></div>
+                <div class="thero-title">國二理化班</div>
+                <div class="thero-meta"><span><span class="lbl">授課</span><b>林老師</b></span><span><span class="lbl">教室</span><b>大教室</b></span>
+                  <span><span class="lbl">學生</span><b>8 人</b></span></div>
+                <div class="thero-prog"><div class="thero-prog-bar"><div class="thero-prog-fill" style="width:8%"></div></div>
+                  <div class="thero-prog-txt"><span class="prog-elap">已進行 10 分</span><span class="prog-remain">剩 110 分</span></div></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="courses-layout" style="grid-template-columns:1fr"><div class="today-panel">
+          <div class="today-panel-hd"><span class="today-panel-title">今日課程</span>
+            <div class="date-nav"><div class="date-title">7/4（週五）</div><button class="dbtn">‹ 前一天</button><button class="dbtn">今天</button><button class="dbtn">後一天 ›</button></div></div>
+          <div class="today-panel-body">
+            <div class="tsum"><span>共 <b>7</b> 堂</span><span>已完成 <b>3</b></span><span>進行中 <b style="color:var(--ac)">4</b></span></div>
+            <div class="tgrid">
+              <div class="tcard2 t-regular t-past" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">數</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">高一數學班</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">大教室 · 林老師 · 5 人</div></div><div class="tcard2-time"><b>14:00</b><span>16:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-practice t-past" style="--tcv:var(--cal-practice)"><div class="tcard2-head"><div class="tcard2-av av-practice">練</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國三理化練習</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">301教室 · 4 人 · 自習</div></div><div class="tcard2-time"><b>15:00</b><span>17:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-past" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">數</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國二數學班</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">大教室 · 王老師 · 8 人</div></div><div class="tcard2-time"><b>17:00</b><span>19:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-pair t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">理</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">新力、晨宇理化</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">小教室 · 陳老師 · 2 人</div></div><div class="tcard2-time"><b>17:30</b><span>19:30</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-one t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">物</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">高三物理</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">208 · 郭老師 · 1 人</div></div><div class="tcard2-time"><b>18:00</b><span>19:30</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">英</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國一英文班</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">301教室 · 黃老師 · 6 人</div></div><div class="tcard2-time"><b>19:00</b><span>21:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">理</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國二理化班</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">大教室 · 林老師 · 8 人</div></div><div class="tcard2-time"><b>19:00</b><span>21:00</span></div><span class="tcard2-chev">▾</span></div></div>
+            </div>
+          </div>
+        </div></div>
+        <p class="cut">↓ 「本週課程」區省略。</p>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ═══ 2 · 全寬橫排 ═══ -->
+  <div>
+    <div class="screen-lbl"><span class="n">2</span>全寬橫排<span class="tag prop">提案</span></div>
+    <p class="verdict">時間軸吃滿寬、hero 移到它下面排成一列。<b>沒有新樣式</b>——只是把 `#today-hero` 真的設成 `display:flex`，
+      <span class="pro">style.css:281 那行躺了不知道多久的 `flex:1;min-width:280px` 當場復活</span>。4 張 × 280px 剛好塞滿版心，第 5 張自動換行。
+      代價：<span class="con">hero 變窄、學生名單那行被擠掉</span>，而且 8 堂並行時會變成兩排、又開始長高。</p>
+    <div class="screen opt-row">
+      <div class="page"><div class="wrap">
+        <div class="tl-ab-box">
+          <div class="tl-a">
+            <div class="tl-a-hd">教室時段</div>
+            <div class="tl-a-body"><div class="tl-wrap">
+              <div class="tl-corner"></div>
+              <div class="tl-hdr">
+                <span class="tl-tick" style="left:0%">13:00</span><span class="tl-tick" style="left:12.5%">14:00</span>
+                <span class="tl-tick" style="left:25%">15:00</span><span class="tl-tick" style="left:37.5%">16:00</span>
+                <span class="tl-tick" style="left:50%">17:00</span><span class="tl-tick" style="left:62.5%">18:00</span>
+                <span class="tl-tick" style="left:75%">19:00</span><span class="tl-tick" style="left:87.5%">20:00</span>
+                <span class="tl-tick" style="left:100%">21:00</span>
+                <span class="tl-now-hdr-lbl" style="left:77.08%">▾</span>
+              </div>
+              <div class="tl-room-lbl">大教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:12.5%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">高一數學班</div></div>
+                <div class="tl-block" style="left:50%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">國二數學班</div></div>
+                <div class="tl-block" style="left:75%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">國二理化班</div></div>
+              </div>
+              <div class="tl-room-lbl">小教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:56.25%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">新力、晨宇理化</div></div>
+              </div>
+              <div class="tl-room-lbl">208</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:62.5%;width:18.75%;background:var(--cal-general)"><div class="tl-block-nm">高三物理</div></div>
+              </div>
+              <div class="tl-room-lbl">301教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:25%;width:25%;background:var(--cal-practice)"><div class="tl-block-nm">國三理化練習</div></div>
+                <div class="tl-block" style="left:75%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">國一英文班</div></div>
+              </div>
+            </div></div>
+          </div>
+        </div>
+
+        <div id="today-hero">
+          <div class="thero">
+            <div class="thero-bar" style="background:var(--cal-general)"></div>
+            <div class="thero-hd"><span class="thero-tag"><span class="ndot"></span>進行中</span>
+              <div class="thero-time">17:30 – 19:30</div></div>
+            <div class="thero-title">新力、晨宇理化</div>
+            <div class="thero-meta"><span><span class="lbl">授課</span><b>陳老師</b></span><span><span class="lbl">教室</span><b>小教室</b></span></div>
+            <div class="thero-prog"><div class="thero-prog-bar"><div class="thero-prog-fill" style="width:83%"></div></div>
+              <div class="thero-prog-txt"><span class="prog-elap">已進行 100 分</span><span class="prog-remain">剩 20 分</span></div></div>
+          </div>
+          <div class="thero">
+            <div class="thero-bar" style="background:var(--cal-general)"></div>
+            <div class="thero-hd"><span class="thero-tag"><span class="ndot"></span>進行中</span>
+              <div class="thero-time">18:00 – 19:30</div></div>
+            <div class="thero-title">高三物理</div>
+            <div class="thero-meta"><span><span class="lbl">授課</span><b>郭老師</b></span><span><span class="lbl">教室</span><b>208</b></span></div>
+            <div class="thero-prog"><div class="thero-prog-bar"><div class="thero-prog-fill" style="width:78%"></div></div>
+              <div class="thero-prog-txt"><span class="prog-elap">已進行 70 分</span><span class="prog-remain">剩 20 分</span></div></div>
+          </div>
+          <div class="thero">
+            <div class="thero-bar" style="background:var(--cal-general)"></div>
+            <div class="thero-hd"><span class="thero-tag"><span class="ndot"></span>進行中</span>
+              <div class="thero-time">19:00 – 21:00</div></div>
+            <div class="thero-title">國一英文班</div>
+            <div class="thero-meta"><span><span class="lbl">授課</span><b>黃老師</b></span><span><span class="lbl">教室</span><b>301教室</b></span></div>
+            <div class="thero-prog"><div class="thero-prog-bar"><div class="thero-prog-fill" style="width:8%"></div></div>
+              <div class="thero-prog-txt"><span class="prog-elap">已進行 10 分</span><span class="prog-remain">剩 110 分</span></div></div>
+          </div>
+          <div class="thero">
+            <div class="thero-bar" style="background:var(--cal-general)"></div>
+            <div class="thero-hd"><span class="thero-tag"><span class="ndot"></span>進行中</span>
+              <div class="thero-time">19:00 – 21:00</div></div>
+            <div class="thero-title">國二理化班</div>
+            <div class="thero-meta"><span><span class="lbl">授課</span><b>林老師</b></span><span><span class="lbl">教室</span><b>大教室</b></span></div>
+            <div class="thero-prog"><div class="thero-prog-bar"><div class="thero-prog-fill" style="width:8%"></div></div>
+              <div class="thero-prog-txt"><span class="prog-elap">已進行 10 分</span><span class="prog-remain">剩 110 分</span></div></div>
+          </div>
+        </div>
+
+        <div class="courses-layout" style="grid-template-columns:1fr"><div class="today-panel">
+          <div class="today-panel-hd"><span class="today-panel-title">今日課程</span>
+            <div class="date-nav"><div class="date-title">7/4（週五）</div><button class="dbtn">‹ 前一天</button><button class="dbtn">今天</button><button class="dbtn">後一天 ›</button></div></div>
+          <div class="today-panel-body">
+            <div class="tsum"><span>共 <b>7</b> 堂</span><span>已完成 <b>3</b></span><span>進行中 <b style="color:var(--ac)">4</b></span></div>
+            <div class="tgrid">
+              <div class="tcard2 t-regular t-past" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">數</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">高一數學班</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">大教室 · 林老師 · 5 人</div></div><div class="tcard2-time"><b>14:00</b><span>16:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-practice t-past" style="--tcv:var(--cal-practice)"><div class="tcard2-head"><div class="tcard2-av av-practice">練</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國三理化練習</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">301教室 · 4 人 · 自習</div></div><div class="tcard2-time"><b>15:00</b><span>17:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-past" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">數</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國二數學班</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">大教室 · 王老師 · 8 人</div></div><div class="tcard2-time"><b>17:00</b><span>19:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-pair t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">理</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">新力、晨宇理化</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">小教室 · 陳老師 · 2 人</div></div><div class="tcard2-time"><b>17:30</b><span>19:30</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-one t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">物</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">高三物理</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">208 · 郭老師 · 1 人</div></div><div class="tcard2-time"><b>18:00</b><span>19:30</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">英</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國一英文班</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">301教室 · 黃老師 · 6 人</div></div><div class="tcard2-time"><b>19:00</b><span>21:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">理</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國二理化班</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">大教室 · 林老師 · 8 人</div></div><div class="tcard2-time"><b>19:00</b><span>21:00</span></div><span class="tcard2-chev">▾</span></div></div>
+            </div>
+          </div>
+        </div></div>
+        <p class="cut">↓ 「本週課程」區省略。</p>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ═══ 3 · 摘要列 ═══ -->
+  <div>
+    <div class="screen-lbl"><span class="n">3</span>摘要列<span class="tag prop">提案</span></div>
+    <p class="verdict">右欄留著、寬度不變，但多堂時每堂只給一行：色條＋課名＋教室＋剩幾分＋細進度條。
+      <span class="pro">四堂只佔 190px、洞消失、全部看得到</span>，而且再多幾堂也只是多幾行。
+      代價：<span class="con">失去 hero 的細節與存在感</span>，要細節得點進去。（1 堂時仍走原本的大 hero。）</p>
+    <div class="screen">
+      <div class="page"><div class="wrap">
+        <div class="tl-ab-box">
+          <div class="tl-a">
+            <div class="tl-a-hd">教室時段</div>
+            <div class="tl-a-body"><div class="tl-wrap">
+              <div class="tl-corner"></div>
+              <div class="tl-hdr">
+                <span class="tl-tick" style="left:0%">13:00</span><span class="tl-tick" style="left:12.5%">14:00</span>
+                <span class="tl-tick" style="left:25%">15:00</span><span class="tl-tick" style="left:37.5%">16:00</span>
+                <span class="tl-tick" style="left:50%">17:00</span><span class="tl-tick" style="left:62.5%">18:00</span>
+                <span class="tl-tick" style="left:75%">19:00</span><span class="tl-tick" style="left:87.5%">20:00</span>
+                <span class="tl-tick" style="left:100%">21:00</span>
+                <span class="tl-now-hdr-lbl" style="left:77.08%">▾</span>
+              </div>
+              <div class="tl-room-lbl">大教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:12.5%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">高一數學班</div></div>
+                <div class="tl-block" style="left:50%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">國二數學班</div></div>
+                <div class="tl-block" style="left:75%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">國二理化班</div></div>
+              </div>
+              <div class="tl-room-lbl">小教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:56.25%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">新力、晨宇理化</div></div>
+              </div>
+              <div class="tl-room-lbl">208</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:62.5%;width:18.75%;background:var(--cal-general)"><div class="tl-block-nm">高三物理</div></div>
+              </div>
+              <div class="tl-room-lbl">301教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:25%;width:25%;background:var(--cal-practice)"><div class="tl-block-nm">國三理化練習</div></div>
+                <div class="tl-block" style="left:75%;width:25%;background:var(--cal-general)"><div class="tl-block-nm">國一英文班</div></div>
+              </div>
+            </div></div>
+          </div>
+          <div class="tl-b">
+            <div class="now-list">
+              <div class="now-list-hd">進行中 <b>4</b></div>
+              <div class="now-row">
+                <span class="now-bar" style="background:var(--cal-general)"></span>
+                <span class="now-nm">新力、晨宇理化</span><span class="now-left">剩 20 分</span>
+                <span class="now-sub"><span class="now-rm">小教室 · 陳老師</span><span class="now-prog"><span style="width:83%"></span></span></span>
+              </div>
+              <div class="now-row">
+                <span class="now-bar" style="background:var(--cal-general)"></span>
+                <span class="now-nm">高三物理</span><span class="now-left">剩 20 分</span>
+                <span class="now-sub"><span class="now-rm">208 · 郭老師</span><span class="now-prog"><span style="width:78%"></span></span></span>
+              </div>
+              <div class="now-row">
+                <span class="now-bar" style="background:var(--cal-general)"></span>
+                <span class="now-nm">國一英文班</span><span class="now-left">剩 110 分</span>
+                <span class="now-sub"><span class="now-rm">301教室 · 黃老師</span><span class="now-prog"><span style="width:8%"></span></span></span>
+              </div>
+              <div class="now-row">
+                <span class="now-bar" style="background:var(--cal-general)"></span>
+                <span class="now-nm">國二理化班</span><span class="now-left">剩 110 分</span>
+                <span class="now-sub"><span class="now-rm">大教室 · 林老師</span><span class="now-prog"><span style="width:8%"></span></span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="courses-layout" style="grid-template-columns:1fr"><div class="today-panel">
+          <div class="today-panel-hd"><span class="today-panel-title">今日課程</span>
+            <div class="date-nav"><div class="date-title">7/4（週五）</div><button class="dbtn">‹ 前一天</button><button class="dbtn">今天</button><button class="dbtn">後一天 ›</button></div></div>
+          <div class="today-panel-body">
+            <div class="tsum"><span>共 <b>7</b> 堂</span><span>已完成 <b>3</b></span><span>進行中 <b style="color:var(--ac)">4</b></span></div>
+            <div class="tgrid">
+              <div class="tcard2 t-regular t-past" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">數</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">高一數學班</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">大教室 · 林老師 · 5 人</div></div><div class="tcard2-time"><b>14:00</b><span>16:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-practice t-past" style="--tcv:var(--cal-practice)"><div class="tcard2-head"><div class="tcard2-av av-practice">練</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國三理化練習</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">301教室 · 4 人 · 自習</div></div><div class="tcard2-time"><b>15:00</b><span>17:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-past" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">數</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國二數學班</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">大教室 · 王老師 · 8 人</div></div><div class="tcard2-time"><b>17:00</b><span>19:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-pair t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">理</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">新力、晨宇理化</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">小教室 · 陳老師 · 2 人</div></div><div class="tcard2-time"><b>17:30</b><span>19:30</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-one t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">物</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">高三物理</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">208 · 郭老師 · 1 人</div></div><div class="tcard2-time"><b>18:00</b><span>19:30</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">英</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國一英文班</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">301教室 · 黃老師 · 6 人</div></div><div class="tcard2-time"><b>19:00</b><span>21:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">理</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國二理化班</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">大教室 · 林老師 · 8 人</div></div><div class="tcard2-time"><b>19:00</b><span>21:00</span></div><span class="tcard2-chev">▾</span></div></div>
+            </div>
+          </div>
+        </div></div>
+        <p class="cut">↓ 「本週課程」區省略。</p>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- ═══ 4 · 時間軸接管 ═══ -->
+  <div>
+    <div class="screen-lbl"><span class="n">4</span>時間軸接管<span class="tag prop">提案</span></div>
+    <p class="verdict">右欄整個拿掉、時間軸吃滿寬，進行中的 block 加外框光暈＋接上「剩 N 分」。
+      關鍵理由：<b>同時進行的課一定在不同教室</b> → 時間軸本來就一間教室一列 → <span class="pro">N 堂並行在時間軸上天生就是 N 條線被 now 線穿過，永遠不會長高</span>。
+      這是唯一「無論幾堂都不會爆」的做法，而且今日課程直接升到第一屏。
+      代價：<span class="con">進度條、學生名單、快速動作全部沒了</span>；block 只有 30px 高（style.css:1051），一行字就是上限。改動最大。</p>
+    <div class="screen opt-tl">
+      <div class="page"><div class="wrap">
+        <div class="tl-ab-box">
+          <div class="tl-a">
+            <div class="tl-a-hd">教室時段<span style="font-size:11px;font-weight:400;color:var(--tx3);margin-left:8px">現在 19:10 · 進行中 4 堂</span></div>
+            <div class="tl-a-body"><div class="tl-wrap">
+              <div class="tl-corner"></div>
+              <div class="tl-hdr">
+                <span class="tl-tick" style="left:0%">13:00</span><span class="tl-tick" style="left:12.5%">14:00</span>
+                <span class="tl-tick" style="left:25%">15:00</span><span class="tl-tick" style="left:37.5%">16:00</span>
+                <span class="tl-tick" style="left:50%">17:00</span><span class="tl-tick" style="left:62.5%">18:00</span>
+                <span class="tl-tick" style="left:75%">19:00</span><span class="tl-tick" style="left:87.5%">20:00</span>
+                <span class="tl-tick" style="left:100%">21:00</span>
+                <span class="tl-now-hdr-lbl" style="left:77.08%">▾</span>
+              </div>
+              <div class="tl-room-lbl">大教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:12.5%;width:25%;background:var(--cal-general);opacity:.45"><div class="tl-block-nm">高一數學班</div></div>
+                <div class="tl-block" style="left:50%;width:25%;background:var(--cal-general);opacity:.45"><div class="tl-block-nm">國二數學班</div></div>
+                <div class="tl-block tl-block-now" style="left:75%;width:25%;background:var(--cal-general)"><div class="tl-block-nm" data-left="· 剩 110 分">國二理化班</div></div>
+              </div>
+              <div class="tl-room-lbl">小教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block tl-block-now" style="left:56.25%;width:25%;background:var(--cal-general)"><div class="tl-block-nm" data-left="· 剩 20 分">新力、晨宇理化</div></div>
+              </div>
+              <div class="tl-room-lbl">208</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block tl-block-now" style="left:62.5%;width:18.75%;background:var(--cal-general)"><div class="tl-block-nm" data-left="· 剩 20 分">高三物理</div></div>
+              </div>
+              <div class="tl-room-lbl">301教室</div>
+              <div class="tl-track">
+                <div class="tl-now-line" style="left:77.08%"></div>
+                <div class="tl-block" style="left:25%;width:25%;background:var(--cal-practice);opacity:.45"><div class="tl-block-nm">國三理化練習</div></div>
+                <div class="tl-block tl-block-now" style="left:75%;width:25%;background:var(--cal-general)"><div class="tl-block-nm" data-left="· 剩 110 分">國一英文班</div></div>
+              </div>
+            </div></div>
+          </div>
+        </div>
+
+        <div class="courses-layout" style="grid-template-columns:1fr"><div class="today-panel">
+          <div class="today-panel-hd"><span class="today-panel-title">今日課程</span>
+            <div class="date-nav"><div class="date-title">7/4（週五）</div><button class="dbtn">‹ 前一天</button><button class="dbtn">今天</button><button class="dbtn">後一天 ›</button></div></div>
+          <div class="today-panel-body">
+            <div class="tsum"><span>共 <b>7</b> 堂</span><span>已完成 <b>3</b></span><span>進行中 <b style="color:var(--ac)">4</b></span></div>
+            <div class="tgrid">
+              <div class="tcard2 t-regular t-past" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">數</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">高一數學班</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">大教室 · 林老師 · 5 人</div></div><div class="tcard2-time"><b>14:00</b><span>16:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-practice t-past" style="--tcv:var(--cal-practice)"><div class="tcard2-head"><div class="tcard2-av av-practice">練</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國三理化練習</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">301教室 · 4 人 · 自習</div></div><div class="tcard2-time"><b>15:00</b><span>17:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-past" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">數</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國二數學班</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                <div class="tcard2-sub">大教室 · 王老師 · 8 人</div></div><div class="tcard2-time"><b>17:00</b><span>19:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-pair t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">理</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">新力、晨宇理化</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">小教室 · 陳老師 · 2 人</div></div><div class="tcard2-time"><b>17:30</b><span>19:30</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-one t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">物</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">高三物理</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">208 · 郭老師 · 1 人</div></div><div class="tcard2-time"><b>18:00</b><span>19:30</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">英</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國一英文班</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">301教室 · 黃老師 · 6 人</div></div><div class="tcard2-time"><b>19:00</b><span>21:00</span></div><span class="tcard2-chev">▾</span></div></div>
+              <div class="tcard2 t-regular t-now" style="--tcv:var(--cal-general)"><div class="tcard2-head"><div class="tcard2-av">理</div>
+                <div class="tcard2-info"><div class="tcard2-name"><span class="tcard2-title">國二理化班</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span></div>
+                <div class="tcard2-sub">大教室 · 林老師 · 8 人</div></div><div class="tcard2-time"><b>19:00</b><span>21:00</span></div><span class="tcard2-chev">▾</span></div></div>
+            </div>
+          </div>
+        </div></div>
+        <p class="cut">↓ 「本週課程」區省略。</p>
+      </div></div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>
