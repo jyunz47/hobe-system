@@ -52,7 +52,8 @@ function buildCourseOverview(){
   // 系統自有課程（driveData.courses，2026-07-04 起）：以 id 為身分的獨立實體，不與行事曆課名合併
   const sysBucket={'一對一':'one','一對二':'pair','團班':'group','練習課':'practice','試聽':'trial'};
   const sys=getCourses().map(co=>({
-    title:co.name,type:sysBucket[co.type]||'group',sys:co,
+    // 卡片標題＝今天生效的課名（namePhases 分段時，8/1 到了自己會換）
+    title:courseNameOn(co,new Date()),type:sysBucket[co.type]||'group',sys:co,
     teachers:new Set(courseTeacherNames(co)),
     sessions:sysCourseSessions(co),
     enrolled:getEnrollments({periodId:pid}).filter(en=>en.courseId===co.id),
@@ -186,6 +187,7 @@ function openCourseModal(key){
 function closeCourseModal(){
   document.getElementById('course-modal-wrap').classList.remove('open');
   _courseModalKey=null;
+  if(typeof _sysDateEdit!=='undefined')_sysDateEdit=null; // 未存的修課起訖編輯狀態一併丟棄
 }
 function refreshCourseModal(){if(courseModalOpen())renderCourseModal();}
 
@@ -273,7 +275,7 @@ function coAddEnroll(btn,title){
 function coRemoveEnroll(enId){
   const en=getEnrollments().find(e=>e.id===enId);
   if(!en)return;
-  if(!confirm(`把「${studentName(en.studentId)}」從「${en.courseTitle}」退掉？\n\n會移除這筆登記（含自訂單價），之後可再加回。不影響 Google 行事曆。`))return;
+  if(!confirm(`把「${studentName(en.studentId)}」從「${en.courseTitle}」退掉？\n\n會移除這筆登記（含自訂單價），連過去的堂數一起消失、舊課堂名單也會少他一人。\n\n如果只是「某天起不上」，請改用名單上的 📅 設修課起訖（過去的堂數會留著）。\n\n不影響 Google 行事曆。`))return;
   saveEnrollments(getEnrollments().filter(e=>e.id!==enId));
   toast(`已退課：${studentName(en.studentId)} — ${en.courseTitle}`,'ok');
   renderSettings();

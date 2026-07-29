@@ -15,6 +15,40 @@ function courseTeacherIds(co){return Array.isArray(co.teacherIds)?co.teacherIds:
 function courseTeacherNames(co){return courseTeacherIds(co).map(teacherNameById).filter(Boolean);}
 function findCourseById(id){return getCourses().find(c=>c.id===id);}
 
+// ── 課名分段（namePhases，2026-07-29 起）──
+// 名單期中變動時課名也要跟著變，做法同 schedule.phases：`[{from:'YYYY-MM-DD', name}]`，
+// 某天的課名＝ from<=該天 的最後一段，沒有就是 course.name（建課當下的名字）。
+// 課程身分是 id 不是名字，所以改名不會對錯資料；已建立的補課/調課紀錄抄的是當下名字，仍顯示舊名。
+function courseNamePhases(co){
+  return (co&&Array.isArray(co.namePhases)?co.namePhases:[])
+    .filter(p=>p&&p.from&&String(p.name||'').trim())
+    .slice().sort((a,b)=>a.from<b.from?-1:a.from>b.from?1:0);
+}
+function courseNameOn(co,day){
+  if(!co)return'';
+  const d=!day?null:(typeof day==='string'?day:toDateStr(day));
+  let name=co.name||'';
+  if(!d)return name;
+  courseNamePhases(co).forEach(p=>{if(p.from<=d)name=String(p.name).trim();});
+  return name;
+}
+// 某天的建議課名：拿「那天在籍的名單」重跑自動命名規則。
+// 人數會影響課型（1 人家教／2 人一對二／3+ 團班），所以型也依當天人數重判——
+// 但只影響建議的字，課程本體的 type/費率不動（費率單位跟型走，動到就動到薪資）。
+function courseSuggestNameOn(co,day){
+  if(!co)return'';
+  const d=typeof day==='string'?day:toDateStr(day);
+  const ens=getEnrollments({periodId:yearPeriodId()})
+    .filter(en=>en.courseId===co.id&&enrollmentActiveOn(en,d));
+  const ids=ens.map(en=>en.studentId);
+  const prac={};ens.forEach(en=>{prac[en.studentId]=en.practiceSubject||'';});
+  const fixed=(co.type==='練習課'||co.type==='試聽');
+  const type=fixed?co.type:(ids.length===1?'一對一':ids.length===2?'一對二':'團班');
+  const wd=co.schedule?.mode==='weekly'&&(co.schedule.slots||[]).length
+    ?(CF_WD_LABEL[co.schedule.slots[0].weekday]||''):'';
+  return courseAutoNameFor({type,studentIds:ids,subject:co.subject,prac,weekdayLabel:wd});
+}
+
 // 週選項自帶一份，不在載入期依賴 settings.js 的 WEEK_ORDER/WEEK_LABEL（script 載入順序防呆）
 var CF_WEEKDAYS=[[1,'週一'],[2,'週二'],[3,'週三'],[4,'週四'],[5,'週五'],[6,'週六'],[0,'週日']];
 var CF_WD_LABEL={1:'週一',2:'週二',3:'週三',4:'週四',5:'週五',6:'週六',0:'週日'};
@@ -39,6 +73,7 @@ function cfBlank(){
     subject:'',
     pinnedType:null,        // null＝自動判型；點類型 chip 鎖定覆蓋
     name:'',nameTouched:false,
+    namePhases:[],          // 課名分段：[{from:'YYYY-MM-DD', name}]，某日起改叫別的（名單期中變動時用）
     teachers:[],            // 老師（可多位）：姓名字串陣列；存檔時對既有老師、對不到就建檔
     teacherInput:'',        // 老師輸入框當前文字
     teacherRate:'',
@@ -58,6 +93,7 @@ function openCourseForm(courseId){
     if(!co)return;
     cfState={...cfBlank(),editId:co.id,subject:co.subject||'',
       pinnedType:co.type||null,name:co.name,nameTouched:true,
+      namePhases:(co.namePhases||[]).map(p=>({from:p.from||'',name:p.name||''})),
       teachers:courseTeacherNames(co),teacherInput:'',teacherRate:co.teacherRate??'',
       mode:co.schedule?.mode||'weekly',
       slots:(co.schedule?.slots||[]).map(s=>({weekday:s.weekday??1,start:s.start||'',end:s.end||'',date:s.date||''})),
@@ -87,45 +123,51 @@ function cfType(){
 // 把一個學生的練習科目字串（可能「數學、理化」）拆成陣列
 function cfSubjList(sid){return (cfState.practiceSubjects[sid]||'').split(/[、,，]/).map(s=>s.trim()).filter(Boolean);}
 
+// ── 自動命名（規則見資料結構.md courses.name）──
+// 純函式版：吃「一份名單」而不是 cfState，所以新增表單與「課名分段建議」共用同一套規則。
+// 資料還不夠命名時回空字串，不要生出「班」「家教」這種殘字掛在課名欄
+function _anSubjList(prac,sid){return String((prac||{})[sid]||'').split(/[、,，]/).map(s=>s.trim()).filter(Boolean);}
+// 名單裡最多人的年級
+function _anTopGrade(ids){
+  const cnt={};
+  ids.forEach(id=>{const s=getStudentList().find(s=>s.id===id);if(s&&s.grade)cnt[s.grade]=(cnt[s.grade]||0)+1;});
+  return Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
+}
 // 練習課命名（#7 規則＋2026-07-16 跨年級規則）：
 //   1 人 → 「(名)(科目)練習課」
 //   ≥2 人跨年級 → 「(年級)、(年級)練習課」（年級照低到高排，不掛名不掛科目）
 //   ≥2 人同年級且全班同一科 → 「(名)、(名)…(科目)練習課」（≤2 列名，3+ 用最多人年級）
 //   ≥2 人同年級但科目不同 → 「(名)、(名)練習課」（≤2 列名，3+ 用最多人年級或週別）
-function cfPracticeName(){
-  const st=cfState;
-  const ids=st.students;
-  if(!ids.length){const wd=st.mode==='weekly'&&st.slots.length?(CF_WD_LABEL[st.slots[0].weekday]||''):'';return wd+'練習課';}
+function _anPracticeName(ids,prac,weekdayLabel){
+  if(!ids.length)return(weekdayLabel||'')+'練習課';
   const names=ids.map(id=>studentName(id));
-  const subjSet=new Set();ids.forEach(id=>cfSubjList(id).forEach(s=>subjSet.add(s)));
+  const subjSet=new Set();ids.forEach(id=>_anSubjList(prac,id).forEach(s=>subjSet.add(s)));
   const subjStr=[...subjSet].join('、');
   if(ids.length===1)return names[0]+subjStr+'練習課';
   // 跨年級：課名列出各年級（低→高，照 GRADES 順序）
   const gradeSet=new Set(ids.map(id=>getStudentList().find(s=>s.id===id)?.grade).filter(Boolean));
   if(gradeSet.size>=2)return [...gradeSet].sort((a,b)=>GRADES.indexOf(a)-GRADES.indexOf(b)).join('、')+'練習課';
-  const head=ids.length<=2?names.join('、'):cfTopGrade();
+  const head=ids.length<=2?names.join('、'):_anTopGrade(ids);
   if(subjSet.size===1)return head+subjStr+'練習課';   // 全班同一科
   return head+'練習課';                                  // 科目不同，不掛科目
 }
-// 名單裡最多人的年級
-function cfTopGrade(){
-  const cnt={};
-  cfState.students.forEach(id=>{const s=getStudentList().find(s=>s.id===id);if(s&&s.grade)cnt[s.grade]=(cnt[s.grade]||0)+1;});
-  return Object.entries(cnt).sort((a,b)=>b[1]-a[1])[0]?.[0]||'';
-}
-
-// ── 自動命名（規則見資料結構.md courses.name）──
-// 資料還不夠命名時回空字串，不要生出「班」「家教」這種殘字掛在課名欄
-function cfAutoName(){
-  const t=cfType();
-  const subj=cfState.subject.trim()==='練習'?'':cfState.subject.trim();
-  const names=cfState.students.map(id=>studentName(id));
-  if(t==='練習課')return cfPracticeName();
-  if(t==='試聽'){const s=(names[0]||'')+subj;return s?s+'試聽':'';}
-  if(t==='一對一'){const s=(names[0]||'')+subj;return s?s+'家教':'';}
-  if(t==='一對二'){const s=names.slice(0,2).join('、')+subj;return s?s+'班':'';}
-  const s=cfTopGrade()+subj;
+function courseAutoNameFor({type,studentIds,subject,prac,weekdayLabel}){
+  const ids=studentIds||[];
+  const subj=String(subject||'').trim()==='練習'?'':String(subject||'').trim();
+  const names=ids.map(id=>studentName(id));
+  if(type==='練習課')return _anPracticeName(ids,prac,weekdayLabel);
+  if(type==='試聽'){const s=(names[0]||'')+subj;return s?s+'試聽':'';}
+  if(type==='一對一'){const s=(names[0]||'')+subj;return s?s+'家教':'';}
+  if(type==='一對二'){const s=names.slice(0,2).join('、')+subj;return s?s+'班':'';}
+  const s=_anTopGrade(ids)+subj;
   return s?s+'班':'';
+}
+function cfAutoName(){
+  const st=cfState;
+  return courseAutoNameFor({
+    type:cfType(),studentIds:st.students,subject:st.subject,prac:st.practiceSubjects,
+    weekdayLabel:st.mode==='weekly'&&st.slots.length?(CF_WD_LABEL[st.slots[0].weekday]||''):'',
+  });
 }
 
 // 費率單位隨型：家教按時數、團班按人頭、試聽（與補課）固定一筆
@@ -211,6 +253,26 @@ function cfAddSlot(){cfState.slots.push({weekday:1,start:'',end:'',date:''});ren
 // 換時段段落（多段上課時間）：同一門課、不同期別時間不同，依 from 日期自動切換
 var CF_TERM_STARTS=[['上學期',8,1],['寒假',1,1],['下學期',2,1],['暑假',6,1]]; // [標籤, 月(0起), 日]
 function cfNextTermDate(mo,dd){const now=new Date();now.setHours(0,0,0,0);let d=new Date(now.getFullYear(),mo,dd);if(d<now)d=new Date(now.getFullYear()+1,mo,dd);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
+// 課名分段（namePhases）：「從某日起改叫別的」，與換時段共用日期快捷
+function cfAddNamePhase(){cfState.namePhases.push({from:'',name:''});renderCourseForm();}
+function cfDelNamePhase(ni){cfState.namePhases.splice(ni,1);renderCourseForm();}
+function cfNamePhaseSet(ni,f,v){cfState.namePhases[ni][f]=v;renderCourseForm();}
+function cfNamePhasePreset(ni,mo,dd){cfState.namePhases[ni].from=cfNextTermDate(mo,dd);renderCourseForm();}
+// 該段的建議課名（也拿來當 placeholder）：編輯既有課＝依那天在籍的名單；新課還沒有登記＝用目前表單名單
+function cfNamePhaseHint(ni){
+  const p=cfState.namePhases[ni];
+  if(!p||!p.from)return'';
+  const co=cfState.editId!=null?findCourseById(cfState.editId):null;
+  return co?courseSuggestNameOn(co,p.from):cfAutoName();
+}
+function cfNamePhaseSuggest(ni){
+  const p=cfState.namePhases[ni];
+  if(!p)return;
+  if(!p.from)return toast('先選日期，才知道要照哪天的名單命名','inf');
+  const nm=cfNamePhaseHint(ni);
+  if(!nm)return toast('那天的名單湊不出課名（沒人或缺年級/科目），請直接輸入','inf');
+  p.name=nm;renderCourseForm();
+}
 function cfAddPhase(){cfState.phases.push({from:'',slots:[{weekday:1,start:'',end:''}]});renderCourseForm();}
 function cfDelPhase(pi){cfState.phases.splice(pi,1);renderCourseForm();}
 function cfPhaseFromSet(pi,v){cfState.phases[pi].from=v;}
@@ -251,7 +313,7 @@ function renderCourseForm(){
   // 學生：建立時＝初始名單；編輯模式名單改在課程視窗加退（同一筆 enrollment，避免兩處打架）
   let stuSec;
   if(edit){
-    stuSec=`<div class="cm-sec"><div class="cm-lbl">名單</div><div class="cm-hint">名單加退在課程總覽點這門課的視窗裡操作，這裡只改課程本身。</div></div>`;
+    stuSec=`<div class="cm-sec"><div class="cm-lbl">名單</div><div class="cm-hint">名單加退、修課起訖（📅 插班／中途退出）在課程總覽點這門課的視窗裡操作，這裡只改課程本身。</div></div>`;
   }else{
     const chosen=new Set(st.students);
     // 自動完成清單：未選的在學學生（value＝姓名，選項文字附年級）
@@ -407,11 +469,29 @@ function renderCourseForm(){
   </div>`:'';
 
   const typeChips=CF_TYPES.map(x=>`<button class="cf-type-chip${x===t?' on':''}${st.pinnedType===x?' pinned':''}" onclick="cfPinType('${x}')">${x}</button>`).join('');
+  // 課名分段：從某日起改叫別的（同「換時段」的長相與快捷）
+  const namePhaseBlocks=st.namePhases.map((np,ni)=>`
+    <div class="cf-phase">
+      <div class="cf-phase-hd">
+        <span class="cf-phase-lbl">從</span>
+        <input type="date" class="cf-phase-date" value="${esc(np.from)}" onchange="cfNamePhaseSet(${ni},'from',this.value)">
+        <span class="cf-phase-lbl">起改叫</span>
+        <span class="cf-phase-presets">${CF_TERM_STARTS.map(([lbl,mo,dd])=>`<button type="button" class="cf-term-btn" onclick="cfNamePhasePreset(${ni},${mo},${dd})">${lbl}</button>`).join('')}</span>
+        <button class="co-stu-x cf-phase-x" title="移除此段" onclick="cfDelNamePhase(${ni})">✕</button>
+      </div>
+      <div class="cf-slot">
+        <input class="cm-input" name="search-phasename" autocomplete="off" value="${esc(np.name)}" placeholder="${esc(cfNamePhaseHint(ni)||'那天起的課名')}" onchange="cfNamePhaseSet(${ni},'name',this.value)">
+        <button type="button" class="cf-term-btn" title="依那天在籍的名單重新命名" onclick="cfNamePhaseSuggest(${ni})">↺ 建議</button>
+      </div>
+    </div>`).join('');
   const nameSec=`<div class="cm-sec cf-verdict">
     <div class="cm-lbl">系統判定${st.pinnedType?'（已手動鎖定，再點一次解除）':'（自動，點類型可改）'}</div>
     <div class="cf-type-row">${typeChips}</div>
     <div class="cm-lbl" style="margin-top:12px">課名（自動命名，可直接改；清空＝回到自動）</div>
     <input class="cm-input" id="cf-name" name="search-coursename" autocomplete="off" value="${esc(st.name)}" placeholder="${esc(cfAutoName()||'選學生、填科目後自動命名')}" oninput="cfNameInput(this.value)">
+    ${namePhaseBlocks}
+    <button class="cf-add-slot" onclick="cfAddNamePhase()">＋ 換課名（某日起改叫別的）</button>
+    ${st.namePhases.length?'<div class="cm-hint">名單期中變動時用：那天之前的課堂顯示舊名，之後顯示新名。</div>':''}
   </div>`;
 
   const foot=onPage
@@ -458,6 +538,11 @@ function cfSubmit(){
     .sort((a,b)=>a.from<b.from?-1:a.from>b.from?1:0)
     :[];
   for(const p of phases)for(const s of p.slots)if(s.end<=s.start)return toast('換時段的結束時間要晚於開始時間','err');
+  // 課名分段：只收「有日期＋有名字」的，依日期排序（沒填完的當作沒設，不擋存檔）
+  const namePhases=st.namePhases
+    .map(p=>({from:p.from||'',name:String(p.name||'').trim()}))
+    .filter(p=>p.from&&p.name)
+    .sort((a,b)=>a.from<b.from?-1:a.from>b.from?1:0);
 
   // 逐一解析成 id；查無此名就建檔（一次可建多位，id 用 Date.now()+序避免同毫秒撞號）
   const tlist=getTeachers().slice();
@@ -471,7 +556,7 @@ function cfSubmit(){
   const noFee=(t==='練習課'||t==='試聽');
   const rec={
     id:st.editId??Date.now(),
-    name,type:t,teacherIds,
+    name,namePhases,type:t,teacherIds,
     teacherRate:t==='練習課'?null:(String(st.teacherRate).trim()===''?null:Math.max(0,parseInt(st.teacherRate,10)||0)),
     schedule:{mode:st.mode,slots,phases},
     room:st.room||'',
@@ -520,10 +605,10 @@ function deleteCourse(id){
   // 連動清掉本課的系統請假紀錄（不留孤兒；待補課清單重建時查無課程也會跳過）
   if(getAbsences().some(a=>a.courseId===id))saveAbsences(getAbsences().filter(a=>a.courseId!==id));
   const times=sysSlotLabel(co)||'（未排時段）';
-  if(!confirm(`刪除課程「${co.name}」？\n\n上課時間：\n${times.split('、').map(s=>'  ・'+s).join('\n')}\n\n會一併移除 ${ens.length} 筆修課登記。學生本人不會被刪。此操作無法復原。`))return;
+  if(!confirm(`刪除課程「${courseNameOn(co,new Date())}」？\n\n上課時間：\n${times.split('、').map(s=>'  ・'+s).join('\n')}\n\n會一併移除 ${ens.length} 筆修課登記。學生本人不會被刪。此操作無法復原。`))return;
   saveCourses(getCourses().filter(c=>c.id!==id));
   if(ens.length)saveEnrollments(getEnrollments().filter(en=>en.courseId!==id));
-  toast(`已刪除「${co.name}」`,'ok');
+  toast(`已刪除「${courseNameOn(co,new Date())}」`,'ok');
   closeCourseForm();
   closeCourseModal();
   renderSettings();
@@ -662,7 +747,7 @@ function sysAddEnroll(btn,courseId){
   if(matches.length>1)return toast(`有多位「${q}」，請到課程編輯或用完整辨識再加`,'inf');
   const sid=matches[0].id;
   const list=getEnrollments().slice();
-  list.push(makeEnrollment({studentId:sid,courseTitle:co.name,periodId:yearPeriodId(),courseId}));
+  list.push(makeEnrollment({studentId:sid,courseTitle:courseNameOn(co,new Date()),periodId:yearPeriodId(),courseId}));
   saveEnrollments(list);
   toast(`已加入 ${studentName(sid)}：${co.name}`,'ok');
   renderSettings();
@@ -674,6 +759,116 @@ function sysSetPracticeSubject(enId,val){
   if(!en)return;
   en.practiceSubject=val.trim();
   saveEnrollments(list);
+}
+
+// ── 修課起訖：期中人數變動（插班／中途退出）──
+// 資料層 startDate/endDate 都是**含當日**（見 enrollment.js）；
+// UI 一律講「從 X 起」——「從 X 起不上」存成 endDate = X 的前一天，換算只在這裡做。
+// 為什麼不直接退課：退課是整筆刪除，過去的堂數與自訂單價會一起消失，
+// 回頭看 7 月的課堂名冊也會變少人。設起訖則是「8 月起才少一人」。
+function coDateParse(s){const[y,m,d]=String(s||'').split('-').map(Number);return(y&&m&&d)?new Date(y,m-1,d):null;}
+function coDateShift(s,n){const d=coDateParse(s);if(!d)return'';d.setDate(d.getDate()+n);return toDateStr(d);}
+function coDateMD(s){const d=coDateParse(s);return d?`${d.getMonth()+1}/${d.getDate()}`:'';}
+
+// 名單 pill 上的起訖標籤；沒設起訖就不顯示
+function sysWindowChip(en){
+  const parts=[];
+  if(en.startDate)parts.push(`${coDateMD(en.startDate)} 起加入`);
+  if(en.endDate)parts.push(`${coDateMD(coDateShift(en.endDate,1))} 起退出`);
+  return parts.length?`<span class="co-stu-win">${esc(parts.join('・'))}</span>`:'';
+}
+
+var _sysDateEdit=null; // {enId, joinFrom, leaveFrom}——leaveFrom 是「起不上」那天（＝endDate+1）
+
+function sysDateEditOpen(enId){
+  const en=getEnrollments().find(e=>e.id===enId);
+  if(!en)return;
+  _sysDateEdit=_sysDateEdit&&_sysDateEdit.enId===enId
+    ?null // 再點一次 📅 收合
+    :{enId,joinFrom:en.startDate||'',leaveFrom:en.endDate?coDateShift(en.endDate,1):''};
+  refreshCourseModal();
+}
+function sysDateEditCancel(){_sysDateEdit=null;refreshCourseModal();}
+function sysDateSet(f,v){if(_sysDateEdit)_sysDateEdit[f]=v;refreshCourseModal();}
+function sysDatePreset(f,mo,dd){if(_sysDateEdit)_sysDateEdit[f]=cfNextTermDate(mo,dd);refreshCourseModal();}
+
+function sysDateEditorHtml(ens){
+  const st=_sysDateEdit;
+  if(!st)return'';
+  const en=ens.find(e=>e.id===st.enId);
+  if(!en)return''; // 編輯中的那筆不屬於這門課（換課程視窗）→ 不顯示
+  const presets=f=>CF_TERM_STARTS.map(([lbl,mo,dd])=>`<button type="button" class="cf-term-btn" onclick="sysDatePreset('${f}',${mo},${dd})">${lbl}</button>`).join('');
+  // 把換算結果講白，避免「含當天不含當天」猜來猜去
+  let sum='';
+  if(st.leaveFrom)sum=`最後一堂是 ${coDateMD(coDateShift(st.leaveFrom,-1))}（含當天），${coDateMD(st.leaveFrom)} 起的課堂名單就沒有他`;
+  else if(st.joinFrom)sum=`${coDateMD(st.joinFrom)} 起的課堂名單才有他，之前的堂不算`;
+  else sum='目前沒有設起訖＝整個期別都上';
+  return`<div class="co-dates">
+    <div class="co-dates-hd">${esc(studentName(en.studentId))} 的修課起訖</div>
+    <div class="co-dates-row">
+      <span class="cf-phase-lbl">從</span>
+      <input type="date" class="cf-phase-date" value="${esc(st.joinFrom)}" onchange="sysDateSet('joinFrom',this.value)">
+      <span class="cf-phase-lbl">起加入</span>
+      <span class="cf-phase-presets">${presets('joinFrom')}</span>
+    </div>
+    <div class="co-dates-row">
+      <span class="cf-phase-lbl">從</span>
+      <input type="date" class="cf-phase-date" value="${esc(st.leaveFrom)}" onchange="sysDateSet('leaveFrom',this.value)">
+      <span class="cf-phase-lbl">起不上</span>
+      <span class="cf-phase-presets">${presets('leaveFrom')}</span>
+    </div>
+    <div class="co-dates-sum">→ ${esc(sum)}</div>
+    <div class="co-dates-foot">
+      <button class="btn btns" onclick="sysDateClear()">清除起訖</button>
+      <span style="flex:1"></span>
+      <button class="btn btns" onclick="sysDateEditCancel()">取消</button>
+      <button class="btn btns btnp" onclick="sysDateSave()">儲存</button>
+    </div>
+  </div>`;
+}
+
+function sysDateClear(){if(_sysDateEdit){_sysDateEdit.joinFrom='';_sysDateEdit.leaveFrom='';}refreshCourseModal();}
+
+function sysDateSave(){
+  const st=_sysDateEdit;
+  if(!st)return;
+  const list=getEnrollments().slice();
+  const en=list.find(e=>e.id===st.enId);
+  if(!en)return;
+  const startDate=st.joinFrom||null;
+  const endDate=st.leaveFrom?coDateShift(st.leaveFrom,-1):null;
+  if(startDate&&endDate&&startDate>endDate)return toast('「起加入」比「起不上」晚，日期反了','err');
+  en.startDate=startDate;en.endDate=endDate;
+  saveEnrollments(list);
+  _sysDateEdit=null;
+  toast(startDate||endDate
+    ?`已設定 ${studentName(en.studentId)} 的修課起訖`
+    :`已清除 ${studentName(en.studentId)} 的修課起訖（整期都上）`,'ok');
+  // 人數變了 → 順手問課名要不要一起改（起訖與課名分段是同一件事的兩半）
+  const changeDay=st.leaveFrom||st.joinFrom;
+  if(changeDay&&en.courseId!=null)sysOfferNamePhase(en.courseId,changeDay);
+  renderSettings();
+  refreshCourseModal();
+  refreshStudentModal();
+}
+
+// 設完修課起訖後：那天起名單變了，課名通常也該變。算出建議名字問一次，按確定就寫課名分段。
+// 只在「建議名字 ≠ 那天原本的課名」且該日期還沒有分段時問，不重複騷擾。
+function sysOfferNamePhase(courseId,day){
+  const co=findCourseById(courseId);
+  if(!co)return;
+  if(courseNamePhases(co).some(p=>p.from===day))return; // 那天已經有分段了
+  const suggest=courseSuggestNameOn(co,day);
+  const curName=courseNameOn(co,day);
+  if(!suggest||suggest===curName)return;
+  if(!confirm(`${coDateMD(day)} 起這門課的名單變了。\n\n課名要不要也從那天起改成：\n「${suggest}」？\n\n（${coDateMD(day)} 之前的課堂仍顯示「${curName}」。不改也可以，之後在 ✎ 編輯課程的「＋ 換課名」隨時設。）`))return;
+  const list=getCourses().slice();
+  const c=list.find(x=>x.id===courseId);
+  if(!c)return;
+  c.namePhases=[...courseNamePhases(c),{from:day,name:suggest}]
+    .sort((a,b)=>a.from<b.from?-1:a.from>b.from?1:0);
+  saveCourses(list);
+  toast(`${coDateMD(day)} 起改叫「${suggest}」`,'ok');
 }
 
 // 時段標籤（modal meta 用）；多段時附各段「起始日→時段」
@@ -698,10 +893,12 @@ function sysSlotLabel(co){
 // ── 系統課程詳情 modal（settings.js renderCourseModal 分流過來）──
 function renderSysCourseModal(ctx){
   const co=ctx.c.sys;
-  document.getElementById('course-modal-title').textContent=co.name;
+  // 標題＝今天生效的課名；課名分段（namePhases）時把之後要改的名字列在下面
+  document.getElementById('course-modal-title').textContent=courseNameOn(co,new Date());
   const noFee=(co.type==='練習課'||co.type==='試聽');
   const isPractice=co.type==='練習課';
   const meta=[co.type,'👤 '+(courseTeacherNames(co).join('、')||'未指定'),sysSlotLabel(co),co.room||''].filter(Boolean).join('　·　');
+  const nameSched=courseNamePhases(co).map(p=>`${coDateMD(p.from)} 起改叫「${p.name}」`).join('、');
 
   const info=`<div class="cm-sec"><div class="cm-lbl">費用與薪資</div>
     <div class="cf-info-row">每堂收費：${noFee?'不收費（不進學費結算）':(co.defaultPrice!=null?co.defaultPrice+' 元/堂':'未定價')}</div>
@@ -730,14 +927,21 @@ function renderSysCourseModal(ctx){
     }).join('')+`</div>`;
   }
 
+  const today=toDateStr(new Date());
+  const anyWindow=ens.some(en=>en.startDate||en.endDate);
   const roster=ens.length
     ?`<div class="co-roster">`+ens.map(en=>{
         const p=en.price??co.defaultPrice; // 系統課預設價在課程本體，不查價目表
         const extra=isPractice
           ?`<input class="cf-chip-subj" list="cf-subjects" value="${esc(en.practiceSubject||'')}" placeholder="科目（多科用、分隔）" onchange="sysSetPracticeSubject(${en.id},this.value)">`
           :(noFee?'':`<span class="co-stu-price">${p==null?'<span class="co-undef">未定價</span>':p}</span>`);
-        return`<span class="co-stu">${esc(studentName(en.studentId))}${extra}<button class="co-stu-x" title="退課" onclick="coRemoveEnroll(${en.id})">✕</button></span>`;
-      }).join('')+`</div>`
+        const win=sysWindowChip(en);
+        const off=!enrollmentActiveOn(en,today); // 今天不在區間內＝淡色（已退出／還沒開始）
+        return`<span class="co-stu${off?' co-stu-off':''}">${esc(studentName(en.studentId))}${extra}${win}`+
+          `<button class="co-stu-cal" title="設定修課起訖（插班／中途退出）" onclick="sysDateEditOpen(${en.id})">📅</button>`+
+          `<button class="co-stu-x" title="退課（整筆刪除）" onclick="coRemoveEnroll(${en.id})">✕</button></span>`;
+      }).join('')+`</div>`+sysDateEditorHtml(ens)+
+      (anyWindow?`<div class="cm-hint">📅＝修課起訖。淡色＝今天不在他的修課區間內；名單人數會依課堂日期自動變（過去的堂數不受影響）。</div>`:'')
     :`<div class="co-empty">還沒有學生。</div>`;
   const adder=`<div class="co-add">
     <input class="co-add-sel" id="sys-add-stu-${co.id}" list="sys-add-dl-${co.id}" placeholder="輸入學生姓名…">
@@ -751,6 +955,7 @@ function renderSysCourseModal(ctx){
   </div>`;
 
   document.getElementById('course-modal-body').innerHTML=
-    `<div class="cm-meta">${esc(meta)}</div>`+info+groupView+
+    `<div class="cm-meta">${esc(meta)}</div>`+
+    (nameSched?`<div class="cm-hint">📛 ${esc(nameSched)}</div>`:'')+info+groupView+
     `<div class="cm-sec"><div class="cm-lbl">名單${isPractice?'（可加退、改科目）':''}<span class="cm-count">${ens.length}</span></div>${roster}${adder}</div>`+btns;
 }

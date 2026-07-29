@@ -59,20 +59,31 @@ function courseOccurrencesInRange(course,start,end){
   const sched=course&&course.schedule;
   if(!sched||!Array.isArray(sched.slots)||!sched.slots.length)return[];
   if(course.status&&course.status!=='開課中')return[]; // 已結束的課不排
-  // 名冊（本期登記簿，依 courseId）——一次算好，同課多堂共用
+  // 名冊（本期登記簿，依 courseId）。有人設了修課起訖（插班／中途退出）時**逐日算**，
+  // 名冊隨課堂日期變（8/1 起退出 → 7 月的堂還是 2 人、8 月的堂 1 人）；
+  // 沒人設起訖就走快取的單一名冊（絕大多數課，成本同舊版）。
   const pid=yearPeriodId();
   const byId=new Map(getStudentList().map(s=>[s.id,s]));
   const ens=(driveData.enrollments||[]).filter(en=>en.courseId===course.id&&en.periodId===pid);
-  const rosterNames=ens.map(en=>byId.get(en.studentId)?.name).filter(Boolean);
-  // 練習課分組（科目：學生）——供課堂物件的 studentGroups
-  const groupMap=new Map();
-  ens.forEach(en=>{
-    const nm=byId.get(en.studentId)?.name;if(!nm)return;
-    const subj=(en.practiceSubject||'').trim()||'（未填科目）';
-    if(!groupMap.has(subj))groupMap.set(subj,[]);
-    groupMap.get(subj).push(nm);
-  });
-  const studentGroups=course.type==='練習課'?[...groupMap].map(([subject,students])=>({subject,students})):[];
+  const hasWindow=ens.some(en=>en.startDate||en.endDate);
+  const rosterCache=new Map();
+  function rosterOn(day){
+    const key=hasWindow?toDateStr(day):'*';
+    if(rosterCache.has(key))return rosterCache.get(key);
+    const act=hasWindow?ens.filter(en=>enrollmentActiveOn(en,key)):ens;
+    const names=act.map(en=>byId.get(en.studentId)?.name).filter(Boolean);
+    // 練習課分組（科目：學生）——供課堂物件的 studentGroups
+    const groupMap=new Map();
+    act.forEach(en=>{
+      const nm=byId.get(en.studentId)?.name;if(!nm)return;
+      const subj=(en.practiceSubject||'').trim()||'（未填科目）';
+      if(!groupMap.has(subj))groupMap.set(subj,[]);
+      groupMap.get(subj).push(nm);
+    });
+    const r={names,groups:course.type==='練習課'?[...groupMap].map(([subject,students])=>({subject,students})):[]};
+    rosterCache.set(key,r);
+    return r;
+  }
 
   const out=[];
   const s0=new Date(start);s0.setHours(0,0,0,0);
@@ -83,7 +94,7 @@ function courseOccurrencesInRange(course,start,end){
       if(!slot.date)return;
       const[y,mo,dd]=String(slot.date).split('-').map(Number);
       const d=new Date(y,(mo||1)-1,dd||1);d.setHours(0,0,0,0);
-      if(d>=s0&&d<=e0)out.push(_makeOccurrence(course,d,si,_atTime(d,slot.start),_atTime(d,slot.end),rosterNames,studentGroups));
+      if(d>=s0&&d<=e0){const r=rosterOn(d);out.push(_makeOccurrence(course,d,si,_atTime(d,slot.start),_atTime(d,slot.end),r.names,r.groups));}
     });
   }else{
     // 每週重複：逐日掃，套用「當天生效的時段段落」（多段依日期自動切換）
@@ -93,8 +104,10 @@ function courseOccurrencesInRange(course,start,end){
       const slots=_activePhase(phases,cur).slots;
       for(let si=0;si<slots.length;si++){
         const slot=slots[si];
-        if(Number(slot.weekday)===cur.getDay())
-          out.push(_makeOccurrence(course,new Date(cur),si,_atTime(cur,slot.start),_atTime(cur,slot.end),rosterNames,studentGroups));
+        if(Number(slot.weekday)===cur.getDay()){
+          const r=rosterOn(cur);
+          out.push(_makeOccurrence(course,new Date(cur),si,_atTime(cur,slot.start),_atTime(cur,slot.end),r.names,r.groups));
+        }
       }
       cur.setDate(cur.getDate()+1);
     }
@@ -134,9 +147,11 @@ function _makeOccurrence(course,day,slotIdx,startDt,endDt,rosterNames,studentGro
       isRescheduled:resched,rescheduleReason:ab.reschedReason||'',
     };
   }
+  // 課名依課堂日期取（namePhases：某日起改叫別的，名單期中變動時用）
+  const occName=courseNameOn(course,day);
   return{
     id:occId,
-    title:course.name,origTitle:course.name,
+    title:occName,origTitle:occName,
     desc:'',notes:'',
     teacher:courseTeacherNames(course).join('、'),
     classroom:course.room||'',

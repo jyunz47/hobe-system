@@ -6,7 +6,8 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--tx);
 .logo{padding:20px 18px 16px;border-bottom:1px solid var(--br)}
 .logo h1{font-size:15px;font-weight:700;color:var(--ac);letter-spacing:-.02em}
 .logo p{font-size:11px;color:var(--tx3);margin-top:2px}
-.nav{padding:8px 0;flex:1;overflow-y:auto}
+.nav{padding:8px 0;flex:1;overflow-y:auto;display:flex;flex-direction:column}
+.ni.nav-bottom{margin-top:auto}
 .nav-sec{padding:10px 14px 0;font-size:10px;font-weight:500;color:var(--tx3);letter-spacing:.08em;text-transform:uppercase;margin-top:4px}
 .ni{display:flex;align-items:center;gap:8px;padding:9px 12px;margin:2px 8px;border-radius:var(--rs);cursor:pointer;font-size:13.5px;color:var(--tx2);transition:all .12s;border:none;background:none;width:calc(100% - 16px);text-align:left}
 .ni:hover{background:var(--sf2);color:var(--tx)}.ni.active{background:var(--al);color:var(--ac);font-weight:500}
@@ -566,6 +567,17 @@ body.hide-todo-chip .stu-info-chip{display:none}
 .co-undef{color:var(--cancel,#C0504A);font-size:10.5px}
 .co-stu-x{border:none;background:none;cursor:pointer;color:var(--tx3);font-size:12px;line-height:1;padding:1px 2px;border-radius:50%}
 .co-stu-x:hover{color:var(--cancel,#C0504A);background:var(--sf2)}
+/* 修課起訖：pill 上的標籤＋📅 鈕、今天不在區間內的淡色、展開的日期編輯盒 */
+.co-stu-win{font-size:10.5px;color:var(--ac);background:var(--al);padding:1px 5px;border-radius:99px}
+.co-stu-off{opacity:.5}
+.co-stu-off .co-stu-win{color:var(--tx3);background:var(--sf2)}
+.co-stu-cal{border:none;background:none;cursor:pointer;font-size:11px;line-height:1;padding:1px 2px;border-radius:50%;filter:grayscale(1);opacity:.65}
+.co-stu-cal:hover{filter:none;opacity:1;background:var(--sf2)}
+.co-dates{margin-top:8px;padding:9px 10px;border:1.5px solid var(--brd);border-radius:var(--rs);background:var(--sf3);display:flex;flex-direction:column;gap:7px}
+.co-dates-hd{font-size:12.5px;font-weight:600;color:var(--tx)}
+.co-dates-row{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.co-dates-sum{font-size:11.5px;color:var(--tx2);line-height:1.5}
+.co-dates-foot{display:flex;align-items:center;gap:6px}
 .co-add{display:flex;gap:6px;margin-top:9px}
 .co-add-sel{flex:1;min-width:0;padding:5px 8px;border:1.5px solid var(--br);border-radius:var(--rs);font-size:12px;font-family:inherit;color:var(--tx);background:#fff}
 .co-add-sel:focus{outline:none;border-color:var(--ac)}
@@ -758,7 +770,8 @@ body.hide-todo-chip .stu-info-chip{display:none}
 @media(max-width:768px){
   .sidebar{top:auto;bottom:0;left:0;right:0;width:100%;flex-direction:row;border-right:none;border-top:1px solid var(--br);padding-bottom:env(safe-area-inset-bottom);box-shadow:0 -2px 10px rgba(0,0,0,.04)}
   .logo,.nav-sec,.sf{display:none}
-  .nav{display:flex;flex:1;padding:0;overflow:visible;min-width:0}
+  .nav{display:flex;flex-direction:row;flex:1;padding:0;overflow:visible;min-width:0}
+  .ni.nav-bottom{margin-top:0}
   .ni{flex:1 1 0;min-width:0;flex-direction:column;justify-content:center;gap:3px;margin:0;padding:8px 2px 7px;border-radius:0;font-size:10.5px;position:relative;min-height:56px}
   .ni svg{width:21px;height:21px}
   .ni-txt{display:none}

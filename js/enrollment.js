@@ -25,18 +25,36 @@ function getEnrollments(filter){
 }
 function saveEnrollments(list){driveData.enrollments=list;scheduleDriveSave();refreshCourseCards();}
 
+// ── 修課起訖（2026-07-27 起真正生效）──
+// startDate＝第一堂、endDate＝最後一堂，**皆含當日**；null＝沒有那一端的邊界。
+// 期中人數變動（插班／中途退出）用這組欄位表達，不是把 enrollment 刪掉——
+// 刪掉會連過去的堂數與自訂單價一起消失，回頭看舊課堂名冊也會少人。
+// UI 一律用「從 X 起加入／從 X 起不上」講（見 courses.js sysDate*），
+// 「起不上」存的是前一天（endDate 含當日），轉換在 UI 層做完，資料層只認含當日語意。
+function enrollmentActiveOn(en,day){
+  if(!en)return false;
+  if(!day)return true;   // 沒有課堂日期可判（例：學生視窗的修課清單）→ 一律視為在籍
+  const d=typeof day==='string'?day:toDateStr(day);
+  if(en.startDate&&d<en.startDate)return false;
+  if(en.endDate&&d>en.endDate)return false;
+  return true;
+}
+// 課堂物件 → 該堂日期字串（給上面兩個 filter 用）
+function eventDayStr(e){return e&&e.startDt?toDateStr(new Date(e.startDt)):null;}
+
 // ── 課程卡名冊：以登記簿為事實來源，查無登記時 fallback 回備註解析 ──
 // 卡片顯示「誰修這門課」改讀本期 enrollments（依課名＋本期反查 studentId → 姓名），
 // 不再只看 Calendar 備註。過渡期：尚未對帳的課登記簿是空的，回 e.students（備註解析）
-// 避免顯示空名單。註：startDate/endDate（插班/中途停課）目前不影響卡片名冊，
-// 僅供學費結算裁切堂數。
+// 避免顯示空名單。名冊依「該堂日期」裁切（enrollmentActiveOn）：
+// 起訖判斷放在 fallback 判定之後，才不會因為「當天沒人」誤退回備註名單。
 function eventRoster(e){
   const descNames=e.students||[];
+  const day=eventDayStr(e);
   // 系統自有課堂：直接以 courseId 反查本期登記簿（同名不混、與展開器一致）
   if(e.courseId!=null){
     const byId=new Map(getStudentList().map(s=>[s.id,s]));
     return getEnrollments({periodId:yearPeriodId()})
-      .filter(en=>en.courseId===e.courseId)
+      .filter(en=>en.courseId===e.courseId&&enrollmentActiveOn(en,day))
       .map(en=>byId.get(en.studentId)?.name).filter(Boolean);
   }
   if(!e.origTitle)return descNames;
@@ -45,7 +63,8 @@ function eventRoster(e){
   if(!ens.length)return descNames; // 這門課這期沒有登記紀錄（尚未對帳）→ fallback 備註
   const byId=new Map(getStudentList().map(s=>[s.id,s]));
   const names=ens.map(en=>byId.get(en.studentId)?.name).filter(Boolean);
-  return names.length?names:descNames;
+  if(!names.length)return descNames; // 登記的學生都查不到（已刪檔）→ fallback 備註
+  return ens.filter(en=>enrollmentActiveOn(en,day)).map(en=>byId.get(en.studentId)?.name).filter(Boolean);
 }
 
 // 點名用名冊：把名冊解析成 [{studentId, name}]。
@@ -54,15 +73,17 @@ function eventRoster(e){
 // 其餘 studentId=null（無法可靠點名，UI 顯示但不可點，引導去課表對帳）。
 function eventRosterWithId(e){
   const byId=new Map(getStudentList().map(s=>[s.id,s]));
+  const day=eventDayStr(e);
   // 系統自有課堂：以 courseId 反查本期登記簿，studentId 直接來自登記（同名終結）
   if(e.courseId!=null){
     return getEnrollments({periodId:yearPeriodId()})
-      .filter(en=>en.courseId===e.courseId)
+      .filter(en=>en.courseId===e.courseId&&enrollmentActiveOn(en,day))
       .map(en=>({studentId:en.studentId,name:byId.get(en.studentId)?.name||'(未知)'}));
   }
   // 同 eventRoster：只看行事曆課的登記，系統課（courseId）不混入
   const ens=e.origTitle?getEnrollments({courseTitle:e.origTitle,periodId:yearPeriodId()}).filter(en=>en.courseId==null):[];
-  if(ens.length)return ens.map(en=>({studentId:en.studentId,name:byId.get(en.studentId)?.name||'(未知)'}));
+  if(ens.length)return ens.filter(en=>enrollmentActiveOn(en,day))
+    .map(en=>({studentId:en.studentId,name:byId.get(en.studentId)?.name||'(未知)'}));
   const byName=new Map();
   getStudentList().filter(s=>(s.status||'在學')==='在學').forEach(s=>{
     if(!byName.has(s.name))byName.set(s.name,[]);

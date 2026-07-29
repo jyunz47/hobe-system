@@ -504,7 +504,7 @@ function buildStuGradesSec(s){
   const courseName=r=>{
     const m=String(r.eventId).match(/^sys:(\d+):/);
     const co=m?findCourseById(Number(m[1])):null;
-    return co?co.name:'課堂';
+    return co?courseNameOn(co,r.date):'課堂'; // 課名可能分段：顯示「那堂當下」的名字
   };
   const recs=gradesBucket().records.filter(r=>r.studentId===s.id)
     .sort((a,b)=>new Date(b.date)-new Date(a.date));
@@ -571,7 +571,11 @@ function stuCourseTagHtml(en){
   }
   const undef=priceStr==='未定價';
   const x=co?`<button class="co-stu-x" title="退課" onclick="coRemoveEnroll(${en.id})">✕</button>`:'';
-  return`<span class="stu-course-tag">${esc(en.courseTitle)}<span class="stu-course-price${undef?' undef':''}">${priceStr}</span>${x}</span>`;
+  // 修課起訖唯讀顯示（設定在課程管理的名單區）；沒設就不佔位
+  const win=typeof sysWindowChip==='function'?sysWindowChip(en):'';
+  // 系統課的課名可能分段（namePhases），顯示今天生效的名字而不是登記時抄下的
+  const label=co?courseNameOn(co,new Date()):en.courseTitle;
+  return`<span class="stu-course-tag">${esc(label)}<span class="stu-course-price${undef?' undef':''}">${priceStr}</span>${win}${x}</span>`;
 }
 
 // ── 學生視窗：「加入課程」盒（選系統課 → 依課型補欄 → 寫入 enrollment）──
@@ -593,7 +597,7 @@ function renderStuAddCourse(sid){
   // 選項附類型／老師／時段：平行分班課名可能相同（三班都叫國二數學班），靠這行分辨
   const opts=avail.map(c=>{
     const slot=sysSlotLabel(c);
-    return`<option value="${c.id}" ${st.courseId===c.id?'selected':''}>${esc(c.name)}（${c.type}・${esc(teacherNameById(c.teacherId)||'未指定')}${slot?'・'+esc(slot):''}）</option>`;
+    return`<option value="${c.id}" ${st.courseId===c.id?'selected':''}>${esc(courseNameOn(c,new Date()))}（${c.type}・${esc(teacherNameById(c.teacherId)||'未指定')}${slot?'・'+esc(slot):''}）</option>`;
   }).join('');
   let extra='';
   if(co){
@@ -649,11 +653,11 @@ function stuAcSubmit(sid){
   const price=noFee||v===''?null:Math.max(0,parseInt(v,10)||0);
   const list=getEnrollments().slice();
   list.push(makeEnrollment({
-    studentId:sid,courseTitle:co.name,periodId:pid,courseId:co.id,
+    studentId:sid,courseTitle:courseNameOn(co,new Date()),periodId:pid,courseId:co.id,
     price,practiceSubject:co.type==='練習課'?_stuAC.subjects.join('、'):'',
   }));
   saveEnrollments(list);
-  toast(`已加入 ${studentName(sid)}：${co.name}`,'ok');
+  toast(`已加入 ${studentName(sid)}：${courseNameOn(co,new Date())}`,'ok');
   renderSettings();        // 課程總覽人數／名單跟著更新
   refreshCourseModal();
   openStudentModal(sid);   // 重繪學生視窗（新課即時出現，選擇器歸零）
