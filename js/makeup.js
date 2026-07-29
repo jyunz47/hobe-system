@@ -497,10 +497,7 @@ function buildSpTimeSection(){
   if(!slotPicker.avail)return sec;
   const wrap=sec.querySelector('.sp-chips-wrap');
   const [y,m,d]=slotPicker.date.split('-').map(Number);
-  const dow=new Date(y,m-1,d).getDay();
-  const isWeekday=dow>=1&&dow<=5;
-  const startMin=isWeekday?16*60:9*60;
-  const endMin=21*60+30;
+  const {start:startMin,end:endMin}=bizHoursOn(new Date(y,m-1,d)); // 營業時間見 state.js BIZ_HOURS
   const noRoomEvs=slotPicker.avail.filter(e=>!e.classroom&&!e.isAbsent&&!e.isRescheduled);
   if(noRoomEvs.length>0){
     const w=document.createElement('div');

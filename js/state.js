@@ -105,6 +105,20 @@ var WD=['日','一','二','三','四','五','六'];
 var ROOM_CAP={'小教室':5,'108':6,'208':6,'309':6};
 var ROOMS_SMALL=['小教室','108','208','309'];
 
+// ── 營業時間（補課/調課「選時段」可挑的範圍）──
+// 平日開門分兩季：暑假（7/1–8/31）12:30 就開，學期中／寒假 16:00 才開；週末固定 9:00。
+// 收班一律 21:30。要調整就改這裡（例：寒假也想提早 → weekdayOpen 那行加寒假判斷）。
+var BIZ_HOURS={weekdayOpen:'16:00',weekdaySummerOpen:'12:30',weekendOpen:'09:00',close:'21:30'};
+function hhmmToMin(s){const[h,m]=String(s||'').split(':').map(Number);return(h||0)*60+(m||0);}
+// 某一天的營業時段（回傳當日分鐘數 {start,end}）；依「那一天」判季節，不是依今天
+function bizHoursOn(date){
+  const mo=date.getMonth()+1,dow=date.getDay();
+  const isWeekday=dow>=1&&dow<=5;
+  const isSummer=mo===7||mo===8;
+  const open=!isWeekday?BIZ_HOURS.weekendOpen:(isSummer?BIZ_HOURS.weekdaySummerOpen:BIZ_HOURS.weekdayOpen);
+  return{start:hhmmToMin(open),end:hhmmToMin(BIZ_HOURS.close)};
+}
+
 // slot picker 與 timeline 狀態
 var slotPicker={ev:null,mode:null,date:null,time:null,room:null,avail:null};
 var heroProgressTimer=null;
