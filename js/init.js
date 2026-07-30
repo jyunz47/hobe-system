@@ -25,11 +25,23 @@ window.addEventListener('appinstalled',()=>{
   if(typeof toast==='function')toast('已安裝到桌面！之後從 Launchpad／Dock 開啟','ok');
 });
 
+// ── 桌面視窗模式的 body class：隨時可重算 ──
+// ⚠️ Chrome 的「Open in app」是把「現有分頁整個搬進 App 視窗」，頁面不會重新載入。
+// 所以只在 load 判斷一次的話，搬進 App 之後設定頁還留著「🖥 開啟桌面系統」，要按 Cmd+R 才會變成
+// 「⧉ 開啟桌面日曆」（2026-07-30 老闆踩到）。改成監聽 display-mode 變化 + 拿到焦點時重算。
+function applyWinMode(){
+  if(!document.body)return;
+  document.body.classList.toggle('dv-standalone',isStandalone()); // 已安裝的 App 視窗：不再顯示安裝鈕
+  document.body.classList.toggle('dv-deskwin',isDesktopWin());    // 已在桌面視窗：設定頁改給「開啟桌面日曆」
+}
+try{window.matchMedia('(display-mode: standalone)').addEventListener('change',applyWinMode);}catch(_){}
+window.addEventListener('focus',applyWinMode);  // 保險：搬進 App 視窗時那個視窗會拿到焦點
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)applyWinMode();});
+
 // ── Page load ──
 window.addEventListener('load',()=>{
   if(isDayApp())document.body.classList.add('dv-app'); // manifest 換版＋標題已在 <head> 內處理
-  if(isStandalone())document.body.classList.add('dv-standalone'); // 已安裝的 App 視窗：不再顯示安裝鈕
-  if(isDesktopWin())document.body.classList.add('dv-deskwin');    // 已在桌面視窗：設定頁改給「開啟桌面日曆」
+  applyWinMode();
   initAuth();
   setDateDisplay(currentDate);
   document.getElementById('date-picker').value=toDateStr(currentDate);
