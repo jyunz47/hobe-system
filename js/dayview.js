@@ -332,6 +332,7 @@ function _dvRenderMonth(evs,start){
   const head=document.getElementById('dv-colhd');
   if(head){
     head.style.display='flex';
+    head.classList.add('flush');   // 月檢視沒有時間軸刻度欄，表頭不留那 52px
     head.innerHTML=['MON','TUE','WED','THU','FRI','SAT','SUN']
       .map(x=>`<div class="dv-colhd-c plain">${x}</div>`).join('');
   }
@@ -390,6 +391,9 @@ function renderDayView(){
   const rb=document.getElementById('dv-roombtn');
   if(rb){rb.style.display=dvView==='day'?'inline-block':'none';rb.classList.toggle('on',dvRooms);}
   document.querySelectorAll('#dv-seg .dv-seg-b').forEach(b=>b.classList.toggle('on',b.dataset.v===dvView));
+
+  const head=document.getElementById('dv-colhd');
+  if(head)head.classList.remove('flush');   // 預設對齊時間軸刻度欄；月檢視自己會加回來
 
   renderMiniMonth();
   const {start}=dvLoadEvents();

@@ -222,7 +222,10 @@ if ('serviceWorker' in navigator) {
       .dv-h-yr{font-weight:400;color:var(--dvfg2)}
       .dv-h-wd{font-size:18px;color:var(--dvfg2);margin-top:2px}
       /* 分欄表頭（週檢視＝七天、日檢視開「依教室」＝各教室）。左側留 52px 對齊時間軸刻度。*/
+      /* 表頭左邊留 52px 是為了對齊時間軸的刻度欄（日／週檢視）；
+         月檢視沒有時間軸、格子是滿版的，要把那段留白拿掉才對得齊 */
       .dv-colhd{display:flex;margin:14px 0 0 52px;padding-right:6px;border-bottom:1px solid var(--dvline)}
+      .dv-colhd.flush{margin-left:0;padding-right:0}
       .dv-colhd-c{flex:1;min-width:0;text-align:center;padding:5px 4px 7px;font-size:12px;color:var(--dvfg2);cursor:pointer;border-radius:8px 8px 0 0}
       .dv-colhd-c:hover{background:var(--dvbg2)}
       .dv-colhd-c b{display:block;font-size:15px;font-weight:600;color:var(--dvfg);margin-top:1px}
@@ -472,7 +475,7 @@ if ('serviceWorker' in navigator) {
 <script src="js/schedule.js?v=6"></script>
 <script src="js/today.js?v=25"></script>
 <script src="js/week.js?v=14"></script>
-<script src="js/dayview.js?v=12"></script>
+<script src="js/dayview.js?v=13"></script>
 <script src="js/absence.js?v=11"></script>
 <script src="js/makeup.js?v=11"></script>
 <script src="js/enrollment.js?v=11"></script>
