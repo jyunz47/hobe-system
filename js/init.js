@@ -128,7 +128,6 @@ async function onSignedIn(){
   setUSt('ok',u?.email||'已登入','已登入');
   if(u?.email)localStorage.setItem('ghint',u.email);
   await loadFromFirestore();
-  migrateCoursesToEnrollments();
   showPanel('courses');
   await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
   updateWeekTitle();
@@ -166,7 +165,6 @@ async function loadFromFirestore(){
         courses:d.courses||[],           // 系統自有課程（2026-07-04 起）——漏讀會導致新增課程按「更新」後消失
         teachers:d.teachers||[],          // 老師檔（同上）
         absences:d.absences||[],          // 系統請假紀錄（2026-07-17 起）——漏讀會導致請假標記消失、甚至被空陣列蓋掉
-        enrollmentsMigratedAt:d.enrollmentsMigratedAt||null,
       };
     }
   }catch(e){

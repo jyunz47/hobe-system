@@ -10,17 +10,15 @@
 <link rel="stylesheet" href="../../style.css">
 <style>
   /* 來源：補習班排程系統.html #panel-settings + js/settings.js
-     （renderSettings／renderCoCard／renderCourseModal／openCutoverModal）。
+     （renderSettings／renderCoCard／renderCourseModal）。
      靜態快照、假資料、已移除 onclick。假資料與 courses-page.html 同一套人事課名。
 
-     ── 一頁多態：三個 screen 各是一次完整的課程管理分頁 ──
-     A 預設　　　　 課程總覽（類型分區 × 週一～日七欄）＋ 底下紅框 Cutover 卡
+     ── 一頁多態：兩個 screen 各是一次完整的課程管理分頁 ──
+     A 預設　　　　 課程總覽（類型分區 × 週一～日七欄）
      B 課程詳情　　 點任一張課卡 → .stu-modal-wrap 遮罩蓋整頁、modal 浮中間（改單價、加退學生）
-     C Cutover 確認 點「🧨 清空並開始重建…」→ 要打「清空重建」四個字的危險確認
 
      版面骨架（每個 screen 相同）：
      ① set-card「課程總覽」＝sec-hd + ＋新增課程鈕 + set-card-sub + co-list 週課表矩陣
-     ② set-card「Cutover 清空重建」＝紅框一次性工具，重建完成後整張移除
 
      ⚠️ 真實 app 的課卡目前「沒有」系統/行事曆的區別標記——見下方 A 態註解。 */
 
@@ -52,7 +50,7 @@
        A · 預設態
        ═══════════════════════════════════════════════════════════ -->
   <div>
-    <div class="screen-lbl"><span class="n">A</span>預設<span class="note">課程總覽七欄矩陣 + 底下紅框 Cutover 卡</span></div>
+    <div class="screen-lbl"><span class="n">A</span>預設<span class="note">課程總覽七欄矩陣</span></div>
     <div class="screen">
       <div class="page">
         <div class="wrap">
@@ -289,12 +287,6 @@
             </div>
           </div>
 
-          <!-- ② Cutover 一次性工具 -->
-          <div class="set-card" style="margin-top:14px;border:1px solid #E4C7C3">
-            <div class="sec-hd" style="color:#C0504A">Cutover 清空重建<span class="sec-hd-line"></span></div>
-            <p class="set-card-sub">系統轉自有課表的一次性操作：清空學生、修課登記、價目表、課程設定、系統課程與老師；<b>保留待補課清單紀錄、不動 Google 行事曆</b>。清完到「新增課程/學生」頁重建暑期課表。</p>
-            <button class="btn btns" style="color:#C0504A;border-color:#E4C7C3">🧨 清空並開始重建…</button>
-          </div>
 
         </div>
       </div>
@@ -520,12 +512,6 @@
             </div>
           </div>
 
-          <!-- ② Cutover 一次性工具 -->
-          <div class="set-card" style="margin-top:14px;border:1px solid #E4C7C3">
-            <div class="sec-hd" style="color:#C0504A">Cutover 清空重建<span class="sec-hd-line"></span></div>
-            <p class="set-card-sub">系統轉自有課表的一次性操作：清空學生、修課登記、價目表、課程設定、系統課程與老師；<b>保留待補課清單紀錄、不動 Google 行事曆</b>。清完到「新增課程/學生」頁重建暑期課表。</p>
-            <button class="btn btns" style="color:#C0504A;border-color:#E4C7C3">🧨 清空並開始重建…</button>
-          </div>
 
         </div>
       </div>
@@ -576,268 +562,6 @@
                 <button class="co-add-btn">＋ 加入</button>
               </div>
               <button class="co-clear-btn">🗑 整門課從登記簿移除（清改名殘留）</button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ═══════════════════════════════════════════════════════════
-       C · Cutover 清空確認（危險態）
-       ═══════════════════════════════════════════════════════════ -->
-  <div>
-    <div class="screen-lbl"><span class="n">C</span>Cutover 清空確認<span class="note">點「🧨 清空並開始重建…」→ 要打「清空重建」四個字才會亮的無法復原操作</span></div>
-    <div class="screen">
-      <div class="page">
-        <div class="wrap">
-
-          <!-- ① 課程總覽 -->
-          <div class="set-card">
-            <div class="sec-hd">課程總覽<span class="sec-hd-line"></span><button class="btn btns btnp" style="flex-shrink:0">＋ 新增課程</button></div>
-            <p class="set-card-sub">系統目前認得的每一門課：類型、老師、單價、是否需登記成績。點一門課開啟視窗：調整單價、加退學生（練習課名單唯讀）。標「系統」的是系統自有課程（不在 Google 行事曆），點開可編輯與刪除。批次調價也可到「學生管理 → 價目表」。</p>
-            <div>
-
-              <div class="co-type-sec">
-                <div class="co-sec-hd">團班<span class="co-group-n">3</span></div>
-                <div class="co-week-grid">
-                  <div class="co-day-col">
-                    <div class="co-day-hd">週一</div>
-                    <div class="co-card">
-                      <div class="co-card-hd">
-                        <span class="co-card-title">國二數學班</span>
-                        <span class="co-card-teacher">👤 王老師</span>
-                        <span class="co-card-time">19:00</span>
-                      </div>
-                      <label class="switch switch-sm">
-                        <input type="checkbox" checked>
-                        <span class="switch-track"><span class="switch-thumb"></span></span>
-                        <span class="switch-label">登記成績</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div class="co-day-col"><div class="co-day-hd">週二</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col">
-                    <div class="co-day-hd">週三</div>
-                    <div class="co-card">
-                      <div class="co-card-hd">
-                        <span class="co-card-title">國一英文班</span>
-                        <span class="co-card-teacher">👤 黃老師</span>
-                        <span class="co-card-time">19:00</span>
-                      </div>
-                      <label class="switch switch-sm">
-                        <input type="checkbox">
-                        <span class="switch-track"><span class="switch-thumb"></span></span>
-                        <span class="switch-label">只點名</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div class="co-day-col"><div class="co-day-hd">週四</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col">
-                    <div class="co-day-hd">週五</div>
-                    <div class="co-card">
-                      <div class="co-card-hd">
-                        <span class="co-card-title">高一數學班</span>
-                        <span class="co-card-teacher">👤 林老師</span>
-                        <span class="co-card-time">14:00</span>
-                      </div>
-                      <label class="switch switch-sm">
-                        <input type="checkbox" checked>
-                        <span class="switch-track"><span class="switch-thumb"></span></span>
-                        <span class="switch-label">登記成績</span>
-                      </label>
-                    </div>
-                    <div class="co-card">
-                      <div class="co-card-hd">
-                        <span class="co-card-title">國二數學班</span>
-                        <span class="co-card-teacher">👤 王老師</span>
-                        <span class="co-card-time">17:00</span>
-                      </div>
-                      <label class="switch switch-sm">
-                        <input type="checkbox" checked>
-                        <span class="switch-track"><span class="switch-thumb"></span></span>
-                        <span class="switch-label">登記成績</span>
-                      </label>
-                    </div>
-                    <div class="co-card">
-                      <div class="co-card-hd">
-                        <span class="co-card-title">國一英文班</span>
-                        <span class="co-card-teacher">👤 黃老師</span>
-                        <span class="co-card-time">19:00</span>
-                      </div>
-                      <label class="switch switch-sm">
-                        <input type="checkbox">
-                        <span class="switch-track"><span class="switch-thumb"></span></span>
-                        <span class="switch-label">只點名</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div class="co-day-col"><div class="co-day-hd">週六</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col"><div class="co-day-hd">週日</div><div class="co-day-empty">—</div></div>
-                </div>
-              </div>
-
-              <div class="co-type-sec">
-                <div class="co-sec-hd">一對二家教<span class="co-group-n">1</span></div>
-                <div class="co-week-grid">
-                  <div class="co-day-col"><div class="co-day-hd">週一</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col"><div class="co-day-hd">週二</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col"><div class="co-day-hd">週三</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col"><div class="co-day-hd">週四</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col">
-                    <div class="co-day-hd">週五</div>
-                    <div class="co-card">
-                      <div class="co-card-hd">
-                        <span class="co-card-title">新力、晨宇理化</span>
-                        <span class="co-card-teacher">👤 陳老師</span>
-                        <span class="co-card-time">17:30</span>
-                      </div>
-                      <label class="switch switch-sm">
-                        <input type="checkbox">
-                        <span class="switch-track"><span class="switch-thumb"></span></span>
-                        <span class="switch-label">只點名</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div class="co-day-col"><div class="co-day-hd">週六</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col"><div class="co-day-hd">週日</div><div class="co-day-empty">—</div></div>
-                </div>
-              </div>
-
-              <div class="co-type-sec">
-                <div class="co-sec-hd">一對一家教<span class="co-group-n">1</span></div>
-                <div class="co-week-grid">
-                  <div class="co-day-col"><div class="co-day-hd">週一</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col"><div class="co-day-hd">週二</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col"><div class="co-day-hd">週三</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col"><div class="co-day-hd">週四</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col">
-                    <div class="co-day-hd">週五</div>
-                    <div class="co-card">
-                      <div class="co-card-hd">
-                        <span class="co-card-title">高三物理</span>
-                        <span class="co-card-teacher">👤 郭老師</span>
-                        <span class="co-card-time">18:00</span>
-                      </div>
-                      <label class="switch switch-sm">
-                        <input type="checkbox" checked>
-                        <span class="switch-track"><span class="switch-thumb"></span></span>
-                        <span class="switch-label">登記成績</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div class="co-day-col"><div class="co-day-hd">週六</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col"><div class="co-day-hd">週日</div><div class="co-day-empty">—</div></div>
-                </div>
-              </div>
-
-              <div class="co-type-sec">
-                <div class="co-sec-hd">練習課<span class="co-group-n">1</span></div>
-                <div class="co-week-grid">
-                  <div class="co-day-col"><div class="co-day-hd">週一</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col"><div class="co-day-hd">週二</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col"><div class="co-day-hd">週三</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col"><div class="co-day-hd">週四</div><div class="co-day-empty">—</div></div>
-                  <div class="co-day-col">
-                    <div class="co-day-hd">週五</div>
-                    <div class="co-card">
-                      <div class="co-card-hd">
-                        <span class="co-card-title">國三理化練習</span>
-                        <span class="co-card-time">15:00</span>
-                      </div>
-                      <label class="switch switch-sm">
-                        <input type="checkbox">
-                        <span class="switch-track"><span class="switch-thumb"></span></span>
-                        <span class="switch-label">只點名</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div class="co-day-col">
-                    <div class="co-day-hd">週六</div>
-                    <div class="co-card">
-                      <div class="co-card-hd">
-                        <span class="co-card-title">週末練習課</span>
-                        <span class="co-card-teacher">👤 郁庭</span>
-                        <span class="co-card-time">09:00 / 14:00</span>
-                      </div>
-                      <label class="switch switch-sm">
-                        <input type="checkbox">
-                        <span class="switch-track"><span class="switch-thumb"></span></span>
-                        <span class="switch-label">只點名</span>
-                      </label>
-                    </div>
-                  </div>
-                  <div class="co-day-col"><div class="co-day-hd">週日</div><div class="co-day-empty">—</div></div>
-                </div>
-              </div>
-
-              <div class="co-type-sec">
-                <div class="co-sec-hd">未分類 / 本週未排<span class="co-group-n">2</span><span class="co-group-hint">無法判斷類型或本週沒排課</span></div>
-                <div class="co-flat">
-                  <div class="co-card">
-                    <div class="co-card-hd">
-                      <span class="co-card-title">柏睿數學家教</span>
-                      <span class="co-card-teacher">👤 王老師</span>
-                    </div>
-                    <label class="switch switch-sm">
-                      <input type="checkbox">
-                      <span class="switch-track"><span class="switch-thumb"></span></span>
-                      <span class="switch-label">只點名</span>
-                    </label>
-                  </div>
-                  <div class="co-card">
-                    <div class="co-card-hd">
-                      <span class="co-card-title">可茵試聽</span>
-                    </div>
-                    <label class="switch switch-sm">
-                      <input type="checkbox">
-                      <span class="switch-track"><span class="switch-thumb"></span></span>
-                      <span class="switch-label">只點名</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          <!-- ② Cutover 一次性工具 -->
-          <div class="set-card" style="margin-top:14px;border:1px solid #E4C7C3">
-            <div class="sec-hd" style="color:#C0504A">Cutover 清空重建<span class="sec-hd-line"></span></div>
-            <p class="set-card-sub">系統轉自有課表的一次性操作：清空學生、修課登記、價目表、課程設定、系統課程與老師；<b>保留待補課清單紀錄、不動 Google 行事曆</b>。清完到「新增課程/學生」頁重建暑期課表。</p>
-            <button class="btn btns" style="color:#C0504A;border-color:#E4C7C3">🧨 清空並開始重建…</button>
-          </div>
-
-        </div>
-      </div>
-
-      <!-- modal：真實 DOM（補習班排程系統.html #cutover-modal-wrap）。
-           內文由 js/settings.js openCutoverModal 依當下雲端筆數填入，這裡放合理數字。 -->
-      <div class="stu-modal-wrap open">
-        <div class="stu-modal-overlay"></div>
-        <div class="stu-modal" style="max-width:430px">
-          <div class="stu-modal-hd">
-            <div class="stu-modal-title"><span style="font-size:16px;font-weight:700;color:#C0504A">🧨 Cutover 清空重建</span></div>
-            <button class="stu-modal-close">✕</button>
-          </div>
-          <div class="stu-modal-body">
-            <div style="font-size:13.5px;color:var(--tx2);margin-bottom:14px;line-height:1.7">
-              這會<b>永久刪除</b>雲端上的：<br>
-              ・學生 <b>42</b> 位（含歷屆）<br>
-              ・修課登記 <b>128</b> 筆（所有學期，含個人單價）<br>
-              ・價目表 <b>9</b> 筆、課程設定 <b>6</b> 筆<br>
-              ・系統課程 <b>7</b> 門、老師 <b>5</b> 位<br>
-              ・點名等測試紀錄與歷史殘留欄位（雲端主文件整份重寫）<br><br>
-              <b>保留</b>：待補課清單紀錄 <b>3</b> 筆（以名字記，重建學生時名字打一樣就自動對回）。<br>
-              <b>不動</b>：Google 行事曆的所有事件、登入白名單。<br><br>
-              清完後雲端只剩待補課清單。請到「新增課程/學生」頁重建暑期課表。<b>此操作無法復原。</b>
-            </div>
-            <div style="font-size:12px;color:var(--tx3);margin-bottom:6px">確定的話，請輸入「清空重建」四個字：</div>
-            <input class="del-modal-confirm-input" placeholder="清空重建" maxlength="10">
-            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
-              <button class="btn btns">取消</button>
-              <button class="btn btns" style="background:#C0504A;color:#fff;border-color:#C0504A">永久清空</button>
             </div>
           </div>
         </div>

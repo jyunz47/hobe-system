@@ -1,6 +1,6 @@
 // Service Worker：網路優先策略
 // 有網路 → 拿最新版並更新快取；斷網 → 退回快取
-// Google API / Firebase 等跨網域請求一律不攔截，避免干擾 OAuth 與即時資料
+// Firebase（Auth / Firestore）等跨網域請求一律不攔截，避免干擾登入與即時資料
 const CACHE_NAME = 'hobe-v2';
 
 self.addEventListener('install', (e) => {

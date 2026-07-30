@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="33.4 33.4 133.2 133.2" width="512" height="512">
+  <!-- 圓標版（PWA「any」用）：底不是方形而是圓盤，圓外透明。
+       幾何完全沿用 hobe-icon-light.svg，只是把 viewBox 收緊到圓的外緣、
+       並把整片米白背景換成同半徑的米白圓盤——這樣 Chrome 網址列的
+       「Open in app」與 Mac Dock 就不會出現一塊米白方塊。
+       ⚠️ manifest 的 purpose="maskable" 仍需不透明方形，繼續指 icon-512.png。 -->
+  <circle cx="100" cy="100" r="65.2" fill="#F3F1EC"></circle>
+  <circle cx="100" cy="100" r="64" fill="none" stroke="#1F1C19" stroke-width="2.4"></circle>
+  <circle cx="100" cy="100" r="54" fill="none" stroke="#1F1C19" stroke-width="1"></circle>
+  <text x="100" y="105" text-anchor="middle" dominant-baseline="central" font-family="'Newsreader', Georgia, serif" font-size="72" font-weight="500" fill="#1F1C19">H</text>
+</svg>

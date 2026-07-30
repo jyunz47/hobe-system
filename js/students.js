@@ -69,7 +69,7 @@ function saveStudentList(list){driveData.studentList=list;scheduleDriveSave();}
 // id 用單調遞增計數器：max(上次 id + 1, Date.now()*1000)
 // 同一毫秒內連續建立保證遞增、跨 session 也單調（時間始終往前）
 var _lastStudentId=0;
-function makeNewStudent({name,grade,courses,school='',parentPhone='',sourceChannel='',note=''}){
+function makeNewStudent({name,grade,school='',parentPhone='',sourceChannel='',note=''}){
   const now=new Date().toISOString();
   _lastStudentId=Math.max(_lastStudentId+1,Date.now()*1000);
   const s={
@@ -85,7 +85,6 @@ function makeNewStudent({name,grade,courses,school='',parentPhone='',sourceChann
     statusChangedAt:now,
     statusNote:''
   };
-  if(courses)s.courses=courses;
   return s;
 }
 
@@ -271,7 +270,8 @@ function openStudentModal(id){
   if(stats.pendingDecision>0)extraBits.push(`<span style="color:var(--tx3)">待確認補課 ${stats.pendingDecision} 筆</span>`);
   if(extraBits.length)body+=`<div style="margin-top:8px;font-size:13px;display:flex;gap:12px;flex-wrap:wrap">${extraBits.join('')}</div>`;
   body+=`</div>`;
-  // 修課（登記簿，含單價）；在學生多「加入課程」入口；沒有本期登記時退回舊 s.courses 顯示（歷屆生）
+  // 修課（登記簿，含單價）；在學生多「加入課程」入口
+  // 註：舊 s.courses fallback 顯示於 2026-07-30 cutover 重建完成後移除——全系統不再有這個欄位
   const ens=getEnrollments({studentId:s.id,periodId:yearPeriodId()});
   const isActive=(s.status||'在學')==='在學';
   if(ens.length||isActive){
@@ -280,13 +280,6 @@ function openStudentModal(id){
     body+=`<div><div class="stu-modal-sec-lbl">修課（${period.label}）</div>
       <div class="stu-courses">${tags}</div>
       ${isActive?'<div id="stu-ac-box"></div>':''}</div>`;
-  }
-  if(!ens.length){
-    const displayCourses=(s.courses||[]).filter(c=>!/^【調課】/.test(c));
-    if(displayCourses.length){
-      body+=`<div><div class="stu-modal-sec-lbl">課程（舊紀錄）</div>
-        <div class="stu-courses">${displayCourses.map(c=>`<span class="stu-course-tag">${esc(c)}</span>`).join('')}</div></div>`;
-    }
   }
   // 成績（課堂成績歷史＋段考登記）——資料按期別 lazy 載入，先佔位、載完填入
   body+=`<div><div class="stu-modal-sec-lbl">成績（${period.label}）</div>
@@ -547,7 +540,7 @@ function saveStudentEdit(id){
   cur.birthYear=byVal?parseInt(byVal,10):null;
   cur.parentPhone=newPhone;
   // 修課異動寫回登記簿（本期）：暫存沒有的刪、有 id 的更新價格、id=null 的新建
-  // 註：s.courses 不再寫入，留作舊資料（rollback 與歷屆顯示用）
+  // 註：修課只寫登記簿（舊 s.courses 欄位已隨 2026-07-30 cutover 重建完全退場）
   syncEditPrices(id);
   const pid=yearPeriodId();
   const keepIds=new Set(_editEnrollments.filter(r=>r.id).map(r=>r.id));

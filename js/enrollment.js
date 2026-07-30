@@ -135,29 +135,8 @@ function courseNeedsGrade(title){
   return !!(row&&row.needsGrade);
 }
 
-// ── 一次性轉換：student.courses → 本期 enrollments ──
-// 安全閥：已轉換過（有 marker）不重跑；學生清單是空的（可能雲端讀取失敗）也不跑，
-// 避免在沒讀到資料的狀態下寫入 marker 導致永遠不轉換
-function migrateCoursesToEnrollments(){
-  if(driveData.enrollmentsMigratedAt)return;
-  const students=getStudentList();
-  if(!students.length)return;
-  const pid=yearPeriodId(detectPeriodId());
-  const ens=driveData.enrollments||[];
-  let added=0;
-  students.filter(s=>(s.status||'在學')==='在學').forEach(s=>{
-    (s.courses||[]).filter(c=>!/^【調課】/.test(c)).forEach(title=>{
-      if(ens.some(en=>en.studentId===s.id&&en.courseTitle===title&&en.periodId===pid))return;
-      ens.push(makeEnrollment({studentId:s.id,courseTitle:title,periodId:pid}));
-      added++;
-    });
-  });
-  driveData.enrollments=ens;
-  driveData.enrollmentsMigratedAt=new Date().toISOString();
-  scheduleDriveSave();
-  console.log(`[enrollment] 一次性轉換完成：${added} 筆 student.courses → 修課登記簿（${pid}）`);
-}
-
+// 註：一次性轉換 migrateCoursesToEnrollments（student.courses → enrollments）於 2026-07-30
+// cutover 重建完成後移除——重建後的學生全由「新增課程/學生」頁正向建立，沒有 s.courses 舊欄位可轉。
 // 註：課表對帳（computeReconciliation / ensureEnrollments）於 2026-07-29 第 4 刀移除——
 // 它的唯一輸入是 Google 行事曆備註的名字，系統改自有課表後名冊由登記簿正向建立，無可對之帳。
 
