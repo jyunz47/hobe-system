@@ -600,14 +600,19 @@ function cfSubmit(){
 }
 
 // ── 刪除課程（連同本課 enrollments；學生本人不動）──
-function deleteCourse(id){
+async function deleteCourse(id){
   const co=findCourseById(id);
   if(!co)return;
   const ens=getEnrollments().filter(en=>en.courseId===id);
+  const times=sysSlotLabel(co)||'（未排時段）';
+  const ok=await uiConfirm({title:'刪除這門課？',ok:'刪除課程',danger:true,
+    html:`<p class="ask-big">${esc(courseNameOn(co,new Date()))}</p>
+      <div class="ask-list">${times.split('、').map(s=>`・${esc(s)}`).join('<br>')}</div>
+      <p>會一併移除 <b>${ens.length}</b> 筆修課登記，學生本人不會被刪。</p>
+      <div class="ask-note ask-warn">刪掉之後救不回來。</div>`});
+  if(!ok)return;
   // 連動清掉本課的系統請假紀錄（不留孤兒；待補課清單重建時查無課程也會跳過）
   if(getAbsences().some(a=>a.courseId===id))saveAbsences(getAbsences().filter(a=>a.courseId!==id));
-  const times=sysSlotLabel(co)||'（未排時段）';
-  if(!confirm(`刪除課程「${courseNameOn(co,new Date())}」？\n\n上課時間：\n${times.split('、').map(s=>'  ・'+s).join('\n')}\n\n會一併移除 ${ens.length} 筆修課登記。學生本人不會被刪。此操作無法復原。`))return;
   saveCourses(getCourses().filter(c=>c.id!==id));
   if(ens.length)saveEnrollments(getEnrollments().filter(en=>en.courseId!==id));
   toast(`已刪除「${courseNameOn(co,new Date())}」`,'ok');
@@ -692,12 +697,15 @@ function taToggleStatus(id){
   toast(`${t.name}：${t.status}${t.status==='離職'?'（不再出現在新增課程的老師下拉）':''}`,'ok');
   renderTeacherAdmin();
 }
-function taDelete(id){
+async function taDelete(id){
   const t=getTeachers().find(x=>x.id===id);
   if(!t)return;
   const used=getCourses().filter(c=>courseTeacherIds(c).includes(id));
   if(used.length)return toast(`不能刪：${t.name} 還有 ${used.length} 門課掛著（${used.map(c=>c.name).join('、')}）。先在那些課的編輯裡改指老師、或刪除課程。`,'err');
-  if(!confirm(`刪除老師「${t.name}」？此操作無法復原。`))return;
+  const ok=await uiConfirm({title:'刪除這位老師？',ok:'刪除',danger:true,
+    html:`<p>把 <b>${esc(t.name)}</b> 從老師名單移除。</p>
+      <div class="ask-note ask-warn">刪掉之後救不回來。</div>`});
+  if(!ok)return;
   saveTeachers(getTeachers().filter(x=>x.id!==id));
   toast(`已刪除老師 ${t.name}`,'ok');
   renderTeacherAdmin();
@@ -831,7 +839,7 @@ function sysDateEditorHtml(ens){
 
 function sysDateClear(){if(_sysDateEdit){_sysDateEdit.joinFrom='';_sysDateEdit.leaveFrom='';}refreshCourseModal();}
 
-function sysDateSave(){
+async function sysDateSave(){
   const st=_sysDateEdit;
   if(!st)return;
   const list=getEnrollments().slice();
@@ -848,7 +856,7 @@ function sysDateSave(){
     :`已清除 ${studentName(en.studentId)} 的修課起訖（整期都上）`,'ok');
   // 人數變了 → 順手問課名要不要一起改（起訖與課名分段是同一件事的兩半）
   const changeDay=st.leaveFrom||st.joinFrom;
-  if(changeDay&&en.courseId!=null)sysOfferNamePhase(en.courseId,changeDay);
+  if(changeDay&&en.courseId!=null)await sysOfferNamePhase(en.courseId,changeDay);
   renderSettings();
   refreshCourseModal();
   refreshStudentModal();
@@ -856,14 +864,18 @@ function sysDateSave(){
 
 // 設完修課起訖後：那天起名單變了，課名通常也該變。算出建議名字問一次，按確定就寫課名分段。
 // 只在「建議名字 ≠ 那天原本的課名」且該日期還沒有分段時問，不重複騷擾。
-function sysOfferNamePhase(courseId,day){
+async function sysOfferNamePhase(courseId,day){
   const co=findCourseById(courseId);
   if(!co)return;
   if(courseNamePhases(co).some(p=>p.from===day))return; // 那天已經有分段了
   const suggest=courseSuggestNameOn(co,day);
   const curName=courseNameOn(co,day);
   if(!suggest||suggest===curName)return;
-  if(!confirm(`${coDateMD(day)} 起這門課的名單變了。\n\n課名要不要也從那天起改成：\n「${suggest}」？\n\n（${coDateMD(day)} 之前的課堂仍顯示「${curName}」。不改也可以，之後在 ✎ 編輯課程的「＋ 換課名」隨時設。）`))return;
+  const ok=await uiConfirm({title:'課名要一起改嗎？',ok:'改課名',cancel:'先不改',
+    html:`<p><b>${esc(coDateMD(day))}</b> 起這門課的名單變了，課名建議同步改成：</p>
+      <p class="ask-big">${esc(suggest)}</p>
+      <div class="ask-note">${esc(coDateMD(day))} 之前的課堂仍顯示「${esc(curName)}」。不改也可以，之後在 ✎ 編輯課程的「＋ 換課名」隨時能設。</div>`});
+  if(!ok)return;
   const list=getCourses().slice();
   const c=list.find(x=>x.id===courseId);
   if(!c)return;

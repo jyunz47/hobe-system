@@ -10,8 +10,9 @@ var DV_MON=['January','February','March','April','May','June','July','August','S
 var DV_WDE=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 var DV_WDS=['SUN','MON','TUE','WED','THU','FRI','SAT'];
 var DV_ADD_MINS=90;      // 點空白新增課程時預設的課堂長度
-var DV_SNAP=15;          // 點空白時把時間吸附到 15 分鐘
+var DV_SNAP=15;          // 點空白／拖曳時把時間吸附到 15 分鐘
 var DV_MONTH_CHIPS=3;    // 月檢視每格最多列幾筆，其餘收成「還有 N 堂」
+var DV_AXIS_PAD=90;      // 時間軸前後各留幾分鐘空白（也是拖曳一次能移動的上限）
 
 // ── 檢視偏好（記在瀏覽器，換分頁/重開都留著）──
 var dvView=localStorage.getItem('dvView')||'day';        // 'day' | 'week' | 'month'
@@ -194,11 +195,13 @@ function _dvCascade(items){
   return items;
 }
 
-// ── 時間軸範圍：包住所有課，至少 3 小時 ──
+// ── 時間軸範圍：包住所有課，前後各留 DV_AXIS_PAD 分鐘，至少 3 小時 ──
+// 前後留白不只是好看：拖曳課塊只能拖在時間軸範圍內，沒留白就一分鐘也往前拖不動。
+// 留 90 分鐘＝一次可以拖 ±1.5 小時；要移更遠就再拖一次（放開後時間軸會依新位置重算）。
 function _dvAxis(evs){
   if(!evs.length){const h=new Date().getHours();return{h0:Math.max(0,h-1),h1:Math.min(24,Math.max(h+5,3))};}
-  const mn=Math.min(...evs.map(e=>e.startDt.getHours()*60+e.startDt.getMinutes()));
-  const mx=Math.max(...evs.map(e=>e.endDt.getHours()*60+e.endDt.getMinutes()));
+  const mn=Math.min(...evs.map(e=>e.startDt.getHours()*60+e.startDt.getMinutes()))-DV_AXIS_PAD;
+  const mx=Math.max(...evs.map(e=>e.endDt.getHours()*60+e.endDt.getMinutes()))+DV_AXIS_PAD;
   let h0=Math.max(0,Math.floor(mn/60)),h1=Math.min(24,Math.ceil(mx/60));
   if(h1-h0<3)h1=Math.min(24,h0+3);
   return{h0,h1};
@@ -227,12 +230,13 @@ function _dvEvHtml(it,axisStart,isToday,now){
     (e.isMakeupOcc&&e.calName==='補課')?'<span class="dv-ev-badge">補課</span>':
     e.isAbsent?'<span class="dv-ev-badge">請假</span>':
     e.isNoShow?'<span class="dv-ev-badge">曠課</span>':'';
-  const cls='dv-ev'+(faded?' dv-faded':'')+(stat==='now'?' dv-now':'')+(stat==='past'?' dv-past':'')+(hgt<40?' dv-short':'');
+  const movable=!_dvDragWhyNot(e);
+  const cls='dv-ev'+(faded?' dv-faded':'')+(stat==='now'?' dv-now':'')+(stat==='past'?' dv-past':'')+(hgt<40?' dv-short':'')+(movable?' dv-movable':'');
   const sub=[`${_dvAP(e.startDt)} – ${_dvAP(e.endDt)}`];
   if(!(dvView==='day'&&dvRooms)&&e.classroom)sub.push(esc(e.classroom)); // 已依教室分欄時不重複寫教室
   if(hgt>=76&&e.teacher)sub.push(esc(e.teacher));
   const meta=hgt>=42?`<div class="dv-ev-meta">${sub.join(' · ')}</div>`:'';
-  return`<div class="${cls}" style="top:${top}px;height:${hgt-2}px;left:calc(${it.left.toFixed(2)}% + 2px);width:calc(${it.width.toFixed(2)}% - 4px);z-index:${2+(it.lv||0)};border-left-color:${bar};background:${bg};color:${txt}" onclick="event.stopPropagation();selectWeekEvent('${esc(e.id)}')" title="${esc(e.origTitle)}">`
+  return`<div class="${cls}" data-id="${esc(e.id)}" style="top:${top}px;height:${hgt-2}px;left:calc(${it.left.toFixed(2)}% + 2px);width:calc(${it.width.toFixed(2)}% - 4px);z-index:${2+(it.lv||0)};border-left-color:${bar};background:${bg};color:${txt}" onpointerdown="dvDragStart(event,'${esc(e.id)}')" onclick="dvEvClick(event,'${esc(e.id)}')" title="${esc(e.origTitle)}${movable?'（可拖曳改時間）':''}">`
     +`${isRepeat?`<span class="dv-ev-rep" style="color:${bar}">↻</span>`:''}`
     +`<div class="dv-ev-title${faded?' struck':''}">${esc(e.origTitle)}${badge}</div>${meta}</div>`;
 }
@@ -244,6 +248,9 @@ function _dvRenderColumns(cols,axis){
   const {h0,h1}=axis,axisStart=h0*60,totalH=(h1-h0)*DV_HOUR_H;
   const now=new Date(),today=_dvMidnight(now);
   const w=100/cols.length;
+  // 拖曳要用的欄位幾何：每欄代表哪一天／哪間教室，以及時間軸涵蓋的分鐘範圍
+  dvAxisMin=axisStart;dvAxisMax=h1*60;
+  dvColMeta={roomCols:dvView==='day'&&dvRooms,cols:cols.map(c=>({date:new Date(c.date),room:c.room||''}))};
   let colsHtml='';
   cols.forEach((c,i)=>{
     const isToday=_dvSameDay(c.date,today);
@@ -256,7 +263,7 @@ function _dvRenderColumns(cols,axis){
       const nm=now.getHours()*60+now.getMinutes();
       if(nm>=axisStart&&nm<=h1*60)nowHtml=`<div class="dv-now-line" style="top:${((nm-axisStart)/60*DV_HOUR_H).toFixed(1)}px"></div>`;
     }
-    colsHtml+=`<div class="dv-col" style="left:${(i*w).toFixed(4)}%;width:${w.toFixed(4)}%">${hit}${evHtml}${nowHtml}</div>`;
+    colsHtml+=`<div class="dv-col" data-i="${i}" style="left:${(i*w).toFixed(4)}%;width:${w.toFixed(4)}%">${hit}${evHtml}${nowHtml}</div>`;
   });
   grid.style.height=totalH+'px';
   grid.innerHTML=`<div class="dv-hours">${_dvHoursHtml(h0,h1)}</div><div class="dv-events">${colsHtml}</div>`;
@@ -380,6 +387,269 @@ function renderMiniMonth(){
     return`<div class="${cls}" onclick="dvNav(new Date(${c.date.getFullYear()},${c.date.getMonth()},${c.date.getDate()}))">${c.n}</div>`;
   }).join('');
   box.innerHTML=dows+days;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 拖曳課塊改時間／教室（2026-07-31）
+// ══════════════════════════════════════════════════════════════
+// 三種對象、三條寫入路徑，全部沿用系統既有的資料模型，不新增 schema：
+//   ① 每週重複課 → 問「只改這一天」還是「從這天起都改」
+//        · 只改這一天＝標記調課（driveData.absences 的 resched 旗標）＋ 寫一筆新時段
+//          （driveData.makeupScheduled），跟手動「調課 → 排時段」寫出來的東西一模一樣，
+//          所以待補課清單、學生統計、「取消調課」都自動吃得到
+//        · 從這天起都改＝在 course.schedule.phases 加一段 {from, slots}，
+//          **不動已經上過的課堂**（老闆定的「從 X 起分段、不回溯」原則）
+//   ② 指定日期課（試聽等單場）→ 沒有「以後」可言，直接改那個 slot 的日期/時間
+//   ③ 補課／調課場次（mk:）→ 直接改 makeupScheduled 那筆的時段
+//      （以前要「取消安排 → 重排」才改得動期）
+//
+// 教室的但書：course.room 是整門課一個欄位，**沒有分段**。所以「從這天起都改」若同時換了
+// 教室，過去的課堂顯示也會跟著變成新教室——小視窗會明講這件事再讓人按。
+// 只想改這一天的教室不受影響（調課紀錄自己帶 room）。
+//
+// 觸控不啟用拖曳：iPad 上手指按住拖＝捲動頁面，搶掉會很難用。平板要改時間走編輯表單。
+
+var dvAxisMin=0,dvAxisMax=1440;              // 目前時間軸涵蓋的分鐘範圍（拖曳夾在裡面）
+var dvColMeta={roomCols:false,cols:[]};      // 每一欄代表哪一天／哪間教室
+var dvDrag=null;                             // 拖曳中的狀態
+var dvDragEndAt=0;                           // 上次放開拖曳的時間戳（用來吃掉緊接著的 click）
+var dvPendingMove=null;                      // 等使用者在小視窗選要怎麼套用
+
+function _dvHM(d){return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');}
+function _dvWhen(d){return`${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）`;}
+// occId `sys:<courseId>:<YYYY-MM-DD>:<slotIdx>` → slotIdx
+function _dvSlotIdx(id){const m=String(id).match(/^sys:\d+:\d{4}-\d{2}-\d{2}:(\d+)$/);return m?Number(m[1]):-1;}
+
+// 這一堂能不能拖？回傳 null＝可以，字串＝不行的原因（也用來決定要不要給「可拖」游標）
+function _dvDragWhyNot(ev){
+  if(typeof isSignedIn==='function'&&!isSignedIn())return'要先登入才能改課表';
+  if(ev.isLegacyAbsence)return'這是舊行事曆搬進來的歷史紀錄，時間改不動';
+  if(ev.isMakeupOcc)return null;                       // 補課／調課場次：可拖＝改期
+  if(ev.courseId==null)return'這堂沒有對應的系統課程，時間改不動';
+  if(ev.isRescheduled)return'這堂已標記調課——請改拖它的調課場次，或先取消調課';
+  return null;
+}
+
+// 點課塊：剛拖曳過就不要順手把詳情視窗也開起來
+function dvEvClick(e,id){
+  e.stopPropagation();
+  if(Date.now()-dvDragEndAt<300)return;
+  selectWeekEvent(id);
+}
+
+function dvDragStart(e,id){
+  if(e.pointerType==='touch')return;         // 觸控留給捲動
+  if(e.button!==0)return;
+  const ev=dvEvents.find(x=>x.id===id);if(!ev)return;
+  const el=e.currentTarget,col=el.closest('.dv-col');if(!col)return;
+  dvDrag={ev,el,why:_dvDragWhyNot(ev),pid:e.pointerId,
+    x0:e.clientX,y0:e.clientY,
+    startMin:ev.startDt.getHours()*60+ev.startDt.getMinutes(),
+    dur:Math.max(DV_SNAP,Math.round((ev.endDt-ev.startDt)/60000)),
+    ci:Number(col.dataset.i||0),min:null,ghost:null,tip:null,moved:false};
+  try{el.setPointerCapture(e.pointerId);}catch(_){}
+}
+
+function dvDragMove(e){
+  if(!dvDrag)return;
+  const dx=e.clientX-dvDrag.x0,dy=e.clientY-dvDrag.y0;
+  if(!dvDrag.moved){
+    if(Math.abs(dx)<4&&Math.abs(dy)<4)return;          // 手抖不算拖，維持「點一下＝開詳情」
+    if(dvDrag.why){const w=dvDrag.why;dvDragCleanup();if(typeof toast==='function')toast(w,'inf');return;}
+    dvDrag.moved=true;
+    document.body.classList.add('dv-dragging');
+    dvDrag.el.classList.add('dv-drag-src');
+    const g=dvDrag.el.cloneNode(true);
+    g.className=dvDrag.el.className.replace('dv-drag-src','')+' dv-ghost';
+    g.removeAttribute('onclick');g.removeAttribute('onpointerdown');
+    document.querySelector('#dv-grid .dv-events').appendChild(g);
+    dvDrag.ghost=g;
+    const t=document.createElement('div');t.className='dv-drag-tip';
+    document.body.appendChild(t);dvDrag.tip=t;
+  }
+  // 時間：垂直位移換算成分鐘、吸附 15 分、夾在時間軸範圍內
+  const dm=Math.round(dy/DV_HOUR_H*60/DV_SNAP)*DV_SNAP;
+  dvDrag.min=Math.max(dvAxisMin,Math.min(dvAxisMax-dvDrag.dur,dvDrag.startMin+dm));
+  // 欄：看游標水平位置落在哪一欄（週檢視＝換日、日檢視依教室＝換教室）
+  const colEls=[...document.querySelectorAll('#dv-grid .dv-col')];
+  for(let i=0;i<colEls.length;i++){
+    const r=colEls[i].getBoundingClientRect();
+    if(e.clientX>=r.left&&e.clientX<r.right){dvDrag.ci=i;break;}
+  }
+  const n=Math.max(1,dvColMeta.cols.length),w=100/n;
+  const g=dvDrag.ghost;
+  g.style.top=((dvDrag.min-dvAxisMin)/60*DV_HOUR_H)+'px';
+  g.style.height=(dvDrag.dur/60*DV_HOUR_H-2)+'px';
+  g.style.left=`calc(${(dvDrag.ci*w).toFixed(4)}% + 2px)`;
+  g.style.width=`calc(${w.toFixed(4)}% - 4px)`;
+  g.style.zIndex=90;
+  // 跟著游標的時間提示
+  const t=_dvDropTarget();
+  dvDrag.tip.textContent=`${_dvWhen(t.start)} ${_dvHM(t.start)}–${_dvHM(t.end)}${t.room?'　'+t.room:''}`;
+  const tw=dvDrag.tip.offsetWidth;
+  dvDrag.tip.style.left=Math.max(8,Math.min(e.clientX+16,window.innerWidth-tw-8))+'px';
+  dvDrag.tip.style.top=(e.clientY+18)+'px';
+}
+
+// 目前拖到哪：{start,end,room}
+function _dvDropTarget(){
+  const c=dvColMeta.cols[dvDrag.ci]||dvColMeta.cols[0]||{date:new Date(currentDate),room:''};
+  const start=new Date(c.date);start.setHours(0,dvDrag.min,0,0);
+  const end=new Date(start.getTime()+dvDrag.dur*60000);
+  const room=dvColMeta.roomCols?(c.room||''):(dvDrag.ev.classroom||'');
+  return{start,end,room};
+}
+
+function dvDragEnd(){
+  if(!dvDrag)return;
+  const d=dvDrag;
+  if(!d.moved){dvDragCleanup();return;}
+  const t=_dvDropTarget();
+  dvDragCleanup();
+  dvDragEndAt=Date.now();
+  if(t.start.getTime()===d.ev.startDt.getTime()&&t.room===(d.ev.classroom||''))return; // 放回原位
+  dvAskMove(d.ev,t.start,t.end,t.room);
+}
+
+function dvDragCleanup(){
+  if(!dvDrag)return;
+  try{dvDrag.el.releasePointerCapture(dvDrag.pid);}catch(_){}
+  dvDrag.el.classList.remove('dv-drag-src');
+  if(dvDrag.ghost)dvDrag.ghost.remove();
+  if(dvDrag.tip)dvDrag.tip.remove();
+  document.body.classList.remove('dv-dragging');
+  dvDrag=null;
+}
+function dvDragAbort(){if(dvDrag){const m=dvDrag.moved;dvDragCleanup();if(m)dvDragEndAt=Date.now();}}
+
+window.addEventListener('pointermove',dvDragMove);
+window.addEventListener('pointerup',dvDragEnd);
+window.addEventListener('pointercancel',dvDragAbort);
+window.addEventListener('keydown',e=>{
+  if(e.key!=='Escape')return;
+  if(dvDrag)return dvDragAbort();
+  if(dvPendingMove)dvCloseMove();
+});
+
+// ── 放開後的小視窗：問這一次移動要怎麼套用 ──
+function dvAskMove(ev,s,en,room){
+  const co=(ev.courseId!=null&&typeof findCourseById==='function')?findCourseById(ev.courseId):null;
+  const weekly=!!(co&&co.schedule&&co.schedule.mode!=='dates');
+  // 「從這天起」的起算日＝原本那天與新那天取早的（跨日拖曳時，同一週的新那天才吃得到）
+  const from=new Date(Math.min(_dvMidnight(ev.startDt).getTime(),_dvMidnight(s).getTime()));
+  dvPendingMove={ev,s,en,room,co,weekly,from};
+  const roomChanged=room!==(ev.classroom||'');
+  const line=(d,e2,r)=>`${_dvWhen(d)} ${_dvHM(d)}–${_dvHM(e2)}${r?'　·　'+esc(r):''}`;
+  let foot,note='';
+  if(ev.isMakeupOcc){
+    foot=`<button class="dv-cf-b dv-cf-pri" onclick="dvMoveApply('makeup')">改期</button>`;
+    note='這是補課／調課場次，改期只影響這一場。';
+  }else if(!weekly){
+    foot=`<button class="dv-cf-b dv-cf-pri" onclick="dvMoveApply('dates')">改這一場</button>`;
+    note='這門課是「指定日期」排的，改的就是那一場本身。';
+  }else{
+    foot=`<button class="dv-cf-b" onclick="dvMoveApply('once')">只改這一天</button>`
+      +`<button class="dv-cf-b dv-cf-pri" onclick="dvMoveApply('series')">從 ${from.getMonth()+1}/${from.getDate()} 起都改</button>`;
+    note=`<b>只改這一天</b>＝登記成一筆調課（原時段會畫上刪除線，待補課清單看得到，可以取消）。<br>`
+      +`<b>從 ${from.getMonth()+1}/${from.getDate()} 起都改</b>＝這門課之後每週都用新時段，${from.getMonth()+1}/${from.getDate()} 以前上過的課維持原樣。`;
+    if(roomChanged)note+=`<br><span class="dv-cf-warn">⚠ 教室沒有分段功能：選「從這天起都改」的話，整門課（含以前的課堂顯示）都會變成「${esc(room||'未指定')}」。只想改這一天的教室請選左邊。</span>`;
+  }
+  document.getElementById('dv-cf-title').textContent=ev.origTitle||'移動課堂';
+  document.getElementById('dv-cf-body').innerHTML=
+    `<div class="dv-cf-row old">${line(ev.startDt,ev.endDt,ev.classroom)}</div>`
+    +`<div class="dv-cf-arw">↓</div>`
+    +`<div class="dv-cf-row new">${line(s,en,room)}</div>`
+    +`<div class="dv-cf-note">${note}</div>`;
+  document.getElementById('dv-cf-foot').innerHTML=
+    `<button class="dv-cf-b dv-cf-cancel" onclick="dvCloseMove()">取消</button>${foot}`;
+  document.getElementById('dv-cf').style.display='flex';
+}
+function dvCloseMove(){
+  dvPendingMove=null;
+  const w=document.getElementById('dv-cf');if(w)w.style.display='none';
+}
+
+async function dvMoveApply(how){
+  const p=dvPendingMove;if(!p)return;
+  dvCloseMove();
+  let msg='';
+  try{
+    if(how==='makeup')msg=_dvMoveMakeup(p);
+    else if(how==='dates')msg=_dvMoveDates(p);
+    else if(how==='once')msg=_dvMoveOnce(p);
+    else if(how==='series')msg=_dvMoveSeries(p);
+  }catch(err){
+    if(typeof toast==='function')toast('改時間失敗：'+(err.message||err),'err');
+    return;
+  }
+  if(!msg)return;
+  if(typeof toast==='function')toast(msg,'ok');
+  await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
+  renderDayView();
+}
+
+// ① 只改這一天：標記調課 ＋ 寫新時段（＝手動「調課 → 排時段」的結果）
+function _dvMoveOnce(p){
+  const ev=p.ev;
+  const list=getAbsences().slice();
+  let rec=list.find(a=>a.occId===ev.id);
+  if(!rec){
+    rec={id:Date.now(),occId:ev.id,courseId:ev.courseId,date:ev.startDt.toISOString(),
+      teacherAbsent:false,leave:[],noShow:[],makeupSkip:[],createdAt:new Date().toISOString()};
+    list.push(rec);
+  }
+  rec.resched=true;
+  if(!rec.reschedReason)rec.reschedReason='';
+  rec.updatedAt=new Date().toISOString();
+  saveAbsences(list);
+  // 調課場次的名單＝這堂的名冊（saveMakeupScheduled 讀 absentStudents）
+  saveMakeupScheduled({...ev,absentStudents:(ev.students||[]).slice()},p.s,p.en,p.room,null,'調課');
+  return`已登記調課：${_dvWhen(p.s)} ${_dvHM(p.s)}–${_dvHM(p.en)}${p.room?'・'+p.room:''}`;
+}
+
+// ② 從這天起都改：course.schedule.phases 加／改一段，不動更早的課堂
+function _dvMoveSeries(p){
+  const co=p.co;if(!co||!co.schedule)throw new Error('找不到這堂課的系統課程');
+  const si=_dvSlotIdx(p.ev.id);if(si<0)throw new Error('認不出這是課程的第幾個時段');
+  const act=_activePhase(_schedulePhases(co.schedule),p.ev.startDt);
+  const slots=(act.slots||[]).map(s=>({weekday:Number(s.weekday),start:s.start,end:s.end}));
+  if(!slots[si])throw new Error('認不出這是課程的第幾個時段');
+  slots[si]={weekday:p.s.getDay(),start:_dvHM(p.s),end:_dvHM(p.en)};
+  const fromStr=toDateStr(p.from);
+  co.schedule.phases=co.schedule.phases||[];
+  const same=co.schedule.phases.find(x=>x.from===fromStr);
+  if(same)same.slots=slots;else co.schedule.phases.push({from:fromStr,slots});
+  co.schedule.phases.sort((a,b)=>String(a.from).localeCompare(String(b.from)));
+  if(p.room!==(co.room||''))co.room=p.room;
+  co.updatedAt=new Date().toISOString();
+  saveCourses(getCourses());
+  return`${p.from.getMonth()+1}/${p.from.getDate()} 起改成 ${WD[p.s.getDay()]} ${_dvHM(p.s)}–${_dvHM(p.en)}${p.room?'・'+p.room:''}`;
+}
+
+// ③ 指定日期課：直接改那個時段本身
+function _dvMoveDates(p){
+  const co=p.co;if(!co||!co.schedule)throw new Error('找不到這堂課的系統課程');
+  const si=_dvSlotIdx(p.ev.id),slot=(co.schedule.slots||[])[si];
+  if(!slot)throw new Error('認不出這是課程的第幾個時段');
+  slot.date=toDateStr(p.s);slot.start=_dvHM(p.s);slot.end=_dvHM(p.en);
+  if(p.room!==(co.room||''))co.room=p.room;
+  co.updatedAt=new Date().toISOString();
+  saveCourses(getCourses());
+  return`已改成 ${_dvWhen(p.s)} ${_dvHM(p.s)}–${_dvHM(p.en)}${p.room?'・'+p.room:''}`;
+}
+
+// ④ 補課／調課場次：改 makeupScheduled 那筆的時段
+function _dvMoveMakeup(p){
+  const oid=p.ev.makeupOriginalId;
+  const list=getMakeupScheduledLS().slice();
+  const rec=list.find(x=>x.originalId===oid);
+  if(!rec)throw new Error('找不到這筆補課安排');
+  rec.scheduledDate=p.s.toISOString();rec.scheduledEnd=p.en.toISOString();rec.room=p.room;
+  driveData.makeupScheduled=list;
+  scheduleDriveSave();
+  const mm=makeupMatchMap.get(oid);
+  if(mm){mm.scheduledDate=rec.scheduledDate;mm.scheduledEnd=rec.scheduledEnd;mm.room=p.room;}
+  return`已改期：${_dvWhen(p.s)} ${_dvHM(p.s)}–${_dvHM(p.en)}${p.room?'・'+p.room:''}`;
 }
 
 // ── 主渲染 ──

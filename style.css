@@ -32,6 +32,7 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--tx);
 .btnp{background:var(--ac);color:#fff;border-color:var(--ac);font-weight:500}.btnp:hover{background:#5C7E6A}
 .btns{padding:5px 11px;font-size:12px}
 .btnd{background:var(--dl);color:var(--dg);border-color:#E8C5BF}.btnd:hover{background:#F1D6D0}
+.btn.btn-danger{background:#C0504A;color:#fff;border-color:#C0504A;font-weight:500}.btn.btn-danger:hover{background:#A94840;border-color:#A94840}
 .content{padding:20px 24px;flex:1}
 .panel{display:none}.panel.active{display:block}
 
@@ -78,6 +79,20 @@ input[type=date]:focus{border-color:var(--ac)}
 .cc-meta{font-size:12px;color:var(--tx2);display:flex;gap:12px;flex-wrap:wrap}
 .cc-note-inline{font-size:12px;font-weight:400;color:var(--tx2);margin-left:6px}
 .cc-actions{display:flex;gap:6px;flex-shrink:0;align-items:center}
+/* 課程詳情 modal：動作鈕變四顆（請假/調課/點名/成績）→ 讓它們自成一列，別把課名擠扁 */
+#week-modal-body .cc-main{flex-wrap:wrap}
+#week-modal-body .cc-actions{width:100%;flex-wrap:wrap;justify-content:flex-end}
+
+/* 確認視窗（uiConfirm）：疊在所有視窗之上（其他 modal 是 50~80），因為它常常是從別的視窗裡按出來的 */
+#ask-modal-wrap{z-index:90}
+/* 內容：重點一行 + 說明 + 淺底提示塊 */
+.ask-body{font-size:13.5px;color:var(--tx1);line-height:1.7}
+.ask-body p{margin:0 0 10px}
+.ask-body p:last-child{margin-bottom:0}
+.ask-big{font-size:15px;font-weight:700;color:var(--tx)}
+.ask-list{background:var(--sf2);border:1px solid var(--br);border-radius:var(--rs);padding:9px 12px;margin:0 0 10px;font-size:13px;color:var(--tx2);line-height:1.8}
+.ask-note{background:var(--sf2);border-left:3px solid var(--ac);border-radius:8px;padding:9px 12px;font-size:12.5px;color:var(--tx2);line-height:1.7}
+.ask-note.ask-warn{background:var(--dl);border-left-color:#C0504A;color:var(--dg)}
 
 /* Absence panel */
 .abs-panel{display:none;border-top:1px solid var(--br);background:var(--sf2);padding:14px 15px}

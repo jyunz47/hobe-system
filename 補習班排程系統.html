@@ -23,7 +23,7 @@ if(new URLSearchParams(location.search).get('app')==='dayview'){
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HOBE">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=42">
+<link rel="stylesheet" href="style.css?v=44">
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -262,6 +262,41 @@ if ('serviceWorker' in navigator) {
       .dv-now-line{position:absolute;left:-6px;right:0;height:2px;background:#e0483d;z-index:15;pointer-events:none}
       .dv-now-line::before{content:'';position:absolute;left:-3px;top:-3px;width:8px;height:8px;border-radius:50%;background:#e0483d}
       .dv-empty{padding:60px 24px;text-align:center;color:var(--dvfg3);font-size:14px}
+      /* ── 拖曳課塊改時間／教室 ── */
+      .dv-movable{cursor:grab}
+      body.dv-dragging{user-select:none;cursor:grabbing}
+      body.dv-dragging .dv-ev,body.dv-dragging .dv-col-hit{cursor:grabbing}
+      .dv-drag-src{opacity:.25}                    /* 原位留個淡影，看得出從哪裡搬走 */
+      .dv-ghost{pointer-events:none;opacity:.95;box-shadow:0 6px 20px rgba(0,0,0,.35);outline:1.5px solid rgba(255,255,255,.35)}
+      .dv-wrap.dv-light .dv-ghost{box-shadow:0 6px 20px rgba(0,0,0,.18);outline-color:rgba(0,0,0,.22)}
+      .dv-drag-tip{position:fixed;z-index:1200;pointer-events:none;background:#23201C;color:#F2EFE9;font-size:12px;font-weight:600;
+        padding:5px 10px;border-radius:7px;white-space:nowrap;box-shadow:0 4px 14px rgba(0,0,0,.3)}
+      /* 放開後的確認小視窗（要不要只改這一天）*/
+      .dv-cf-wrap{position:fixed;inset:0;z-index:1100;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;padding:20px}
+      .dv-cf{background:var(--dvbg);color:var(--dvfg);border:1px solid var(--dvline);border-radius:14px;width:min(430px,100%);
+        box-shadow:0 18px 50px rgba(0,0,0,.45);overflow:hidden}
+      .dv-cf-title{padding:15px 18px 0;font-size:16px;font-weight:700;line-height:1.3}
+      .dv-cf-body{padding:12px 18px 4px}
+      .dv-cf-row{font-size:14px;padding:7px 11px;border-radius:8px;background:var(--dvbg2)}
+      .dv-cf-row.old{color:var(--dvfg2);text-decoration:line-through}
+      .dv-cf-row.new{font-weight:700}
+      .dv-cf-arw{text-align:center;color:var(--dvfg3);font-size:13px;padding:3px 0}
+      .dv-cf-note{margin-top:12px;font-size:12px;line-height:1.65;color:var(--dvfg2)}
+      .dv-cf-warn{display:block;margin-top:7px;color:#e0805d}
+      .dv-wrap.dv-light .dv-cf-warn{color:#B4562C}
+      .dv-cf-foot{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:14px 18px 16px}
+      /* ⚠️ 修飾 class 一律用「元件名 + 修飾」的完整名字（dv-cf-pri / dv-cf-cancel），不要用短名。
+         這裡踩過兩次雷（2026-07-31 兩修）：
+           1. 主要鈕叫 .main → 撞 style.css 的版面主欄 .main（min-height:100vh），按鈕被撐成整頁高
+           2. 取消鈕改叫 .dv-ghost → 撞上面拖曳殘影的 .dv-ghost（pointer-events:none），按了沒反應 */
+      .dv-cf-b{border:1px solid var(--dvline);background:var(--dvbg2);color:var(--dvfg);border-radius:8px;padding:8px 14px;font:inherit;font-size:13px;cursor:pointer}
+      .dv-cf-b:hover{background:var(--dvbg3)}
+      .dv-cf-b.dv-cf-pri{background:#5C7E6A;border-color:transparent;color:#fff;font-weight:600}
+      .dv-cf-b.dv-cf-pri:hover{background:#4E6C5A}
+      .dv-cf-b.dv-cf-cancel{margin-right:auto;background:transparent;border-color:transparent;color:var(--dvfg3)}
+      /* 取消鈕要自己一條 hover：上面 .dv-cf-b:hover 是 (0,1,1)，
+         打不過 .dv-cf-b.dv-cf-cancel 的 (0,2,0) 透明底，滑上去不會有反應 */
+      .dv-cf-b.dv-cf-cancel:hover{background:var(--dvbg2);color:var(--dvfg)}
       /* ── 月檢視：6×7 日格，每格列出當天課程 chip ── */
       .dv-month{display:grid;grid-template-columns:repeat(7,1fr);grid-auto-rows:1fr;border-top:1px solid var(--dvline2);border-left:1px solid var(--dvline2);min-height:520px}
       .dv-mcell{border-right:1px solid var(--dvline2);border-bottom:1px solid var(--dvline2);padding:4px 5px 5px;min-height:88px;display:flex;flex-direction:column;gap:2px;cursor:pointer;overflow:hidden}
@@ -357,6 +392,15 @@ if ('serviceWorker' in navigator) {
             <div class="dv-noevt">No Event Selected</div>
           </aside>
         </div>
+        <!-- 拖曳課塊放開後的確認視窗：問這次移動要「只改這一天」還是「從這天起都改」。
+             放在 .dv-wrap 裡面才吃得到亮／深色那組 CSS 變數。 -->
+        <div class="dv-cf-wrap" id="dv-cf" onclick="if(event.target===this)dvCloseMove()">
+          <div class="dv-cf">
+            <div class="dv-cf-title" id="dv-cf-title"></div>
+            <div class="dv-cf-body" id="dv-cf-body"></div>
+            <div class="dv-cf-foot" id="dv-cf-foot"></div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -382,7 +426,7 @@ if ('serviceWorker' in navigator) {
       </div>
       <div class="set-card add-card" id="add-course-card">
         <div class="sec-hd">新增課程<span class="sec-hd-line"></span></div>
-        <p class="set-card-sub">填學生、科目、老師、排課，系統自動判類型與命名（可手改）。存進系統自有課表、不寫 Google 行事曆；建立後表單自動清空，可連續輸入。</p>
+        <p class="set-card-sub">填學生、科目、老師、排課，系統自動判類型與命名（可手改）。存進系統自有課表；建立後表單自動清空，可連續輸入。</p>
         <div id="add-course-body"></div>
       </div>
       <div class="set-card add-card" id="add-student-card" style="display:none">
@@ -414,7 +458,7 @@ if ('serviceWorker' in navigator) {
     <div id="panel-settings" class="panel" style="display:none">
       <div class="set-card">
         <div class="sec-hd">課程總覽<span class="sec-hd-line"></span><button class="btn btns btnp" style="flex-shrink:0" onclick="goAddCourse()" title="到「新增課程/學生」頁建課">＋ 新增課程</button></div>
-        <p class="set-card-sub">系統目前認得的每一門課：類型、老師、單價、是否需登記成績。點一門課開啟視窗：調整單價、加退學生（練習課名單唯讀）。標「系統」的是系統自有課程（不在 Google 行事曆），點開可編輯與刪除。批次調價也可到「學生管理 → 價目表」。</p>
+        <p class="set-card-sub">系統目前認得的每一門課：類型、老師、單價、是否需登記成績。點一門課開啟視窗：調整單價、加退學生（練習課名單唯讀）。標「系統」的是系統自有課程，點開可編輯與刪除。批次調價也可到「學生管理 → 價目表」。</p>
         <div id="co-list"></div>
       </div>
     </div>
@@ -465,19 +509,19 @@ if ('serviceWorker' in navigator) {
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <!-- 應用程式分模組（順序：state → utils → 解析 → 各 panel → init 最後）-->
 <script src="js/state.js?v=13"></script>
-<script src="js/utils.js?v=7"></script>
+<script src="js/utils.js?v=8"></script>
 <script src="js/schedule.js?v=6"></script>
-<script src="js/today.js?v=25"></script>
-<script src="js/week.js?v=14"></script>
-<script src="js/dayview.js?v=13"></script>
-<script src="js/absence.js?v=11"></script>
+<script src="js/today.js?v=26"></script>
+<script src="js/week.js?v=15"></script>
+<script src="js/dayview.js?v=16"></script>
+<script src="js/absence.js?v=12"></script>
 <script src="js/makeup.js?v=11"></script>
 <script src="js/enrollment.js?v=12"></script>
-<script src="js/students.js?v=17"></script>
+<script src="js/students.js?v=18"></script>
 <script src="js/attendance.js?v=2"></script>
 <script src="js/grades.js?v=3"></script>
-<script src="js/settings.js?v=21"></script>
-<script src="js/courses.js?v=16"></script>
+<script src="js/settings.js?v=22"></script>
+<script src="js/courses.js?v=17"></script>
 <script src="js/init.js?v=25"></script>
 
 <div class="stu-modal-wrap" id="stu-modal-wrap">
@@ -510,6 +554,24 @@ if ('serviceWorker' in navigator) {
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
         <button class="btn btns" onclick="closeStatusModal()">取消</button>
         <button class="btn btns btnp" onclick="confirmStatusChange()">儲存</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- 通用確認視窗（uiConfirm）：取代瀏覽器原生 confirm，那個會畫成「localhost:8080 says」的系統警示 -->
+<div class="stu-modal-wrap" id="ask-modal-wrap">
+  <div class="stu-modal-overlay" onclick="askClose(false)"></div>
+  <div class="stu-modal" style="max-width:420px">
+    <div class="stu-modal-hd">
+      <div class="stu-modal-title"><span id="ask-modal-title" style="font-size:16px;font-weight:700"></span></div>
+      <button class="stu-modal-close" onclick="askClose(false)">✕</button>
+    </div>
+    <div class="stu-modal-body">
+      <div class="ask-body" id="ask-modal-body"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+        <button class="btn btns" id="ask-modal-cancel" onclick="askClose(false)">取消</button>
+        <button class="btn btns btnp" id="ask-modal-ok" onclick="askClose(true)">確定</button>
       </div>
     </div>
   </div>

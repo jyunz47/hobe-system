@@ -32,6 +32,41 @@ function toast(m,t,sticky){
   if(!sticky)el._t=setTimeout(()=>el.style.display='none',4000);
 }
 
+// ── 確認視窗（系統自己的，取代瀏覽器原生 confirm）──
+// 原生 confirm 會被瀏覽器畫成「localhost:8080 says」那種系統警示，看起來像系統外的東西，
+// 而且只能吐純文字。這個長得跟其他視窗一樣，可以排版、可以標紅（危險操作）。
+// 用法：if(!await uiConfirm({title:'退掉這門課？',html:'…',ok:'退掉',danger:true}))return;
+//      呼叫端的資料記得自己 esc()（html 是原樣塞進去的）
+var _askResolve=null;
+function uiConfirm(o){
+  o=o||{};
+  return new Promise(res=>{
+    const wrap=document.getElementById('ask-modal-wrap');
+    if(!wrap){res(window.confirm(o.title||'確定要執行嗎？'));return;} // 保底：視窗不在就退回原生
+    document.getElementById('ask-modal-title').textContent=o.title||'確認';
+    document.getElementById('ask-modal-body').innerHTML=o.html||'';
+    const ok=document.getElementById('ask-modal-ok');
+    ok.textContent=o.ok||'確定';
+    ok.className='btn btns '+(o.danger?'btn-danger':'btnp');
+    document.getElementById('ask-modal-cancel').textContent=o.cancel||'取消';
+    _askResolve=res;
+    wrap.classList.add('open');
+    setTimeout(()=>ok.focus(),30);
+  });
+}
+function askClose(v){
+  const wrap=document.getElementById('ask-modal-wrap');if(!wrap)return;
+  wrap.classList.remove('open');
+  const r=_askResolve;_askResolve=null;
+  if(r)r(!!v);
+}
+// Enter＝照做、Esc＝取消（跟原生 confirm 的手感一樣）
+window.addEventListener('keydown',e=>{
+  if(!_askResolve)return;
+  if(e.key==='Escape'){e.preventDefault();askClose(false);}
+  else if(e.key==='Enter'){e.preventDefault();askClose(true);}
+});
+
 // ── 日期切換 ──
 function changeDay(d){currentDate=new Date(currentDate.getTime()+d*864e5);setDateDisplay(currentDate);document.getElementById('date-picker').value=toDateStr(currentDate);if(isSignedIn())Promise.all([loadToday(),loadWeek()]);}
 function goToday(){currentDate=new Date();setDateDisplay(currentDate);document.getElementById('date-picker').value=toDateStr(currentDate);if(isSignedIn())Promise.all([loadToday(),loadWeek()]);}

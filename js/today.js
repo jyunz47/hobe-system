@@ -190,12 +190,22 @@ function renderToday(){
 function evNeedsGrade(e){
   return e.courseId!=null?!!(findCourseById(e.courseId)?.needsGrade):courseNeedsGrade(e.origTitle);
 }
+// 點名／成績／請假／調課四塊面板都住在課程詳情 modal 裡，一次只開一塊
+// （2026-07-31 老闆要求：卡上每個動作一律跳置中視窗，不再卡內展開）
+function closeEventPanels(id,keep){
+  if(keep!=='att'){const a=document.getElementById('attp-'+id);if(a)a.style.display='none';}
+  if(keep!=='grade'){const g=document.getElementById('grp-'+id);if(g)g.style.display='none';}
+  if(keep!=='abs')document.querySelectorAll('.abs-panel.open').forEach(p=>p.classList.remove('open'));
+  if(keep!=='resched'){const rp=document.getElementById('rp-'+id);if(rp)rp.style.display='none';}
+}
 function toggleGradePanel(id){
   const p=document.getElementById('grp-'+id);if(!p)return;
   if(p.style.display!=='none'){p.style.display='none';return;}
   const e=findEventById(id);if(!e)return;
+  closeEventPanels(id,'grade');
   p.innerHTML=buildGradePanel(e);
   p.style.display='block';
+  p.scrollIntoView({block:'nearest',behavior:'smooth'}); // modal 高度有限，展開後自動捲到看得到
 }
 function refreshGradePanel(e){const p=document.getElementById('grp-'+e.id);if(p)p.innerHTML=buildGradePanel(e);}
 // 每生一列：既有成績（標籤＋分數）chips 可刪、行內新增（標籤＋分數＋✓）——每堂每生可多筆
@@ -284,15 +294,11 @@ function subjectLetter(e){
   const s=(e.subject||e.origTitle||'').trim();
   return s?s[0]:'課';
 }
-// 點卡展開動作列（手風琴：開一張收其他，順手收已開的請假面板）
+// 點卡展開動作列（手風琴：開一張收其他）——面板本身都在 modal 裡，卡上只剩按鈕列
 function toggleTcard(id){
   const card=document.getElementById('cc-'+id);if(!card)return;
   const willOpen=!card.classList.contains('tc-open');
-  document.querySelectorAll('.tcard2.tc-open').forEach(c=>{
-    c.classList.remove('tc-open');
-    c.querySelector('.abs-panel.open')?.classList.remove('open');
-    c.querySelectorAll('.att-panel').forEach(p=>p.style.display='none'); // 點名＋成績面板都收
-  });
+  document.querySelectorAll('.tcard2.tc-open').forEach(c=>c.classList.remove('tc-open'));
   if(willOpen)card.classList.add('tc-open');
 }
 function toggleRoster(id){
@@ -382,8 +388,10 @@ function toggleAttPanel(id){
   if(p.style.display!=='none'){p.style.display='none';return;}
   const e=findEventById(id);if(!e)return;
   attLatePick=null;
+  closeEventPanels(id,'att');
   p.innerHTML=buildAttPanel(e);
   p.style.display='block';
+  p.scrollIntoView({block:'nearest',behavior:'smooth'}); // modal 高度有限，展開後自動捲到看得到
 }
 // 到：toggle 準時到（再點一次取消）
 function onHere(eventId,studentId){
@@ -416,7 +424,9 @@ function onSkip(eventId,studentId){
   const e=findEventById(eventId);if(!e)return;
   const r=eventRosterWithId(e).find(x=>x.studentId===studentId);
   const name=r?r.name:null;if(!name)return;
-  selectWeekEvent(eventId);
+  // 點名面板本身就在 modal 裡了：同一堂就別再重畫一次 modal（會閃），直接切到請假面板
+  const inModal=selectedWeekEvent===eventId&&document.getElementById('week-modal')?.classList.contains('open');
+  if(!inModal)selectWeekEvent(eventId);
   setTimeout(()=>{
     const sfx='-w';
     toggleAbsPanelWeek(eventId);              // 展開請假/曠課面板
@@ -485,7 +495,7 @@ function tcardHtml(e){
     badge=`<span class="tc-badge tc-badge-abs">${e.type==='one'||!ns.length?'曠課':esc(ns.join('、'))+' 曠課'}</span>`;
   }
   const mkBadge=(()=>{if(!e.isFullAbsent&&!e.isRescheduled)return'';const rec=findMakeupScheduledById(e.id);return rec?`<span class="tc-badge tc-badge-arr">✓ 已安排</span>`:`<span class="tc-badge tc-badge-un">未安排</span>`;})();
-  // 動作列：請假內嵌（今日情境面板），調課走 week-modal 避免 rp-${id} 撞車
+  // 動作列：每個動作都跳課程詳情 modal（點名/成績/請假/調課統一置中視窗，2026-07-31 老闆要求）
   let acts='';
   if(e.isMakeupOcc)acts='';// 補課/調課場次：改期走待補課清單「取消安排」重排，卡上不出請假/調課鈕
   else if(e.isRescheduled)acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEvent('${id}')">看調課安排</button><button class="tc-act danger" onclick="event.stopPropagation();cancelReschedule('${id}')">取消調課</button>`;
@@ -494,8 +504,8 @@ function tcardHtml(e){
   else acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndAbs('${id}')">🗓 標記請假</button><button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndReschedule('${id}')">↔ 調課</button>`;
   // 能點名的課：點名面板已列出名冊，不再放「名單」鈕（避免重複）；
   // 不能點名的課（試聽/整堂請假/調課原課）沒有點名面板 → 保留「名單」鈕當唯一名冊入口
-  const attBtn=canAttend(e)?`<button class="tc-act" onclick="event.stopPropagation();toggleAttPanel('${id}')">✓ 點名</button>`:'';
-  const gradeBtn=canAttend(e)&&evNeedsGrade(e)?`<button class="tc-act" onclick="event.stopPropagation();toggleGradePanel('${id}')">✎ 成績</button>`:'';
+  const attBtn=canAttend(e)?`<button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndAtt('${id}')">✓ 點名</button>`:'';
+  const gradeBtn=canAttend(e)&&evNeedsGrade(e)?`<button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndGrade('${id}')">✎ 成績</button>`:'';
   const rosterBtn=canAttend(e)?'':`<button class="tc-act roster" onclick="event.stopPropagation();toggleRoster('${id}')">名單 <b>${roster.length}</b></button>`;
   const cls=`tcard2 t-${e.type}${e.status==='now'?' t-now':''}${e.status==='past'?' t-past':''}${e.isFullAbsent?' t-absent':''}${e.isRescheduled?' t-resched':''}`;
   return `<div class="${cls}" id="cc-${id}" style="--tcv:${tcv}">
@@ -511,7 +521,5 @@ function tcardHtml(e){
     <div class="tcard2-actions">${acts}${attBtn}${gradeBtn}${rosterBtn}</div>
     ${pracRosterHtml(e)}
     <div class="tcard2-roster" id="rost-${id}" style="display:none">${roster.length?esc(roster.join('、')):'（無名單）'}</div>
-    <div class="att-panel" id="attp-${id}" style="display:none"></div>
-    <div class="att-panel grade-panel" id="grp-${id}" style="display:none"></div>
   </div>`;
 }

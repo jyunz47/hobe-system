@@ -371,11 +371,13 @@ function stuExamAdd(sid){
   _refreshStuGradesSec();
   document.getElementById('stu-exam-subj')?.focus(); // 同一次段考連續登下一科
 }
-function stuExamRemove(examId){
+async function stuExamRemove(examId){
   const rec=examsBucket().records.find(r=>r.id===examId);
   if(!rec)return;
   const label=`${rec.examName}${rec.subject?'・'+rec.subject:''}${rec.score!=null?' '+rec.score+' 分':''}`;
-  if(!confirm(`刪除段考成績「${label}」？`))return;
+  const ok=await uiConfirm({title:'刪除這筆段考成績？',ok:'刪除',danger:true,
+    html:`<p class="ask-big">${esc(label)}</p>`});
+  if(!ok)return;
   removeExam(examId);
   _refreshStuGradesSec();
 }
@@ -815,7 +817,7 @@ function confirmDeleteStudent(){
 // 國三→高一（多數會繼續補高中，例外手動改）
 // 高三→畢業（設 status='畢業'，例外手動復學）
 // 國小、大學跳過（國小不分年級無法判斷；大學是頂層）
-function batchPromoteGrade(){
+async function batchPromoteGrade(){
   const GRADE_NEXT={'國小一':'國小二','國小二':'國小三','國小三':'國小四','國小四':'國小五','國小五':'國小六','國小六':'國一','國一':'國二','國二':'國三','國三':'高一','高一':'高二','高二':'高三'};
   const SKIP=['大學','國小'];  // 大學已頂層；裸「國小」＝舊資料未分年、無法自動升
   const list=getStudentList();
@@ -828,11 +830,16 @@ function batchPromoteGrade(){
   }
   const gradeSummary=Object.entries(GRADE_NEXT).map(([from,to])=>{
     const n=eligibleGrade.filter(s=>s.grade===from).length;
-    return n?`  ${from} → ${to}：${n} 位`:'';
-  }).filter(Boolean).join('\n');
-  const gradMsg=eligibleGraduate.length?`\n  高三 → 畢業（狀態變更）：${eligibleGraduate.length} 位`:'';
-  const skipMsg=skipped.length?`\n\n${skipped.length} 位跳過（大學已頂層、或舊資料未分年級的「國小」）`:'';
-  if(!confirm(`批次升年級將執行：\n${gradeSummary}${gradMsg}${skipMsg}\n\n國三→高一、高三→畢業 為自動處理。\n如有例外（國三畢業後不續、高三繼續大學），執行後個別調整即可。\n\n確定執行？`))return;
+    return n?`${from} → ${to}：<b>${n}</b> 位`:'';
+  }).filter(Boolean).join('<br>');
+  const gradMsg=eligibleGraduate.length?`<br>高三 → 畢業（狀態變更）：<b>${eligibleGraduate.length}</b> 位`:'';
+  const skipMsg=skipped.length?`<p>${skipped.length} 位跳過（大學已頂層、或舊資料未分年級的「國小」）。</p>`:'';
+  const ok=await uiConfirm({title:'批次升年級',ok:'執行升年級',
+    html:`<p>這次會做這些事：</p>
+      <div class="ask-list">${gradeSummary}${gradMsg}</div>
+      ${skipMsg}
+      <div class="ask-note">國三→高一、高三→畢業是自動處理。有例外（國三畢業後不續、高三繼續大學）執行完再個別調整就好。</div>`});
+  if(!ok)return;
   const now=new Date().toISOString();
   eligibleGrade.forEach(s=>{s.grade=GRADE_NEXT[s.grade];});
   eligibleGraduate.forEach(s=>{

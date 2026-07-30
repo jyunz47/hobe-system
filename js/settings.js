@@ -191,7 +191,7 @@ function renderCourseModal(){
   const renameSec=`<div class="cm-sec">
     <div class="cm-lbl">課名</div>
     <input class="cm-input" value="${esc(c.title)}" disabled>
-    <div class="cm-hint">改課名待「系統擁有課表」完成後開放——目前課表仍讀 Google 行事曆，系統改名會與行事曆標題對不上。</div>
+    <div class="cm-hint">這是舊行事曆時代留下的課，課名在這裡不能改。系統自有課程請到課程管理按 ✎ 編輯課程改名（可設「從某天起改名」）。</div>
   </div>`;
 
   // 改學費：課程預設單價（coursePrices）。練習課不走登記簿、不在此設價
@@ -228,14 +228,18 @@ function coSavePrice(title,valStr){
   refreshCourseModal();  // modal 內名單的 effectivePrice 跟著更新
 }
 
-// 一鍵移除某課名本期的全部登記（清掉改名後殘留的舊課；不碰其他期別、不碰行事曆、學生本人不刪）
-function coClearCourse(title){
+// 一鍵移除某課名本期的全部登記（清掉改名後殘留的舊課；不碰其他期別、學生本人不刪）
+async function coClearCourse(title){
   const t=normTitle(title);
   const pid=yearPeriodId();
   const victims=getEnrollments({periodId:pid}).filter(e=>normTitle(e.courseTitle)===t);
   if(!victims.length)return;
   const names=victims.map(e=>studentName(e.studentId)).join('、');
-  if(!confirm(`把「${t}」本期的全部 ${victims.length} 筆登記從登記簿移除？\n\n（${names}）\n\n用於清掉改名後殘留的舊課。不影響 Google 行事曆，學生本人不會被刪，之後可再加回。`))return;
+  const ok=await uiConfirm({title:'整門課從登記簿移除？',ok:`移除 ${victims.length} 筆`,danger:true,
+    html:`<p>把 <b>${esc(t)}</b> 本期的 <b>${victims.length}</b> 筆修課登記全部移除。</p>
+      <div class="ask-list">${esc(names)}</div>
+      <div class="ask-note">用來清掉改名後殘留的舊課。學生本人不會被刪，之後可以再加回來。</div>`});
+  if(!ok)return;
   saveEnrollments(getEnrollments().filter(e=>!(normTitle(e.courseTitle)===t&&e.periodId===pid)));
   toast(`已移除「${t}」的 ${victims.length} 筆登記`,'ok');
   renderSettings();
@@ -257,10 +261,14 @@ function coAddEnroll(btn,title){
 
 // 退課：從登記簿移除這筆（可在學生編輯或這裡再加回）
 // 呼叫端有二：課程視窗名單的 ✕、學生視窗修課 tag 的 ✕（系統課），兩邊的視窗都要刷新
-function coRemoveEnroll(enId){
+async function coRemoveEnroll(enId){
   const en=getEnrollments().find(e=>e.id===enId);
   if(!en)return;
-  if(!confirm(`把「${studentName(en.studentId)}」從「${en.courseTitle}」退掉？\n\n會移除這筆登記（含自訂單價），連過去的堂數一起消失、舊課堂名單也會少他一人。\n\n如果只是「某天起不上」，請改用名單上的 📅 設修課起訖（過去的堂數會留著）。\n\n不影響 Google 行事曆。`))return;
+  const ok=await uiConfirm({title:'退掉這門課？',ok:'退掉',danger:true,
+    html:`<p>把 <b>${esc(studentName(en.studentId))}</b> 從 <b>${esc(en.courseTitle)}</b> 的名單移除。</p>
+      <p>這筆登記（含自訂單價）會整筆消失，<b>過去的堂數一起不見</b>，舊課堂的名單也會少他一人。</p>
+      <div class="ask-note">只是「某天起不上」的話，改用名單上的 📅 設修課起訖——過去的堂數會留著。</div>`});
+  if(!ok)return;
   saveEnrollments(getEnrollments().filter(e=>e.id!==enId));
   toast(`已退課：${studentName(en.studentId)} — ${en.courseTitle}`,'ok');
   renderSettings();

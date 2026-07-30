@@ -199,6 +199,16 @@ function selectWeekEventAndReschedule(id){
   setTimeout(()=>toggleReschedulePanel(id),50);
 }
 
+// 今日卡「✓ 點名」「✎ 成績」：同樣走 week-modal（2026-07-31 老闆要求：卡上動作一律跳置中視窗）
+function selectWeekEventAndAtt(id){
+  selectWeekEvent(id);
+  setTimeout(()=>toggleAttPanel(id),50);
+}
+function selectWeekEventAndGrade(id){
+  selectWeekEvent(id);
+  setTimeout(()=>toggleGradePanel(id),50);
+}
+
 function selectWeekEvent(id){
   const ev=findEventById(id);if(!ev)return;
   // Deselect previous
@@ -210,6 +220,9 @@ function selectWeekEvent(id){
   const body=document.getElementById('week-modal-body');
   document.getElementById('week-modal-title').textContent=`${fmtD(ev.startDt)} ${fmtT(ev.startDt)}–${fmtT(ev.endDt)}`;
   modal.classList.add('open');
+  // 點名／成績鈕：與今日卡同條件（可點名的課才有點名；再加「需登記成績」才有成績）
+  const attBtn=canAttend(ev)?`<button class="btn btns" onclick="toggleAttPanel('${esc(ev.id)}')">✓ 點名</button>`:'';
+  const gradeBtn=canAttend(ev)&&evNeedsGrade(ev)?`<button class="btn btns" onclick="toggleGradePanel('${esc(ev.id)}')">✎ 成績</button>`:'';
   body.innerHTML=`<div class="cc" style="border:none;border-radius:0">
     <div class="cc-main">
       <div class="cc-bar" style="background:${COLORS[ev.type]||'#888'}"></div>
@@ -233,8 +246,11 @@ function selectWeekEvent(id){
         ${ev.isRescheduled?`<button class="btn btns btnd" onclick="cancelReschedule('${esc(ev.id)}')">取消調課</button>`:''}
         ${!ev.isRescheduled?`<button class="btn btns" onclick="selectCard(this.closest('.cc'));toggleAbsPanelWeek('${esc(ev.id)}')">標記請假</button>`:''}
         <button class="btn btns" onclick="toggleReschedulePanel('${esc(ev.id)}')">${ev.isRescheduled?(ev.rescheduleReason?'更新調課原因':'輸入調課原因'):'調課'}</button>`}
+        ${attBtn}${gradeBtn}
       </div>
     </div>
+    <div class="att-panel" id="attp-${esc(ev.id)}" style="display:none"></div>
+    <div class="att-panel grade-panel" id="grp-${esc(ev.id)}" style="display:none"></div>
     <div class="abs-panel" id="absp-w-${esc(ev.id)}">${buildAbsPanel(ev,'-w')}</div>
     <div class="reschedule-panel" id="rp-${esc(ev.id)}" style="display:none">
       <div style="padding:12px 14px;border-top:1px solid var(--br);display:flex;flex-direction:column;gap:8px">
@@ -253,9 +269,10 @@ function selectWeekEvent(id){
 function toggleReschedulePanel(id){
   const p=document.getElementById('rp-'+id);if(!p)return;
   const show=p.style.display==='none';
-  if(show){ // 展開調課時收掉請假面板，避免兩塊同時展開
+  if(show){ // 展開調課時收掉請假／點名／成績面板，避免兩塊同時展開
     document.getElementById('absp-w-'+id)?.classList.remove('open');
     document.getElementById('absp-'+id)?.classList.remove('open');
+    closeEventPanels(id,'resched');
   }
   p.style.display=show?'block':'none';
   if(show)document.getElementById('rp-reason-'+id)?.focus();

@@ -37,17 +37,39 @@ function refreshCourseCards() {}   // 真身在 week.js（純重繪，測試不�
 // schedule.js 的 sysAbsenceEvents 會反查系統課程（courses.js 提供，這裡照原樣 stub）
 function getCourses() { return driveData.courses || []; }
 function findCourseById(id) { return getCourses().find(c => c.id === id); }
+// dayview.js 拖曳寫入時會用到的其他全域（真身在 courses.js / makeup.js / init.js，
+// 那幾支綁 DOM 太深，這裡只補會被呼叫到的部分）
+var currentDate = new Date();
+var WD = ['日', '一', '二', '三', '四', '五', '六'];   // 真身在 state.js（不整支載入，那裡會覆蓋掉 driveData stub）
+var makeupMatchMap = new Map();
+var _mkCalls = [];              // 記錄 saveMakeupScheduled 被怎麼呼叫，供斷言
+function saveCourses(list) { driveData.courses = list; _saveCount++; }
+function courseNameOn(co) { return co.name; }
+function courseTeacherNames() { return ['王老師']; }
+function isSignedIn() { return true; }
+function getMakeupScheduledLS() { return driveData.makeupScheduled || []; }
+function saveMakeupScheduled(ev, sS, sE, room, calEventId, calName) {
+  _mkCalls.push({ id: ev.id, students: ev.absentStudents, start: sS, end: sE, room, calName });
+  const list = getMakeupScheduledLS().filter(x => x.originalId !== ev.id);
+  list.push({ originalId: ev.id, origTitle: ev.origTitle, originalDate: ev.startDt.toISOString(),
+    scheduledDate: sS.toISOString(), scheduledEnd: sE.toISOString(), room, calName });
+  driveData.makeupScheduled = list;
+  makeupMatchMap.set(ev.id, { scheduledDate: sS.toISOString(), scheduledEnd: sE.toISOString(), room, calName });
+}
 </script>
 
-<!-- 1. 被測程式 -->
+<!-- 1. 被測程式（utils.js 提供 toDateStr/fmtT，dayview.js 的拖曳寫入需要）-->
+<script src="../js/utils.js"></script>
 <script src="../js/enrollment.js"></script>
 <script src="../js/schedule.js"></script>
+<script src="../js/dayview.js"></script>
 
 <!-- 2. 測試框架（會註冊 DOM 載入後自動跑） -->
 <script src="test-runner.js"></script>
 
 <!-- 3. 各個測試檔（每個檔註冊自己的 suite） -->
 <script src="enrollment.test.js"></script>
+<script src="dayview-move.test.js"></script>
 
 </body>
 </html>
