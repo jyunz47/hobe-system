@@ -130,19 +130,24 @@ function dvOpenDay(y,m,dd){
 }
 
 // ── 點空白處新增課程 ──
-// 帶著「哪一天、幾點、哪間教室」跳到「新增課程/學生」頁，表單的時段先填好。
+// 開「＋ 新增課程」置中 modal（跟課程管理 ✎ 編輯同一張表單），時段／教室先填好。
+// ⚠️ 刻意不切換到「新增課程/學生」分頁：桌面日曆視窗（?app=dayview）沒有側欄與工具列，
+// 切過去就回不來了（2026-07-30 老闆實際踩到）。modal 有 ✕ 可關，不會變死路。
 // 預設「每週重複」＋那天的星期（補習班多數課是週課）；要改單日或改時間在表單裡調。
 function dvAddAt(y,m,dd,mins,room){
   if(!isSignedIn())return;
   const d=new Date(y,m,dd);
-  const s=Math.max(0,Math.min(24*60-DV_ADD_MINS,Math.round(mins/DV_SNAP)*DV_SNAP));
+  const raw=Number(mins);
+  const s=Number.isFinite(raw)
+    ? Math.max(0,Math.min(24*60-DV_ADD_MINS,Math.round(raw/DV_SNAP)*DV_SNAP))
+    : 16*60;   // 換算不出時間時退回常見的開課時間，至少不會填出壞值
   const hhmm=n=>String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0');
-  goAddCourse();
-  cfState={...cfBlank(),target:'page',mode:'weekly',
+  cfState={...cfBlank(),target:'modal',mode:'weekly',
     slots:[{weekday:d.getDay(),start:hhmm(s),end:hhmm(s+DV_ADD_MINS),date:toDateStr(d)}],
     room:room||''};
   renderCourseForm();
-  if(typeof toast==='function')toast(`新增課程：每週${WD[d.getDay()]} ${hhmm(s)}–${hhmm(s+DV_ADD_MINS)}${room?'・'+room:''}（都可以改）`,'inf');
+  document.getElementById('cf-modal-wrap').classList.add('open');
+  if(typeof toast==='function')toast(`帶入：每週${WD[d.getDay()]} ${hhmm(s)}–${hhmm(s+DV_ADD_MINS)}${room?'・'+room:''}（都可以改）`,'inf');
 }
 
 // ── 資料：依當前檢視的範圍現算課堂 ──

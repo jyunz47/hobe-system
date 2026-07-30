@@ -595,6 +595,8 @@ function cfSubmit(){
   else closeCourseForm();
   renderSettings();
   refreshCourseModal();
+  // 從桌面日曆點空白建課時，人還停在日曆上——把新課現算進來，馬上看得到
+  if(currentPanel==='dayview'&&typeof renderDayView==='function')renderDayView();
 }
 
 // ── 刪除課程（連同本課 enrollments；學生本人不動）──
