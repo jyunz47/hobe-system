@@ -3,22 +3,16 @@
 // 不會掛到 window；var 才能被其他檔案的程式碼讀到。
 
 // ── 設定常數 ──
-var CLIENT_ID='729031557572-tjn0hoiph1b0dbkp57lut0l6ekshm629.apps.googleusercontent.com';
-var SCOPES='https://www.googleapis.com/auth/calendar';
-var DISCOVERY_DOC='https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
-var CAL_NAMES=['一般課程','補課','調課','試聽','練習課','加課'];
-var MAKEUP_CALS=['一般課程','調課','試聽','練習課','加課']; // exclude 補課
 var TL_ROOMS=['大教室','小教室','108','208','309']; // 北投教學教室（主頁時間軸一列一間）
 var COURSE_ROOMS=[...TL_ROOMS,'石牌分校']; // 課程可指定的教室：北投 5 間 + 石牌分校（石牌單一桶、不進北投時間軸）
 
 // ── 全域狀態 ──
-var tokenClient=null,gapiReady=false,gisReady=false;
-var tokenRefreshTimer=null;
-var calendarIds={};
+var authReady=false;    // Firebase Auth 已回報過一次狀態（onAuthStateChanged 首次觸發）
 var currentPanel='login';
 var currentDate=new Date();
 var dayEvents=[];
 var weekEvents=[];
+var dvEvents=[];   // 桌面日曆當前檢視（日/週/月）展開出來的課堂；範圍跟 dayEvents/weekEvents 不同，要獨立一份
 var absState={};
 var makeupList=[];
 var driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[],courses:[],teachers:[],absences:[]};
@@ -50,7 +44,8 @@ function getCurrentPeriod(){return getPeriods().find(p=>p.id===currentPeriodId)|
 // 過去散在 7 處：[...dayEvents,...weekEvents].find(e=>e.id===id)
 // 整合成單一函式，且短路一找到就返回（不再每次 spread 建臨時陣列）
 function findEventById(id){
-  return dayEvents.find(e=>e.id===id)||weekEvents.find(e=>e.id===id)||makeupList.find(e=>e.id===id);
+  return dayEvents.find(e=>e.id===id)||weekEvents.find(e=>e.id===id)
+    ||dvEvents.find(e=>e.id===id)||makeupList.find(e=>e.id===id);
 }
 // 過去散在 3 處：new Map(getMakeupScheduled().map(s=>[s.originalId,s])).get(id)
 // 直接從 makeupMatchMap 取（O(1)），不用每次建臨時 Map
@@ -59,34 +54,10 @@ function findMakeupScheduledById(originalId){
   return v?{originalId,...v}:undefined;
 }
 
-// ── Calendar API 快取 ──
-// 同一 timeRange 在 TTL 內重複查同一行事曆 → 直接用上次的結果，省一次網路請求
-// ⚠️ 2026-07-29 第 4 刀後，系統已不再讀寫 Google Calendar；這層只剩「舊請假搬進系統」
-// 一次性工具在用（js/migrate-absences.js），該工具刪掉時整段連同 calendarIds/CAL_NAMES 一併移除。
-var _eventListCache=new Map();
-var EVENT_CACHE_TTL_MS=30000; // 30 秒
-async function cachedEventList(params){
-  const key=JSON.stringify(params);
-  const cached=_eventListCache.get(key);
-  if(cached&&Date.now()-cached.ts<EVENT_CACHE_TTL_MS)return cached.response;
-  const response=await gapi.client.calendar.events.list(params);
-  // 自動翻頁：maxResults 只是每頁上限，整學年掃描會超過一頁；不翻頁會默默掉後面的事件
-  let items=response.result.items||[];
-  let pageToken=response.result.nextPageToken;
-  while(pageToken){
-    const r=await gapi.client.calendar.events.list({...params,pageToken});
-    items=items.concat(r.result.items||[]);
-    pageToken=r.result.nextPageToken;
-  }
-  response.result.items=items;
-  _eventListCache.set(key,{ts:Date.now(),response});
-  return response;
-}
-function invalidateEventCache(){_eventListCache.clear();}
-
 // ── 顏色與教室常數 ──
 var COLORS={one:'#4A7C8C',pair:'#7C5A8C',group:'#2D5A3D',practice:'#8C6A2D'};
-// 行事曆六色從 tokens.css 讀（唯一真相來源）；讀不到時用 fallback 暖化色
+// 課堂類別（calName：一般課程／調課／補課／加課／試聽／練習課）配色，從 tokens.css 讀
+//（唯一真相來源）；讀不到時用 fallback 暖化色。名稱沿用舊行事曆分類，現在純粹是類別標籤。
 function readCalColors(){
   const cs=getComputedStyle(document.documentElement);
   const g=(n,f)=>cs.getPropertyValue(n).trim()||f;

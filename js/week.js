@@ -37,7 +37,7 @@ function refreshCourseCards(){
 }
 
 async function loadWeek(){
-  if(!gapi.client.getToken())return;
+  if(!isSignedIn())return;
   const mon=currentMonday();
   const sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
   try{

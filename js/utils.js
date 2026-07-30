@@ -22,23 +22,20 @@ function showErr(panel,msg){const el=document.getElementById('err-'+panel);if(el
 function hideErr(panel){const el=document.getElementById('err-'+panel);if(el)el.style.display='none';}
 function showL(m){document.getElementById('lo-txt').textContent=m||'載入中...';document.getElementById('lo').classList.add('open');}
 function hideL(){document.getElementById('lo').classList.remove('open');}
-function toast(m,t,withReauth){
+// sticky＝重要訊息不自動收（要使用者看到才走），其餘 4 秒自動消失
+function toast(m,t,sticky){
   const el=document.getElementById('toast');
   el.className='toast t'+t;
-  if(withReauth){
-    el.innerHTML=(t==='ok'?'✓ ':t==='err'?'✕ ':'ℹ ')+m+' <span style="text-decoration:underline;cursor:pointer;margin-left:6px" onclick="requestReauth()">點此授權</span>';
-  }else{
-    el.textContent=(t==='ok'?'✓ ':t==='err'?'✕ ':'ℹ ')+m;
-  }
+  el.textContent=(t==='ok'?'✓ ':t==='err'?'✕ ':'ℹ ')+m;
   el.style.display='block';
   clearTimeout(el._t);
-  if(!withReauth)el._t=setTimeout(()=>el.style.display='none',4000);
+  if(!sticky)el._t=setTimeout(()=>el.style.display='none',4000);
 }
 
 // ── 日期切換 ──
-function changeDay(d){currentDate=new Date(currentDate.getTime()+d*864e5);setDateDisplay(currentDate);document.getElementById('date-picker').value=toDateStr(currentDate);if(gapi.client.getToken())Promise.all([loadToday(),loadWeek()]);}
-function goToday(){currentDate=new Date();setDateDisplay(currentDate);document.getElementById('date-picker').value=toDateStr(currentDate);if(gapi.client.getToken())Promise.all([loadToday(),loadWeek()]);}
-function pickDate(val){if(!val)return;const[y,m,d]=val.split('-').map(Number);currentDate=new Date(y,m-1,d);setDateDisplay(currentDate);if(gapi.client.getToken())Promise.all([loadToday(),loadWeek()]);}
+function changeDay(d){currentDate=new Date(currentDate.getTime()+d*864e5);setDateDisplay(currentDate);document.getElementById('date-picker').value=toDateStr(currentDate);if(isSignedIn())Promise.all([loadToday(),loadWeek()]);}
+function goToday(){currentDate=new Date();setDateDisplay(currentDate);document.getElementById('date-picker').value=toDateStr(currentDate);if(isSignedIn())Promise.all([loadToday(),loadWeek()]);}
+function pickDate(val){if(!val)return;const[y,m,d]=val.split('-').map(Number);currentDate=new Date(y,m-1,d);setDateDisplay(currentDate);if(isSignedIn())Promise.all([loadToday(),loadWeek()]);}
 function setDateDisplay(d){
   const W=['日','一','二','三','四','五','六'];
   const today=new Date();today.setHours(0,0,0,0);

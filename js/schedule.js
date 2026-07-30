@@ -1,6 +1,6 @@
 // 系統自有課表 → 課堂物件展開器（開發路線 ①「全頁改讀系統」的地基）
 // 把 driveData.courses 的排程（每週重複 / 指定日期）在某日期範圍內展開成「課堂物件」，
-// 輸出形狀對齊 parse.js 的 parseEv，讓今日/本週/時間軸/hero 幾乎不用改就能改讀系統。
+// 輸出形狀沿用舊 Calendar 解析器的課堂物件，讓今日/本週/時間軸/hero 幾乎不用改就能改讀系統。
 // 只讀寫 driveData（courses/teachers/enrollments/studentList/absences），不打 Google Calendar。
 // 第 2 刀（2026-07-17）：請假/曠課改存系統（driveData.absences，每課堂一筆），
 // 展開時疊回課堂物件；調課仍待第 3 刀。

@@ -30,218 +30,93 @@ window.addEventListener('load',()=>{
   if(isDayApp())document.body.classList.add('dv-app'); // manifest 換版＋標題已在 <head> 內處理
   if(isStandalone())document.body.classList.add('dv-standalone'); // 已安裝的 App 視窗：不再顯示安裝鈕
   if(isDesktopWin())document.body.classList.add('dv-deskwin');    // 已在桌面視窗：設定頁改給「開啟桌面日曆」
-  const ck=setInterval(()=>{if(window.google&&window.gapi){clearInterval(ck);initAPIs();}},100);
+  initAuth();
   setDateDisplay(currentDate);
   document.getElementById('date-picker').value=toDateStr(currentDate);
 });
 
-// ── PWA 獨立視窗模式：popup 開不起來，登入/授權一律改走整頁 redirect ──
+// ── PWA 獨立視窗模式：popup 開不起來，登入改走整頁 redirect ──
 function isStandalone(){
   return window.matchMedia('(display-mode: standalone)').matches||window.navigator.standalone===true;
 }
 
-// 整頁跳轉到 Google OAuth（implicit flow），授權後帶著 #access_token 跳回
-// redirect_uri 是本資料夾根（已在 Cloud Console 白名單），由 index.html 把 hash 轉交回主頁
-function redirectSignIn(){
-  const state=Math.random().toString(36).slice(2);
-  sessionStorage.setItem('oauth_state',state);
-  const p=new URLSearchParams({
-    client_id:CLIENT_ID,
-    redirect_uri:location.origin+location.pathname.replace(/[^/]*$/,''),
-    response_type:'token',
-    scope:SCOPES+' openid email profile',
-    include_granted_scopes:'true',
-    state
-  });
-  const hint=getLoginHint();if(hint)p.set('login_hint',hint); // 預選帳號，少跳一層帳戶選擇器
-  location.href='https://accounts.google.com/o/oauth2/v2/auth?'+p;
-}
+// ── 登入（Firebase Auth，信箱＋密碼）──
+// 2026-07-30 起系統與 Google 完全分家：登入只剩「你是誰」，不經過 Google 也不載入任何 Google API。
+// Firebase Auth 的 session 存在 localStorage 且會自動續期，所以「用著用著被踢出去要重登」不會再發生
+//（以前那是 Calendar 的 access token 每小時過期造成的）。
+// 帳號由管理者在 Firebase Console 建立、走「重設密碼」的信設定密碼，見 mds/新員工加入SOP.md。
+function isSignedIn(){try{return !!firebase.auth().currentUser;}catch(_){return false;}}
 
-// 登入過的 email：給 GIS / redirect 當 login_hint，避免多帳號時跳「選擇帳戶」
-function getLoginHint(){
-  try{const e=firebase.auth().currentUser&&firebase.auth().currentUser.email;if(e)return e;}catch(_){}
-  return localStorage.getItem('ghint')||'';
-}
-
-// 靜默續授權：帶 login_hint 讓 Google 固定用同一帳號悄悄換新 token（多帳號時才不會跳選擇器）
-function silentReauth(){
-  if(!tokenClient)return;
-  const hint=getLoginHint();
-  tokenClient.requestAccessToken(hint?{prompt:'',hint}:{prompt:''});
-}
-
-// 重新授權：桌面走 GIS 靜默 popup，App 模式走 redirect
-function requestReauth(){
-  if(isStandalone()){redirectSignIn();return;}
-  silentReauth();
-}
-
-// 解析 redirect 回來的 #access_token（沒有就回 null）
-function consumeOAuthHash(){
-  if(!location.hash.includes('access_token')&&!location.hash.includes('error='))return null;
-  const h=new URLSearchParams(location.hash.slice(1));
-  history.replaceState(null,'',location.pathname+location.search);
-  if(h.get('error')){toast('授權失敗：'+h.get('error'),'err');return null;}
-  if(h.get('state')!==sessionStorage.getItem('oauth_state')){toast('授權回應驗證失敗，請重新登入','err');return null;}
-  sessionStorage.removeItem('oauth_state');
-  return {access_token:h.get('access_token'),expires_in:+h.get('expires_in')||3599};
-}
-
-// ── Google Identity Services + GAPI Calendar ──
-async function initAPIs(){
-  await new Promise(r=>gapi.load('client',r));
-  await gapi.client.init({discoveryDocs:[DISCOVERY_DOC]});
-  gapiReady=true;
-  tokenClient=google.accounts.oauth2.initTokenClient({
-    client_id:CLIENT_ID,scope:SCOPES,
-    callback:async(resp)=>{
-      if(resp.error){
-        hideL();
-        if(['interaction_required','user_cancelled','access_denied'].includes(resp.error)){
-          if(currentPanel!=='login')toast('授權已過期，請點擊重新授權','inf',true);
-        }else{
-          toast('授權失敗：'+resp.error,'err');
-        }
-        return;
-      }
-      saveToken();
-      scheduleTokenRefresh();
-      if(currentPanel==='login')await onSignedIn();
-      else await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
-    },
-    // 授權 popup 開不成（平板/手機會擋非點擊觸發的彈窗）或被手動關掉時，
-    // GIS 只走這裡、不走上面的 callback——沒設的話「登入中」轉圈會卡死
-    error_callback:(err)=>{
-      hideL();
-      if(err?.type==='popup_closed')return; // 使用者自己關掉授權視窗，不用吵
-      if(currentPanel==='login')toast('自動登入未完成，請點「使用 Google 帳號登入」','inf');
-      else toast('授權視窗被瀏覽器擋下','err',true);
-    }
-  });
-  gisReady=true;
-  // App 模式 redirect 回來：hash 裡有 token，優先處理
-  const rtok=consumeOAuthHash();
-  if(rtok){
-    showL('登入中...');
-    gapi.client.setToken({access_token:rtok.access_token});
-    localStorage.setItem('gtoken',JSON.stringify({access_token:rtok.access_token,expires_at:Date.now()+rtok.expires_in*1000-60000}));
-    scheduleTokenRefresh();
-    try{
-      const cred=firebase.auth.GoogleAuthProvider.credential(null,rtok.access_token);
-      await firebase.auth().signInWithCredential(cred);
-    }catch(e){hideL();toast('登入失敗：'+(e?.message||e),'err');return;}
+function initAuth(){
+  showL('載入中...');   // 等 Firebase 從 localStorage 還原登入狀態，避免閃一下登入頁
+  const em=localStorage.getItem('ghint');
+  const ei=document.getElementById('login-email');if(ei&&em)ei.value=em;
+  firebase.auth().onAuthStateChanged(async user=>{
+    authReady=true;
+    if(!user){hideL();showPanel('login');return;}
     await onSignedIn();
-    return;
-  }
-  // localStorage 的 token 撐得過重開瀏覽器；還在有效期就直接還原登入
-  const saved=localStorage.getItem('gtoken');
-  if(saved){
-    try{
-      const t=JSON.parse(saved);
-      const remaining=t.expires_at-Date.now();
-      if(remaining>10*60*1000){
-        gapi.client.setToken({access_token:t.access_token});
-        await onSignedIn();
-        return;
-      }
-    }catch(e){}
-    localStorage.removeItem('gtoken');
-  }
-  // 沒有有效 token，但 Firebase（localStorage）還記得登入 → 自動靜默續授權，省掉手動點登入
-  // App 模式靜默 popup 不可用，留給使用者手動點（避免 reload 就被整頁跳走）
-  if(isStandalone())return;
-  const user=await new Promise(resolve=>{
-    const unsub=firebase.auth().onAuthStateChanged(u=>{unsub();resolve(u);});
-  });
-  if(user&&tokenClient){
-    showL('登入中...');
-    silentReauth(); // 帶 login_hint 靜默續授權；失敗（需互動）時 callback 會 hideL 並停在登入頁
-  }
-}
-
-// 登入：用單一 Firebase popup 同時取得 Firebase auth + Google Calendar OAuth token
-// 避免兩個 popup 連環觸發時，第二個被瀏覽器擋（user gesture 在 await 後失效）
-function signIn(){
-  if(!gisReady){toast('系統初始化中...','inf');return;}
-  // App 模式：popup 不可用，整頁跳轉授權
-  if(isStandalone()){showL('前往 Google 授權...');redirectSignIn();return;}
-  showL('開啟 Google 登入...');
-  doSignIn().catch(e=>{
-    hideL();
-    if(e?.code==='auth/popup-closed-by-user'||e?.code==='auth/cancelled-popup-request')return;
-    if(e?.code==='auth/popup-blocked'){toast('彈窗被瀏覽器封鎖，請允許彈窗後重試','err');return;}
-    toast('登入失敗：'+(e?.message||e),'err');
   });
 }
 
-async function doSignIn(){
-  // Case 1：Firebase 已登入（localStorage 還原），只需 Calendar token
-  // 走 GIS silent refresh，已授權過的話不會跳 popup
-  if(firebase.auth().currentUser){
-    silentReauth();
-    return;
-  }
-  // Case 2：全新登入，combined popup 一次拿 Firebase auth + Calendar OAuth token
-  const provider=new firebase.auth.GoogleAuthProvider();
-  provider.addScope(SCOPES); // 'https://www.googleapis.com/auth/calendar'
-  const result=await firebase.auth().signInWithPopup(provider);
-  const accessToken=result.credential?.accessToken;
-  if(!accessToken)throw new Error('登入成功但沒拿到 Calendar 授權，請重試');
-  gapi.client.setToken({access_token:accessToken});
-  saveToken();
-  scheduleTokenRefresh();
-  await onSignedIn();
+// Firebase 錯誤碼 → 看得懂的中文
+function authErrMsg(e){
+  const c=e?.code||'';
+  if(c==='auth/invalid-email')return'信箱格式不對';
+  if(c==='auth/user-disabled')return'這個帳號已被停用';
+  if(c==='auth/user-not-found'||c==='auth/wrong-password'||c==='auth/invalid-credential'||c==='auth/invalid-login-credentials')return'信箱或密碼不對';
+  if(c==='auth/too-many-requests')return'嘗試太多次，請稍後再試';
+  if(c==='auth/operation-not-allowed')return'Firebase 尚未啟用「電子郵件/密碼」登入方式，請到 Console 開啟';
+  if(c==='auth/network-request-failed')return'連不上網路';
+  return e?.message||String(e);
 }
 
-function saveToken(){const t=gapi.client.getToken();if(t)localStorage.setItem('gtoken',JSON.stringify({access_token:t.access_token,expires_at:Date.now()+3500000}));}
-
-function scheduleTokenRefresh(){
-  if(tokenRefreshTimer)clearTimeout(tokenRefreshTimer);
-  const stored=localStorage.getItem('gtoken');
-  if(!stored)return;
-  try{
-    const t=JSON.parse(stored);
-    const delay=Math.max(t.expires_at-Date.now()-5*60*1000,60*1000);
-    tokenRefreshTimer=setTimeout(()=>{
-      if(currentPanel==='login')return;
-      // App 模式不能在使用中整頁跳走（會打斷操作），改提示讓使用者挑時機
-      if(isStandalone()){toast('授權即將過期','inf',true);return;}
-      silentReauth();
-    },delay);
-  }catch(e){}
+// 信箱＋密碼登入（登入頁主要路徑）
+function signInPassword(){
+  const em=(document.getElementById('login-email')?.value||'').trim();
+  const pw=document.getElementById('login-pass')?.value||'';
+  if(!em||!pw){setLoginErr('請填信箱與密碼');return;}
+  setLoginErr('');
+  showL('登入中...');
+  firebase.auth().signInWithEmailAndPassword(em,pw)
+    .then(()=>{localStorage.setItem('ghint',em);})   // 下次自動填信箱
+    .catch(e=>{hideL();setLoginErr(authErrMsg(e));});
 }
 
-// 切回分頁時若 token 快過期就重新請求
-document.addEventListener('visibilitychange',()=>{
-  if(document.visibilityState!=='visible'||!gisReady||currentPanel==='login')return;
-  const stored=localStorage.getItem('gtoken');
-  if(!stored){requestReauth();return;}
-  try{
-    const t=JSON.parse(stored);
-    if(t.expires_at-Date.now()<5*60*1000)requestReauth();
-  }catch(e){requestReauth();}
-});
+// 設定／重設密碼：寄一封 Firebase 的重設信。
+// 原本只用 Google 登入的帳號，走完這封信就會多一組密碼（同一個帳號、同一個 uid），
+// 所以「第一次設定密碼」跟「忘記密碼」是同一條路。
+function sendResetMail(){
+  const em=(document.getElementById('login-email')?.value||'').trim();
+  if(!em){setLoginErr('請先填要收信的信箱');return;}
+  setLoginErr('');
+  showL('寄送中...');
+  firebase.auth().sendPasswordResetEmail(em)
+    .then(()=>{hideL();toast('設定密碼的信已寄到 '+em+'，點信裡的連結設好密碼再回來登入','ok',true);})
+    .catch(e=>{hideL();setLoginErr(authErrMsg(e));});
+}
+
+function setLoginErr(msg){
+  const el=document.getElementById('login-err');if(!el)return;
+  el.textContent=msg||'';el.style.display=msg?'block':'none';
+}
 
 function signOut(){
-  const t=gapi.client.getToken();
-  if(t){google.accounts.oauth2.revoke(t.access_token);gapi.client.setToken(null);}
-  calendarIds={};dayEvents=[];weekEvents=[];makeupList=[];
+  dayEvents=[];weekEvents=[];makeupList=[];
   driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[],courses:[],teachers:[],absences:[]};
   firebase.auth().signOut();
-  localStorage.removeItem('gtoken');
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='none');
-  setUSt('','未登入','請登入 Google 帳號');
+  setUSt('','未登入','請輸入帳號密碼登入');
   showPanel('login');
 }
 
 async function onSignedIn(){
   hideL();
-  scheduleTokenRefresh();
+  const u=firebase.auth().currentUser;
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='inline-block');
-  try{const info=await fetch('https://www.googleapis.com/oauth2/v3/userinfo',{headers:{Authorization:'Bearer '+gapi.client.getToken().access_token}}).then(r=>r.json());setUSt('ok',info.email||'已登入','Google 帳號');if(info.email)localStorage.setItem('ghint',info.email);}catch(e){setUSt('ok','已登入','Google 帳號');}
+  setUSt('ok',u?.email||'已登入','已登入');
+  if(u?.email)localStorage.setItem('ghint',u.email);
   await loadFromFirestore();
   migrateCoursesToEnrollments();
-  await fetchCalIds();   // 只剩「舊請假搬進系統」一次性工具要用（該工具刪掉時一併移除）
   showPanel('courses');
   await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
   updateWeekTitle();
@@ -285,7 +160,7 @@ async function loadFromFirestore(){
   }catch(e){
     console.error('loadFromFirestore failed',e);
     const denied=e?.code==='permission-denied'||/permission|denied|unauthor/i.test(e?.message||'');
-    if(denied)toast('此 Google 帳號未獲授權使用系統，請聯繫管理員加入白名單','err',false);
+    if(denied)toast('此帳號未獲授權使用系統（白名單、或信箱尚未完成驗證），請聯繫管理員','err',false);
     else toast('讀取雲端資料失敗：'+(e?.message||e),'err');
   }
 }
@@ -297,14 +172,9 @@ async function saveToFirestore(){
   catch(e){console.error('saveToFirestore failed',e);}
 }
 
-async function fetchCalIds(){
-  if(Object.keys(calendarIds).length>0)return;
-  try{const l=await gapi.client.calendar.calendarList.list();(l.result.items||[]).forEach(c=>{if(CAL_NAMES.includes(c.summary))calendarIds[c.summary]=c.id;});}catch(e){console.error(e);}
-}
-
 // ── 導覽（側邊欄 panel 切換）──
 function switchPanel(id){
-  if(!gapi.client.getToken())return;
+  if(!isSignedIn())return;
   showPanel(id);
   if(id==='courses')Promise.all([loadToday(),loadWeek()]);
   if(id==='dayview')loadToday(); // 共用 dayEvents；載完 loadToday 尾端會 renderDayView
@@ -330,21 +200,8 @@ function showPanel(id){
   document.getElementById('tbs').textContent=s;
 }
 
-// token 是否已過期（gapi 沒 token、或 localStorage 記錄的 expires_at 已到）
-function isTokenExpired(){
-  if(!gapi.client.getToken())return true;
-  try{
-    const t=JSON.parse(localStorage.getItem('gtoken')||'null');
-    return !t||t.expires_at<=Date.now();
-  }catch(e){return true;}
-}
-
 async function refreshCurrent(){
-  // token 過期：明確提示 + 給重新授權連結，不再靜默失敗
-  if(isTokenExpired()){
-    toast('授權已過期','inf',true);
-    return;
-  }
+  if(!isSignedIn()){toast('尚未登入','inf');return;}
   showL('更新中…');
   try{
     if(drivePendingSave)await saveToFirestore();   // 先把本機待存改動寫上去，避免被雲端舊值蓋掉

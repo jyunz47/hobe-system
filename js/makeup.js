@@ -11,7 +11,7 @@ function jumpToMkCompleted(){
 
 // ── 載入補課清單 + 媒合 ──
 async function loadMakeup(silent=false){
-  if(!gapi.client.getToken())return;
+  if(!isSignedIn())return;
   if(!silent)showL('讀取待補課/調課清單...');
   try{
     const SUBJECTS=['數學','英文','理化','物理','化學','國文','生物','歷史','地理','社會','自然','寫作','作文'];

@@ -128,7 +128,7 @@ function effectivePrice(en){return en.price??getCourseDefaultPrice(en.courseTitl
 function getCourseSettings(){return driveData.courseSettings||[];}
 function saveCourseSettings(list){driveData.courseSettings=list;scheduleDriveSave();}
 // 這門課要不要登記成績；查無設定 = 只點名
-// 比對前去前後空白：parse.js 的 origTitle 無【】標記時不 trim，避免尾端空白導致對不上
+// 比對前去前後空白：舊資料的 origTitle 可能帶尾端空白，不清會對不上
 function courseNeedsGrade(title){
   const t=(title||'').trim();
   const row=getCourseSettings().find(c=>(c.title||'').trim()===t);

@@ -3,7 +3,7 @@
 // 資料來源（2026-07-29 第 4 刀後）：系統自有課程（driveData.courses）∪ 本期登記簿 ∪ 價目表。
 // 「需登記成績」開關：系統課存課程本體（courses.needsGrade），舊行事曆課存 driveData.courseSettings（見 enrollment.js）。
 
-// 課名正規化：去前後空白，避免同一門課因尾端空白被當兩門（parse.js origTitle 無標記時不 trim）
+// 課名正規化：去前後空白，避免同一門課因尾端空白被當兩門
 function normTitle(t){return (t||'').trim();}
 
 // 課程卡 → 該卡的上下文（給置中 modal 用：點卡開 modal，不再就地展開）

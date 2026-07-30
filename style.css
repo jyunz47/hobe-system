@@ -40,9 +40,6 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--tx);
 .login-card{background:var(--sf);border:1px solid var(--br);border-radius:var(--r);padding:36px;max-width:440px;width:100%;text-align:center}
 .login-card h2{font-size:18px;font-weight:700;margin-bottom:8px}
 .login-card p{font-size:13px;color:var(--tx2);margin-bottom:24px;line-height:1.8}
-.gbtn{display:inline-flex;align-items:center;gap:10px;padding:11px 20px;background:#fff;border:1px solid #DDD;border-radius:var(--rs);cursor:pointer;font-size:14px;font-family:'Noto Sans TC',sans-serif;font-weight:500;color:#333;box-shadow:0 1px 3px rgba(0,0,0,.08);transition:all .12s}
-.gbtn:hover{box-shadow:0 2px 8px rgba(0,0,0,.12)}
-.gbtn svg{width:20px;height:20px}
 
 /* Section heading */
 .sec-hd{font-size:15px;font-weight:700;color:var(--tx);margin-bottom:12px;display:flex;align-items:center;gap:8px;letter-spacing:-.01em}
@@ -886,7 +883,16 @@ body:has(#panel-login.active) .content{padding:0}
 .login-box{background:#fff;border:1px solid var(--br);border-radius:22px;padding:40px;max-width:400px;width:100%;box-shadow:0 20px 60px -20px rgba(20,40,32,.3),0 2px 8px rgba(20,40,32,.06)}
 .login-box h2{font-family:'DM Sans','Noto Sans TC',sans-serif;font-size:22px;font-weight:700;margin-bottom:8px;color:var(--tx)}
 .login-box-sub{font-size:13px;color:var(--tx2);margin-bottom:24px;line-height:1.7}
-.login-box .gbtn{width:100%;justify-content:center;border-radius:14px;border-color:var(--brd);padding:13px 20px}
+/* 帳號密碼登入表單（2026-07-30 起的主要登入方式）*/
+.login-form{display:flex;flex-direction:column}
+.login-lbl{font-size:12px;font-weight:600;color:var(--tx2);margin-bottom:6px}
+.login-inp{width:100%;padding:11px 13px;border:1px solid var(--brd);border-radius:12px;font:inherit;font-size:14px;color:var(--tx);background:#fff;margin-bottom:14px;transition:border-color .12s,box-shadow .12s}
+.login-inp:focus{outline:none;border-color:var(--ac);box-shadow:0 0 0 3px var(--al)}
+.login-err{font-size:12.5px;color:#C0504A;background:#FBF0EF;border:1px solid #E4C7C3;border-radius:10px;padding:9px 11px;margin-bottom:12px;line-height:1.55}
+.login-submit{width:100%;justify-content:center;padding:12px 20px;border-radius:14px;font-size:14px}
+.login-links{margin-top:12px;text-align:center}
+.login-link{font-size:12.5px;color:var(--ac);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+.login-link:hover{opacity:.75}
 .login-perm{display:flex;gap:10px;align-items:flex-start;margin-top:20px;padding:13px 14px;background:var(--sf3);border:1px solid var(--br);border-radius:12px;font-size:12.5px;color:var(--tx2);line-height:1.6}
 .login-perm-ic{width:18px;height:18px;flex-shrink:0;color:var(--ac);margin-top:1px}
 .login-perm b{color:var(--tx);font-weight:600}

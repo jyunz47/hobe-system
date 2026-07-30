@@ -1,7 +1,7 @@
 // 今日課程：載入 + 渲染 + 教室時間軸 + hero 卡
 
 async function loadToday(){
-  if(!gapi.client.getToken())return;
+  if(!isSignedIn())return;
   showL('讀取今日課程...');
   try{
     const d=currentDate;
