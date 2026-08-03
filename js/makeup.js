@@ -231,6 +231,7 @@ async function markMakeupSkip(id){
   const ev=findEventById(id);if(!ev)return;
   const skip=[...new Set([...(ev.makeupSkip||[]),...(ev.absentStudents||[])])];
   sysSetMakeupSkip(ev,skip);
+  logAct('makeup',`標記 ${(ev.absentStudents||[]).join('、')} 不補課`,actEvLabel(ev),'退半堂、不算欠課、移出待安排');
   toast('已標記不補課（退半堂）','ok');
   await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
 }
@@ -239,6 +240,7 @@ async function unmarkMakeupSkip(id){
   const ev=findEventById(id);if(!ev)return;
   const skip=(ev.makeupSkip||[]).filter(s=>!(ev.absentStudents||[]).includes(s));
   sysSetMakeupSkip(ev,skip);
+  logAct('makeup',`把 ${(ev.absentStudents||[]).join('、')} 改回要補課`,actEvLabel(ev),'重新回到待安排清單');
   toast('已改為補課','ok');
   await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
 }
@@ -590,18 +592,31 @@ function getMakeupScheduledLS(){return driveData.makeupScheduled||[];}
 function getMakeupScheduled(){return[...makeupMatchMap.entries()].map(([originalId,v])=>({originalId,...v}));}
 
 function saveMakeupScheduled(ev,sS,sE,room,calEventId,calName='補課'){
+  const prev=makeupMatchMap.get(ev.id);   // 已經排過＝這次是「改時段」，動態要講得出差別
   const rec={originalId:ev.id,origTitle:ev.origTitle,originalDate:ev.startDt.toISOString(),scheduledDate:sS.toISOString(),scheduledEnd:sE.toISOString(),room,calEventId:calEventId||null,absentStudents:ev.absentStudents||[],calName};
   makeupMatchMap.set(ev.id,{calEventId:calEventId||null,scheduledDate:sS.toISOString(),scheduledEnd:sE.toISOString(),room,origTitle:ev.origTitle,absentStudents:ev.absentStudents||[],calName});
   const list=getMakeupScheduledLS().filter(x=>x.originalId!==ev.id);
   list.push(rec);
   driveData.makeupScheduled=list;
   scheduleDriveSave();
+  // 動態：排定／改時段（補課與調課共用這支，calName 就是類別）
+  const who=(ev.absentStudents||[]).join('、');
+  logAct('makeup',`${prev?'改了':'排好'}${who?` ${who} 的`:''}${calName}`,
+    `${fmtD(sS)} ${fmtT(sS)}–${fmtT(sE)} ${room||''} ${ev.origTitle||''}`.trim(),
+    prev?`原本排在 ${fmtD(new Date(prev.scheduledDate))} ${fmtT(new Date(prev.scheduledDate))} ${prev.room||''}`
+        :`原課堂 ${fmtD(ev.startDt)} ${fmtT(ev.startDt)}`);
 }
 
 async function deleteMakeupScheduled(originalId){
+  const prev=makeupMatchMap.get(originalId);   // 刪掉之前先抄，動態才講得出取消的是哪一場
   makeupMatchMap.delete(originalId);
   driveData.makeupScheduled=getMakeupScheduledLS().filter(x=>x.originalId!==originalId);
   scheduleDriveSave();
+  if(prev){
+    const s=new Date(prev.scheduledDate);
+    logAct('makeup',`取消${(prev.absentStudents||[]).length?` ${prev.absentStudents.join('、')} 的`:''}${prev.calName||'補課'}`,
+      `${fmtD(s)} ${fmtT(s)} ${prev.room||''} ${prev.origTitle||''}`.trim(),'回到待安排清單');
+  }
   await Promise.all([loadToday(),loadWeek()]); // 場次從主頁課表移除
   renderMakeup();updateMakeupBadge();
 }

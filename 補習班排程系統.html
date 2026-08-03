@@ -23,7 +23,7 @@ if(new URLSearchParams(location.search).get('app')==='dayview'){
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HOBE">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=46">
+<link rel="stylesheet" href="style.css?v=48">
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -38,6 +38,11 @@ if ('serviceWorker' in navigator) {
     <button class="ni active" id="nav-courses" data-m="課程" onclick="switchPanel('courses')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg>
       <span class="ni-txt">課程</span>
+    </button>
+    <button class="ni" id="nav-activity" data-m="動態" onclick="switchPanel('activity')">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>
+      <span class="ni-txt">動態與待辦</span>
+      <span class="nbadge" id="badge-activity" style="display:none">0</span>
     </button>
     <button class="ni" id="nav-makeup" data-m="補課" onclick="switchPanel('makeup')">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/><path d="M9 12h6M9 16h4"/></svg>
@@ -245,7 +250,10 @@ if ('serviceWorker' in navigator) {
       .dv-col:first-child{border-left:none}
       .dv-col-hit{position:absolute;inset:0;cursor:copy}   /* 點空白處新增課程 */
       .dv-ev{position:absolute;border-radius:7px;border-left:3px solid;padding:4px 9px;overflow:hidden;cursor:pointer;box-shadow:inset 0 0 0 .5px rgba(255,255,255,.05)}
-      .dv-ev:hover{filter:brightness(1.09);z-index:20}
+      /* 疊在一起時，滑過／選取要能把被壓在下面的那堂整塊帶到最上面看全貌。
+         課塊的 z-index 是寫在 style 屬性裡的（每堂不同），只有 !important 蓋得過去。
+         拖曳殘影 .dv-ghost 例外，它得一直浮在最上層（pointer-events:none，不會被 hover 到）。 */
+      .dv-ev:hover{filter:brightness(1.09);z-index:20!important}
       .dv-wrap.dv-light .dv-ev{box-shadow:inset 0 0 0 .5px rgba(0,0,0,.06)}
       .dv-wrap.dv-light .dv-ev:hover{filter:brightness(.97)}
       .dv-ev-title{font-size:12.5px;font-weight:600;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -259,6 +267,17 @@ if ('serviceWorker' in navigator) {
       .dv-ev-rep{position:absolute;top:4px;right:6px;font-size:11px;opacity:.75}
       .dv-ev-badge{display:inline-block;margin-left:5px;font-size:10px;font-weight:600;padding:0 5px;border-radius:5px;background:rgba(255,255,255,.14);color:#e6e2db;vertical-align:middle}
       .dv-wrap.dv-light .dv-ev-badge{background:rgba(0,0,0,.10);color:inherit}
+      /* ── 疊在一起的課：⊞ 展開成橫列 ── */
+      .dv-stack{position:absolute;right:3px;z-index:40;padding:2px 5px;border-radius:5px;font-size:10px;font-weight:700;line-height:1.1;
+        background:var(--dvbg3);color:var(--dvfg);border:1px solid var(--dvline);cursor:pointer;opacity:.9;white-space:nowrap}
+      .dv-stack:hover{opacity:1;background:var(--dvon);color:var(--dvonfg)}
+      .dv-stack.on{background:var(--dvon);color:var(--dvonfg);opacity:1}
+      /* 橫列：直向排（課名一行、老師一行）。⚠️ 不能用橫向 flex——課名會跟下面那行擠成左右兩欄，
+         窄欄位一擠課名就只剩「5:…」（2026-08-03 踩過）。 */
+      .dv-ev.dv-row{border-radius:5px;padding-top:2px;padding-bottom:2px;display:flex;flex-direction:column;justify-content:center}
+      .dv-ev.dv-row .dv-ev-title{min-width:0}
+      .dv-ev-time{opacity:.72;font-weight:500;margin-right:5px;font-variant-numeric:tabular-nums}
+      .dv-ev.dv-badged .dv-ev-rep{right:32px}   /* 右上角讓給 ⊞ 鈕 */
       .dv-now-line{position:absolute;left:-6px;right:0;height:2px;background:#e0483d;z-index:15;pointer-events:none}
       .dv-now-line::before{content:'';position:absolute;left:-3px;top:-3px;width:8px;height:8px;border-radius:50%;background:#e0483d}
       .dv-empty{padding:60px 24px;text-align:center;color:var(--dvfg3);font-size:14px}
@@ -329,6 +348,7 @@ if ('serviceWorker' in navigator) {
       .dv-insp-none{height:100%;min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;
         text-align:center;color:var(--dvfg3);font-size:12.5px;line-height:1.75;gap:6px}
       .dv-insp-none i{font-style:normal;font-size:20px;opacity:.5}
+      .dv-insp-none small{display:inline-block;margin-top:4px;font-size:11.5px;opacity:.7}
       .dv-insp-hd{display:flex;gap:9px;align-items:stretch}
       .dv-insp-bar{width:4px;border-radius:2px;flex-shrink:0}
       .dv-insp-title{font-size:15px;font-weight:700;line-height:1.32;color:var(--dvfg);word-break:break-word}
@@ -358,7 +378,7 @@ if ('serviceWorker' in navigator) {
       .dv-insp-b.dv-insp-open{border-color:transparent;background:transparent;color:var(--dvfg3)}
       .dv-insp-b.dv-insp-open:hover{background:var(--dvbg2);color:var(--dvfg)}
       /* 被選到的課塊：日／週用外框，月檢視 chip 用細框（chip 太小塞不下粗框）*/
-      .dv-ev.dv-sel{box-shadow:0 0 0 2px var(--dvfg2);z-index:30}
+      .dv-ev.dv-sel:not(.dv-ghost){box-shadow:0 0 0 2px var(--dvfg2);z-index:30!important}
       .dv-mchip.dv-sel{box-shadow:0 0 0 1.5px var(--dvfg2)}
       /* ── App 模式：獨立桌面視窗（?app=dayview）——藏系統側邊欄＋工具列、滿版 ── */
       body.dv-app{background:#1b1a19}
@@ -490,6 +510,11 @@ if ('serviceWorker' in navigator) {
       <div class="clist" id="clist-makeup"><div class="empty">按「更新」載入資料</div></div>
     </div>
 
+    <!-- Activity（動態與待辦）-->
+    <div id="panel-activity" class="panel" style="display:none">
+      <div id="act-wrap"></div>
+    </div>
+
     <!-- Settings -->
     <div id="panel-settings" class="panel" style="display:none">
       <div class="set-card">
@@ -544,21 +569,22 @@ if ('serviceWorker' in navigator) {
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <!-- 應用程式分模組（順序：state → utils → 解析 → 各 panel → init 最後）-->
-<script src="js/state.js?v=13"></script>
+<script src="js/state.js?v=14"></script>
 <script src="js/utils.js?v=13"></script>
-<script src="js/schedule.js?v=7"></script>
+<script src="js/schedule.js?v=8"></script>
 <script src="js/today.js?v=29"></script>
 <script src="js/week.js?v=16"></script>
-<script src="js/dayview.js?v=17"></script>
-<script src="js/absence.js?v=12"></script>
-<script src="js/makeup.js?v=11"></script>
+<script src="js/dayview.js?v=22"></script>
+<script src="js/absence.js?v=13"></script>
+<script src="js/makeup.js?v=12"></script>
 <script src="js/enrollment.js?v=14"></script>
-<script src="js/students.js?v=21"></script>
+<script src="js/students.js?v=23"></script>
 <script src="js/attendance.js?v=2"></script>
 <script src="js/grades.js?v=3"></script>
-<script src="js/settings.js?v=22"></script>
-<script src="js/courses.js?v=21"></script>
-<script src="js/init.js?v=25"></script>
+<script src="js/settings.js?v=24"></script>
+<script src="js/courses.js?v=23"></script>
+<script src="js/activity.js?v=2"></script>
+<script src="js/init.js?v=27"></script>
 
 <div class="stu-modal-wrap" id="stu-modal-wrap">
   <div class="stu-modal-overlay" onclick="closeStudentModal()"></div>

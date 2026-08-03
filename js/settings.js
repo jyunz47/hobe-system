@@ -36,9 +36,11 @@ function buildCourseOverview(){
 
   // 系統自有課程（driveData.courses，2026-07-04 起）：以 id 為身分的獨立實體，不與行事曆課名合併
   const sysBucket={'一對一':'one','一對二':'pair','團班':'group','練習課':'practice','試聽':'trial'};
+  const todayStr=toDateStr(new Date());
   const sys=getCourses().map(co=>({
     // 卡片標題＝今天生效的課名（namePhases 分段時，8/1 到了自己會換）
-    title:courseNameOn(co,new Date()),type:sysBucket[co.type]||'group',sys:co,
+    // 分區＝今天生效的課型（滾動判型：兩人的課退到剩一人，卡片自己搬到「一對一家教」區）
+    title:courseNameOn(co,new Date()),type:sysBucket[courseTypeOn(co,todayStr)]||'group',sys:co,
     teachers:new Set(courseTeacherNames(co)),
     sessions:sysCourseSessions(co),
     enrolled:getEnrollments({periodId:pid}).filter(en=>en.courseId===co.id),
@@ -274,6 +276,7 @@ async function coRemoveEnroll(enId){
       <div class="ask-note">只是「某天起不上」的話，改用名單上的 📅 設修課起訖——過去的堂數會留著。</div>`});
   if(!ok)return;
   saveEnrollments(getEnrollments().filter(e=>e.id!==enId));
+  logAct('roster',`把 ${studentName(en.studentId)} 退出課程`,en.courseTitle||'','整筆登記移除（過去堂數一起消失）');
   toast(`已退課：${studentName(en.studentId)} — ${en.courseTitle}`,'ok');
   renderSettings();
   refreshCourseModal();

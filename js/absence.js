@@ -204,17 +204,73 @@ function sysApplyAbsence(ev,state){
   saveAbsences(list);
 }
 
+// 標記請假／曠課 → 記一筆動態（js/activity.js）。時機三段照面板的字，同事才對得起來
+var ABS_TIMING_LBL={A:'課前 1 小時以上',B:'課前 1 小時內',C:'已開始'};
+function logAbsenceAct(ev,state){
+  if(typeof logAct!=='function')return;
+  if(state.type==='teacher'){logAct('absence','標記 老師請假',actEvLabel(ev),'整堂不上');return;}
+  const names=(state.type==='student-auto'?ev.students.slice(0,1):(state.students||[])).join('、');
+  if(!names)return;
+  const noShow=state.timing==='C';
+  logAct('absence',`標記 ${names} ${noShow?'曠課':'請假'}`,actEvLabel(ev),
+    noShow?'曠課：不排補課、不計欠課':(ABS_TIMING_LBL[state.timing||'B']||''));
+}
+
+// ── 請假次數提醒 ──
+// 學生卡片的「⚠ 多收費」是事後才看得到的標籤，這裡把同一條門檻搬到「標記當下」先攔一下，
+// 同事馬上知道要跟家長講收費。計數口徑跟那個標籤一致：只算「學生自己請假」
+//（調課、老師請假、曠課都不算，因為 leave[] 裡本來就只有請假的人），同一門課、同一期別內累計。
+// 期別看「這堂課的日期」落在哪期，不是學生頁上面選的分頁。
+function countStudentLeaves(courseId,studentId,name,period,excludeOccId){
+  if(courseId==null||!period)return 0;
+  return getAbsences().filter(a=>{
+    if(a.courseId!==courseId||a.occId===excludeOccId)return false;
+    const d=new Date(a.date);
+    if(d<period.start||d>period.end)return false;
+    return (a.leave||[]).some(x=>(studentId!=null&&x.studentId!=null)?x.studentId===studentId:x.name===name);
+  }).length;
+}
+
+// 這次要標記的人裡，哪些人算完會達到門檻。回傳 [{name,count}]，空陣列＝不用跳提醒
+function leaveThresholdWarnings(ev,state){
+  if(state.type==='teacher'||state.timing==='C')return[]; // 老師請假、曠課都不計多收費
+  const period=periodOfDate(ev.startDt);
+  if(!period)return[];
+  const threshold=getThreshold(period.id);
+  const idOf=new Map(eventRosterWithId(ev).map(r=>[r.name,r.studentId]));
+  const newOnes=state.type==='student-auto'?ev.students.slice(0,1):(state.students||[]);
+  return newOnes
+    .map(n=>({name:n,count:countStudentLeaves(ev.courseId,idOf.get(n)??null,n,period,ev.id)+1}))
+    .filter(x=>x.count>=threshold)
+    .map(x=>Object.assign(x,{period,threshold}));
+}
+
 async function confirmAbs(id,sfx){
   const state=absState[id];
   const ev=findEventById(id);
   if(!state?.type||!ev)return;
   const res=computeAbsResult(ev,state);
   if(res.empty){toast('請選擇請假學生','inf');return;}
+  const warns=leaveThresholdWarnings(ev,state);
+  if(warns.length){
+    const p=warns[0].period,t=warns[0].threshold;
+    const lines=warns.map(w=>`<div style="margin:4px 0">・<b>${esc(w.name)}</b>　${esc(ev.origTitle)}　第 <b>${w.count}</b> 次請假</div>`).join('');
+    const ok=await uiConfirm({
+      title:'⚠ 請假次數提醒',
+      html:`<div style="font-size:13.5px;line-height:1.7">
+        <div style="margin-bottom:8px">以下學生標記後會達到 <b>${esc(p.label)}</b> 的多收費門檻（${t} 次）：</div>
+        ${lines}
+        <div style="margin-top:10px;color:var(--tx2);font-size:12.5px">記得跟家長確認收費。仍要標記請按下面的按鈕。</div>
+      </div>`,
+      ok:'仍要標記'});
+    if(!ok)return;
+  }
   const newTitle=res.title;
   // Close panels
   const panel=document.getElementById('absp-'+id);if(panel)panel.classList.remove('open');
   const panelW=document.getElementById('absp-w-'+id);if(panelW)panelW.classList.remove('open');
   sysApplyAbsence(ev,state);
+  logAbsenceAct(ev,state);
   toast('已標記：'+newTitle,'ok');
   await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
   if(selectedWeekEvent===id) closeWeekModal();
@@ -277,6 +333,8 @@ async function confirmCancel(id){
 // 取消請假：從請假紀錄移除（保留曠課群組），紀錄清空即刪整筆
 async function doCancel(id,ev,cancelStudents){
   const clearAll=(cancelStudents.length===0||ev.type==='one');
+  // 動態要記「取消了誰的請假」——名單得在改資料之前先抄下來
+  const undone=clearAll?(ev.absType==='老師請假'?['老師']:(ev.absentStudents||[])):cancelStudents;
   let list=getAbsences().slice();
   const rec=list.find(a=>a.occId===id);
   if(rec){
@@ -287,6 +345,7 @@ async function doCancel(id,ev,cancelStudents){
     if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length&&!rec.resched)list=list.filter(a=>a!==rec);
     saveAbsences(list);
   }
+  if(undone.length)logAct('absence',`取消 ${undone.join('、')} 的請假`,actEvLabel(ev),'');
   toast('已取消請假','ok');
   await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
   closeWeekModal();
@@ -349,6 +408,7 @@ async function confirmCancelNoShow(id){
 
 // 取消曠課：從曠課群組移除（保留請假群組），紀錄清空即刪整筆
 async function doCancelNoShow(id,ev,cancelStudents){
+  const undone=cancelStudents.length?cancelStudents:(ev.noShowStudents||[]);   // 同 doCancel：改資料前先抄名單
   let list=getAbsences().slice();
   const rec=list.find(a=>a.occId===id);
   if(rec){
@@ -357,6 +417,7 @@ async function doCancelNoShow(id,ev,cancelStudents){
     if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length&&!rec.resched)list=list.filter(a=>a!==rec);
     saveAbsences(list);
   }
+  if(undone.length)logAct('absence',`取消 ${undone.join('、')} 的曠課`,actEvLabel(ev),'');
   toast('已取消曠課','ok');
   await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
   closeWeekModal();

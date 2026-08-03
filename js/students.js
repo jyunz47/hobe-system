@@ -144,6 +144,7 @@ function asSubmit(){
   if(sameName.length&&!st.dupAck){renderAddStudentForm();return toast('有同名學生，請先勾「確認是另一位新學生」','inf');}
   const stu=makeNewStudent({name,grade:st.grade,school:st.school.trim(),parentPhone:st.parentPhone.trim(),sourceChannel:st.sourceChannel.trim(),note:st.note.trim()});
   saveStudentList([...list,stu]);
+  logAct('student','新增學生',`${name}（${st.grade}）`,[st.school.trim(),st.sourceChannel.trim()&&`來源：${st.sourceChannel.trim()}`].filter(Boolean).join(' · '));
   toast(`已新增 ${name}（${st.grade}）`,'ok');
   asState=asBlank();
   renderAddStudentForm();  // 清空重填，連續輸入下一筆
@@ -152,7 +153,7 @@ function asSubmit(){
 }
 
 // ── 統計與警示 ──
-function getThreshold(pid){return(pid==='sem1'||pid==='sem2')?3:2;}
+// getThreshold（多收費門檻）已搬到 state.js 的學期 helpers（請假面板也要用）
 
 function getStudentStats(studentId,periodId){
   // 2026-06-01 改 by id：先用 id 找到學生，內部仍用 name 比對 Calendar 備註
@@ -420,9 +421,10 @@ function renderStuAddCourse(sid){
   const st=_stuAC;
   const co=st.courseId!=null?findCourseById(st.courseId):null;
   // 選項附類型／老師／時段：平行分班課名可能相同（三班都叫國二數學班），靠這行分辨
+  // 類型取今天生效的（滾動判型），跟課程卡與課堂看到的一致
   const opts=avail.map(c=>{
     const slot=sysSlotLabel(c);
-    return`<option value="${c.id}" ${st.courseId===c.id?'selected':''}>${esc(courseNameOn(c,new Date()))}（${c.type}・${esc(teacherNameById(c.teacherId)||'未指定')}${slot?'・'+esc(slot):''}）</option>`;
+    return`<option value="${c.id}" ${st.courseId===c.id?'selected':''}>${esc(courseNameOn(c,new Date()))}（${courseTypeOn(c,new Date())}・${esc(teacherNameById(c.teacherId)||'未指定')}${slot?'・'+esc(slot):''}）</option>`;
   }).join('');
   let extra='';
   if(co){
@@ -482,6 +484,7 @@ function stuAcSubmit(sid){
     price,practiceSubject:co.type==='練習課'?_stuAC.subjects.join('、'):'',
   }));
   saveEnrollments(list);
+  logAct('roster',`把 ${studentName(sid)} 加進課程`,courseNameOn(co,new Date()),'從學生視窗加入');
   toast(`已加入 ${studentName(sid)}：${courseNameOn(co,new Date())}`,'ok');
   renderSettings();        // 課程總覽人數／名單跟著更新
   refreshCourseModal();
@@ -804,8 +807,10 @@ function confirmDeleteStudent(){
   if(!s)return;
   const typed=document.getElementById('delete-modal-confirm').value.trim();
   if(typed!==s.name)return toast(`請輸入「${s.name}」以確認刪除`,'err');
+  const enrollCount=getEnrollments().filter(e=>e.studentId===s.id).length;
   saveStudentList(getStudentList().filter(x=>x.id!==s.id));
   saveEnrollments(getEnrollments().filter(e=>e.studentId!==s.id));
+  logAct('student','徹底刪除學生',`${s.name}（${s.grade}）`,`連同 ${enrollCount} 筆修課登記，不可復原`);
   closeDeleteModal();
   stuEditId=null;_editEnrollments=[];
   renderStudents();

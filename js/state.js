@@ -34,7 +34,12 @@ function getPeriods(){
     {id:'summer',label:'暑假',start:new Date(y+1,6,1),end:new Date(y+1,7,31,23,59,59)},
   ];
 }
-function detectPeriodId(){const now=new Date();return(getPeriods().find(p=>now>=p.start&&now<=p.end)||getPeriods()[0]).id;}
+// 某個日期落在哪一期別。給「這堂課屬於哪一期」用（別拿學生頁上面選的分頁當答案）
+function periodOfDate(d){return getPeriods().find(p=>d>=p.start&&d<=p.end)||null;}
+// 多收費門檻：同一門課請假幾次要警示。寒暑假只有 1~2 個月，門檻比學期低一次
+// （學生卡片的「⚠ 多收費」標籤與請假面板的次數提醒共用這一個數字）
+function getThreshold(pid){return(pid==='sem1'||pid==='sem2')?3:2;}
+function detectPeriodId(){return(periodOfDate(new Date())||getPeriods()[0]).id;}
 var currentPeriodId=detectPeriodId();
 function switchPeriod(id){currentPeriodId=id;renderMakeup();renderStudents();}
 function periodTabsHtml(){return`<div class="period-tabs">${getPeriods().map(p=>`<button class="period-tab${p.id===currentPeriodId?' active':''}" onclick="switchPeriod('${p.id}')">${p.label}</button>`).join('')}</div>`;}

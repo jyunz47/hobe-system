@@ -14,9 +14,35 @@ function getAbsences(){return driveData.absences||[];}
 function saveAbsences(list){driveData.absences=list;scheduleDriveSave();}
 function findAbsenceByOcc(occId){return getAbsences().find(a=>a.occId===occId);}
 
+// ── 滾動判型（2026-08-03）──
+// 課型不是課程本體的固定標籤，而是「那一堂實際幾個人」：1 人一對一、2 人一對二、3+ 團班。
+// 期中有人退出／插班，課型跟著那天的在籍人數自己降級或升級，補課時長與
+// 「課前 1hr 內請假要不要算半堂」才會照實況走（見 makeup.js getEffectiveDur / needsMakeupDecision）。
+// 三種不滾：練習課、試聽（本來就有自己的規則）、手動鎖定的課（typePinned，編輯課程點類型 chip）。
+// 那天沒人在籍（人數 0）→ 退回課程本體的型，免得空堂顯示成「一對一」。
+// ⚠ 老師費率單位刻意**不滾**（courses.js cfRateUnit 一律吃 co.type）：費率是開課時談好的合約，
+//   團班的「元／人／堂」不該因為這個月少來一個人就變成「元／小時」。
+function courseTypeByCount(co,n){
+  if(!co)return'團班';
+  if(co.type==='練習課'||co.type==='試聽')return co.type;
+  if(co.typePinned)return co.type||'團班';
+  if(!n)return co.type||'團班';
+  return n===1?'一對一':n===2?'一對二':'團班';
+}
+// 某天在籍人數（登記簿依修課起訖裁切）
+function courseRosterCountOn(co,day){
+  if(!co)return 0;
+  const d=typeof day==='string'?day:toDateStr(day||new Date());
+  return getEnrollments({periodId:yearPeriodId()})
+    .filter(en=>en.courseId===co.id&&enrollmentActiveOn(en,d)).length;
+}
+// 某天的課型（中文）。展開器手上已有人數走 courseTypeByCount，這支給沒人數在手的地方用
+function courseTypeOn(co,day){return courseTypeByCount(co,courseRosterCountOn(co,day));}
+
 // 系統課類型（中文）→ 內部 type code（parseEv 慣例 one/pair/group/practice；CSS 與 typeLbl 都吃它）
+// count 已由 rosterOn 依課堂日期裁切，所以這裡拿到的就是「這一堂」的人數
 function _occType(course,count){
-  switch(course.type){
+  switch(courseTypeByCount(course,count)){
     case '一對一':return'one';
     case '一對二':return'pair';
     case '團班':return'group';

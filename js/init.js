@@ -115,6 +115,8 @@ function setLoginErr(msg){
 function signOut(){
   dayEvents=[];weekEvents=[];makeupList=[];
   driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[],courses:[],teachers:[],absences:[]};
+  unwatchActivity();   // 先斷監聽再登出，免得換帳號還聽著舊連線
+  actEvents=[];actTodos=[];actLoaded=false;actHasNew=false;actPruned=false;updateActivityBadge();
   firebase.auth().signOut();
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='none');
   setUSt('','未登入','請輸入帳號密碼登入');
@@ -129,6 +131,7 @@ async function onSignedIn(){
   if(u?.email)localStorage.setItem('ghint',u.email);
   await loadFromFirestore();
   showPanel('courses');
+  watchActivity();  // 掛上動態／待辦的即時監聽：側欄待辦數一登入就對，之後同事寫什麼自己浮出來
   await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
   updateWeekTitle();
   if(isDayApp()){showPanel('dayview');renderDayView();} // 桌面視窗：登入後直達日檢視（dayEvents 已由 loadToday 備妥）
@@ -189,6 +192,9 @@ function switchPanel(id){
   if(id==='courses')Promise.all([loadToday(),loadWeek()]);
   if(id==='dayview')loadToday(); // 共用 dayEvents；載完 loadToday 尾端會 renderDayView
   if(id==='makeup')loadMakeup();
+  // 動態／待辦靠 onSnapshot 一直是最新的，切進來只要畫＋把「有新動態」的圓點收掉；
+  // 監聽沒掛上（斷線／權限）才退回一次性讀取
+  if(id==='activity'){actMarkSeen();renderActivity();if(!actUnsub)watchActivity();}
   if(id==='students')renderStudents();
   if(id==='teachers')renderTeacherAdmin();
   if(id==='add')initAddPage();
@@ -197,14 +203,14 @@ function switchPanel(id){
 
 function showPanel(id){
   currentPanel=id;
-  ['courses','dayview','makeup','students','teachers','add','settings','login'].forEach(p=>{
+  ['courses','dayview','makeup','students','teachers','add','settings','activity','login'].forEach(p=>{
     const el=document.getElementById('panel-'+p);
     if(p==='login')el.classList.toggle('active',p===id);
     else el.style.display=p===id?'block':'none';
   });
   document.querySelectorAll('.ni').forEach(el=>el.classList.remove('active'));
   const nav=document.getElementById('nav-'+id);if(nav)nav.classList.add('active');
-  const meta={courses:['課程','今日與本週課程'],dayview:['設定','單日課表檢視'],makeup:['待補課/調課清單','找出需要安排補課或調課的課程'],students:['學生管理','請假、補課、欠課紀錄'],teachers:['老師管理','老師名單：改名、在職/離職、刪除'],add:['新增課程/學生','建檔工作站：直接輸入、送出即清空可連續建檔'],settings:['課程管理','系統課程總覽：類型、老師、單價、需登記成績']};
+  const meta={courses:['課程','今日與本週課程'],dayview:['設定','單日課表檢視'],makeup:['待補課/調課清單','找出需要安排補課或調課的課程'],students:['學生管理','請假、補課、欠課紀錄'],teachers:['老師管理','老師名單：改名、在職/離職、刪除'],add:['新增課程/學生','建檔工作站：直接輸入、送出即清空可連續建檔'],settings:['課程管理','系統課程總覽：類型、老師、單價、需登記成績'],activity:['動態與待辦','系統發生了什麼事＋全員共用的待辦清單']};
   const[t,s]=meta[id]||['',''];
   document.getElementById('tbt').textContent=t;
   document.getElementById('tbs').textContent=s;
@@ -219,6 +225,7 @@ async function refreshCurrent(){
     if(currentPanel==='courses')await Promise.all([loadToday(),loadWeek()]);
     else if(currentPanel==='makeup'){await loadMakeup(true);populateMkFilters();renderMakeup();}
     else if(currentPanel==='students')renderStudents();
+    else if(currentPanel==='activity'){if(!actUnsub)await loadActivity();renderActivity();}   // 有監聽就已經是最新的
     hideL();toast('已更新','ok');
   }catch(e){
     hideL();toast('更新失敗：'+(e?.message||e),'err');

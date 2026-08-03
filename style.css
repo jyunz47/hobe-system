@@ -1140,3 +1140,68 @@ body:has(#panel-login.active) .content{padding:0}
 .wcell-nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wcell-more{font-size:10px;color:var(--tx3)}
 .wcell-empty{font-size:11px;color:var(--tx3)}
+
+/* ===== 動態與待辦（js/activity.js）===== */
+#act-wrap{display:flex;flex-direction:column;gap:18px}
+
+/* 待辦：新增列 */
+.act-add{display:flex;gap:8px;margin-bottom:6px}
+.act-add-inp{flex:1;padding:9px 12px;border:1px solid var(--brd);border-radius:var(--rs);background:var(--sf);color:var(--tx);font-family:'Noto Sans TC',sans-serif;font-size:13.5px;outline:none}
+.act-add-inp:focus{border-color:var(--ac)}
+.act-add-hint{font-size:11.5px;color:var(--tx3);margin:0 0 14px}
+
+/* 待辦：一列 */
+.act-todos{display:flex;flex-direction:column;gap:8px}
+.act-todos-done{margin-top:8px;opacity:.72}
+.act-todo{display:flex;align-items:flex-start;gap:11px;padding:11px 13px;border:1px solid var(--br);border-radius:var(--rs);background:var(--sf3);transition:border-color .12s}
+.act-todo:hover{border-color:var(--brs)}
+.act-todo.done{background:var(--sf2)}
+.act-todo.done .act-todo-text{text-decoration:line-through;color:var(--tx3)}
+.act-check{flex-shrink:0;width:19px;height:19px;margin-top:1px;border:1.5px solid var(--brs);border-radius:6px;background:var(--sf);cursor:pointer;font-size:12px;line-height:1;color:transparent;transition:all .12s}
+.act-check:hover{border-color:var(--ac)}
+.act-check.on{background:var(--ac);border-color:var(--ac);color:#fff}
+.act-todo-body{flex:1;min-width:0}
+.act-todo-text{font-size:13.5px;color:var(--tx);line-height:1.55;word-break:break-word}
+.act-todo-meta{font-size:11.5px;color:var(--tx3);margin-top:3px}
+.act-todo-act{display:flex;align-items:center;gap:6px;flex-shrink:0}
+.act-claim{padding:4px 11px;border:1px solid var(--brd);border-radius:99px;background:var(--sf);color:var(--tx2);font-family:'Noto Sans TC',sans-serif;font-size:11.5px;cursor:pointer;white-space:nowrap;transition:all .12s}
+.act-claim:hover{border-color:var(--ac);color:var(--ac)}
+.act-claim.mine{background:var(--al);border-color:var(--ac);color:var(--am);font-weight:500}
+.act-claim.taken{background:var(--il);border-color:var(--in);color:var(--in)}
+.act-del{width:24px;height:24px;border:none;border-radius:6px;background:transparent;color:var(--tx3);cursor:pointer;font-size:13px;line-height:1;transition:all .12s}
+.act-del:hover{background:var(--dl);color:var(--dg)}
+.act-done-toggle{margin-top:12px;padding:4px 0;border:none;background:none;color:var(--tx2);font-family:'Noto Sans TC',sans-serif;font-size:12.5px;cursor:pointer}
+.act-done-toggle:hover{color:var(--tx)}
+
+/* 側欄「有新動態」小圓點：不在動態頁時同事做了事就亮，切進去就收
+   （跟旁邊那顆待辦數量圓標是兩件事：圓標＝還沒做完幾件，圓點＝有沒有沒看過的動態）*/
+.ni.has-new .ni-txt::after{content:"";display:inline-block;width:6px;height:6px;margin-left:6px;border-radius:50%;background:#D38A5D;vertical-align:middle}
+.ni.has-new.active .ni-txt::after{background:#2A1A0E}
+
+/* 動態：分類 chips */
+.act-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
+.act-chip{padding:4px 12px;border:1px solid var(--brd);border-radius:99px;background:var(--sf);color:var(--tx2);font-family:'Noto Sans TC',sans-serif;font-size:12px;cursor:pointer;transition:all .12s}
+.act-chip:hover{border-color:var(--brs);color:var(--tx)}
+.act-chip.on{background:var(--ac);border-color:var(--ac);color:#fff;font-weight:500}
+
+/* 動態：時間軸 */
+.act-feed{display:flex;flex-direction:column}
+.act-day{font-size:11.5px;font-weight:600;color:var(--tx3);letter-spacing:.02em;padding:14px 0 7px;border-bottom:1px solid var(--br);margin-bottom:4px}
+.act-feed .act-day:first-child{padding-top:0}
+.act-row{display:flex;align-items:flex-start;gap:10px;padding:8px 2px}
+.act-dot{flex-shrink:0;width:7px;height:7px;margin-top:7px;border-radius:50%;background:var(--tx3)}
+.act-row.k-absence .act-dot{background:var(--dg)}
+.act-row.k-makeup .act-dot{background:var(--wn)}
+.act-row.k-roster .act-dot{background:var(--ac)}
+.act-row.k-course .act-dot{background:var(--in)}
+.act-row-body{flex:1;min-width:0}
+.act-row-line{font-size:13.5px;color:var(--tx);line-height:1.55}
+.act-row-sub{font-size:12px;color:var(--tx2);margin-top:2px;line-height:1.5;word-break:break-word}
+.act-row-detail{color:var(--tx3)}
+.act-row-time{flex-shrink:0;font-family:'DM Mono',monospace;font-size:11.5px;color:var(--tx3);margin-top:2px}
+.act-empty{font-size:12.5px;color:var(--tx3);line-height:1.7;padding:10px 0}
+
+@media(max-width:640px){
+  .act-todo-act{flex-direction:column;align-items:flex-end;gap:3px}
+  .act-row-time{display:none}
+}

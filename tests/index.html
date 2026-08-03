@@ -19,12 +19,16 @@
 </head>
 <body>
 
-<h1>單元測試（enrollment.js + schedule.js）</h1>
-<div class="hint">改 <code>js/enrollment.js</code> 或 <code>js/schedule.js</code> 後，重新整理本頁即可看到所有測試結果。失敗的會用紅底顯示預期與實際差異。</div>
+<h1>單元測試（enrollment.js + schedule.js + absence.js）</h1>
+<div class="hint">改 <code>js/enrollment.js</code>、<code>js/schedule.js</code> 或 <code>js/absence.js</code> 後，重新整理本頁即可看到所有測試結果。失敗的會用紅底顯示預期與實際差異。</div>
 
 <div id="results"></div>
 
-<!-- 0. enrollment.js 依賴的全域 stub（測試固定在 2025 學年下學期） -->
+<!-- 0a. 學期／門檻 helpers 的真身（absence.js 的次數提醒要用 getPeriods/periodOfDate/getThreshold）。
+     必須排在 stub 前面：下面那塊的 var driveData = {...} 會把這裡的初值蓋掉，順序反了就沒 stub 資料。 -->
+<script src="../js/state.js"></script>
+
+<!-- 0b. enrollment.js 依賴的全域 stub（測試固定在 2025 學年下學期） -->
 <script>
 var driveData = { studentList: [], makeupScheduled: [], enrollments: [], coursePrices: [] };
 var currentPeriodId = 'sem2';
@@ -40,13 +44,21 @@ function findCourseById(id) { return getCourses().find(c => c.id === id); }
 // dayview.js 拖曳寫入時會用到的其他全域（真身在 courses.js / makeup.js / init.js，
 // 那幾支綁 DOM 太深，這裡只補會被呼叫到的部分）
 var currentDate = new Date();
-var WD = ['日', '一', '二', '三', '四', '五', '六'];   // 真身在 state.js（不整支載入，那裡會覆蓋掉 driveData stub）
+var WD = ['日', '一', '二', '三', '四', '五', '六'];   // 真身在 state.js（上面已載入，這裡重寫一次無妨）
 var makeupMatchMap = new Map();
 var _mkCalls = [];              // 記錄 saveMakeupScheduled 被怎麼呼叫，供斷言
 function saveCourses(list) { driveData.courses = list; _saveCount++; }
+// courses.js 之後會用真身蓋掉 courseNameOn / courseTeacherNames / getCourses / findCourseById
+// （滾動命名要測真的），這兩支是它們的下游，courses.js 沒有、留在這裡
+function studentName(id) { const s = getStudentList().find(x => x.id === id); return s ? s.name : '(已刪除)'; }
+function teacherNameById() { return '王老師'; }
 function courseNameOn(co) { return co.name; }
 function courseTeacherNames() { return ['王老師']; }
 function isSignedIn() { return true; }
+// 動態紀錄（真身在 activity.js，要 Firebase 才跑得動）：這裡收起來就好，測的是資料寫入不是記錄
+var _actCalls = [];
+function logAct(kind, text, target, detail) { _actCalls.push({ kind, text, target, detail }); }
+function actEvLabel(ev) { return ev && ev.origTitle || ''; }
 function getMakeupScheduledLS() { return driveData.makeupScheduled || []; }
 function saveMakeupScheduled(ev, sS, sE, room, calEventId, calName) {
   _mkCalls.push({ id: ev.id, students: ev.absentStudents, start: sS, end: sE, room, calName });
@@ -63,6 +75,8 @@ function saveMakeupScheduled(ev, sS, sE, room, calEventId, calName) {
 <script src="../js/enrollment.js"></script>
 <script src="../js/schedule.js"></script>
 <script src="../js/dayview.js"></script>
+<script src="../js/courses.js"></script>
+<script src="../js/absence.js"></script>
 
 <!-- 2. 測試框架（會註冊 DOM 載入後自動跑） -->
 <script src="test-runner.js"></script>
@@ -70,6 +84,8 @@ function saveMakeupScheduled(ev, sS, sE, room, calEventId, calName) {
 <!-- 3. 各個測試檔（每個檔註冊自己的 suite） -->
 <script src="enrollment.test.js"></script>
 <script src="dayview-move.test.js"></script>
+<script src="course-type.test.js"></script>
+<script src="leave-threshold.test.js"></script>
 
 </body>
 </html>
