@@ -76,7 +76,7 @@ function courseOccurrencesInRange(course,start,end){
     const groupMap=new Map();
     act.forEach(en=>{
       const nm=byId.get(en.studentId)?.name;if(!nm)return;
-      const subj=(en.practiceSubject||'').trim()||'（未填科目）';
+      const subj=pracSubjLabel(en.practiceSubject)||'（未填科目）'; // 數學＋理化 → 併成「數理」一組
       if(!groupMap.has(subj))groupMap.set(subj,[]);
       groupMap.get(subj).push(nm);
     });

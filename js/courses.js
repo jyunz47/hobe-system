@@ -106,17 +106,39 @@ function openCourseForm(courseId){
   renderCourseForm();
   document.getElementById('cf-modal-wrap').classList.add('open');
 }
-function closeCourseForm(){document.getElementById('cf-modal-wrap').classList.remove('open');cfState=null;}
+function closeCourseForm(){
+  document.getElementById('cf-modal-wrap').classList.remove('open');
+  cfState=null;
+  if(typeof _sysDateEdit!=='undefined')_sysDateEdit=null; // 未存的修課起訖編輯狀態一併丟棄
+}
+function courseFormOpen(){const w=document.getElementById('cf-modal-wrap');return !!cfState&&!!w&&w.classList.contains('open');}
+
+// ── 表單裡的名單（2026-07-31：編輯課程也能加退學生）──
+// 新增模式＝表單暫存的初始名單（送出時才寫 enrollments）；
+// 編輯模式＝直接讀寫本期登記簿，跟課程視窗同一份資料、即時生效（所以不會「兩處打架」）。
+function cfCourseEnrolls(){
+  const id=cfState?cfState.editId:null;
+  return id==null?[]:getEnrollments({periodId:yearPeriodId()}).filter(en=>en.courseId===id);
+}
+function cfRosterIds(){return cfState.editId!=null?cfCourseEnrolls().map(en=>en.studentId):cfState.students;}
+function cfRosterPrac(){
+  if(cfState.editId==null)return cfState.practiceSubjects;
+  const m={};cfCourseEnrolls().forEach(en=>{m[en.studentId]=en.practiceSubject||'';});
+  return m;
+}
+function cfTakenIds(){return new Set(cfRosterIds());}
 
 // ── 自動判型 ──
-// 規則：鎖定優先 → 科目「練習」＝練習課 → 指定日期＋1 人＝試聽 → 1 人一對一、2 人一對二、其餘團班
+// 規則：鎖定優先 → 科目「練習」＝練習課 → 1 人一對一、2 人一對二、其餘團班
+// 2026-07-31：拿掉「指定日期＋1 人＝試聽」——指定日期只是排課方式（單場加課、寒暑期單堂都是），
+// 不代表試聽；試聽改成點類型 chip 手動鎖定。
 function cfType(){
   const st=cfState;
   if(st.pinnedType)return st.pinnedType;
   if(st.subject.trim()==='練習')return'練習課';
-  if(st.mode==='dates'&&st.students.length===1)return'試聽';
-  if(st.students.length===1)return'一對一';
-  if(st.students.length===2)return'一對二';
+  const n=cfRosterIds().length;   // 編輯模式＝登記簿在籍人數；新增＝表單初始名單
+  if(n===1)return'一對一';
+  if(n===2)return'一對二';
   return'團班';
 }
 
@@ -142,13 +164,14 @@ function _anPracticeName(ids,prac,weekdayLabel){
   if(!ids.length)return(weekdayLabel||'')+'練習課';
   const names=ids.map(id=>studentName(id));
   const subjSet=new Set();ids.forEach(id=>_anSubjList(prac,id).forEach(s=>subjSet.add(s)));
-  const subjStr=[...subjSet].join('、');
+  const cats=pracSubjCats([...subjSet]);   // 數學＋理化＝一類「數理」
+  const subjStr=cats.join('、');
   if(ids.length===1)return names[0]+subjStr+'練習課';
   // 跨年級：課名列出各年級（低→高，照 GRADES 順序）
   const gradeSet=new Set(ids.map(id=>getStudentList().find(s=>s.id===id)?.grade).filter(Boolean));
   if(gradeSet.size>=2)return [...gradeSet].sort((a,b)=>GRADES.indexOf(a)-GRADES.indexOf(b)).join('、')+'練習課';
   const head=ids.length<=2?names.join('、'):_anTopGrade(ids);
-  if(subjSet.size===1)return head+subjStr+'練習課';   // 全班同一科
+  if(cats.length===1)return head+subjStr+'練習課';    // 全班同一類（數理算一類）
   return head+'練習課';                                  // 科目不同，不掛科目
 }
 function courseAutoNameFor({type,studentIds,subject,prac,weekdayLabel}){
@@ -165,7 +188,7 @@ function courseAutoNameFor({type,studentIds,subject,prac,weekdayLabel}){
 function cfAutoName(){
   const st=cfState;
   return courseAutoNameFor({
-    type:cfType(),studentIds:st.students,subject:st.subject,prac:st.practiceSubjects,
+    type:cfType(),studentIds:cfRosterIds(),subject:st.subject,prac:cfRosterPrac(),
     weekdayLabel:st.mode==='weekly'&&st.slots.length?(CF_WD_LABEL[st.slots[0].weekday]||''):'',
   });
 }
@@ -178,7 +201,8 @@ function cfStuInput(v){cfState.stuInput=v;}
 function cfResolveStudent(){
   const st=cfState,q=(st.stuInput||'').trim();
   if(!q)return;
-  const matches=getStudentList({activeOnly:true}).filter(s=>s.name===q&&!st.students.includes(s.id));
+  const taken=cfTakenIds();
+  const matches=getStudentList({activeOnly:true}).filter(s=>s.name===q&&!taken.has(s.id));
   if(matches.length===1)return cfPickStudent(matches[0].id);
   if(matches.length>1){st.stuMatches=matches.map(s=>s.id);st.pendingStu=null;return renderCourseForm();}
   // 系統查無此人 → 開現場建檔小表單（名字帶入）
@@ -187,12 +211,35 @@ function cfResolveStudent(){
   renderCourseForm();
 }
 function cfPickStudent(sid){
-  cfState.students.push(sid);
-  cfState.stuInput='';cfState.stuMatches=null;cfState.pendingStu=null;
+  const st=cfState;
+  st.stuInput='';st.stuMatches=null;st.pendingStu=null;
+  if(st.editId!=null)return cfEnrollNow(sid);   // 編輯既有課：直接寫登記簿，不等「儲存變更」
+  st.students.push(sid);
   cfAfterTypeAffecting();
+}
+// 編輯模式加入學生＝寫一筆 enrollment（與課程視窗的 ＋加入 同一筆資料、同一套規則）
+function cfEnrollNow(sid){
+  const co=findCourseById(cfState.editId);
+  if(!co)return;
+  const title=courseNameOn(co,new Date());
+  saveEnrollments([...getEnrollments(),makeEnrollment({
+    studentId:sid,courseTitle:title,periodId:yearPeriodId(),courseId:co.id,
+  })]);
+  toast(`已加入 ${studentName(sid)}：${title}`,'ok');
+  renderSettings();
+  refreshCourseModal();   // 連帶重繪本表單（見 settings.js refreshCourseModal）
 }
 function cfCancelStuAdd(){cfState.stuMatches=null;cfState.pendingStu=null;renderCourseForm();}
 function cfPendingSet(f,v){cfState.pendingStu[f]=v;}
+// 現場建檔小表單的「姓名」＝這個名字的唯一真相：改它，上面的輸入框與標題一起跟著改，
+// 免得三個地方各寫各的（改了下面按上面的「＋ 加入」會拿到舊名字）。
+// 直接改 DOM 不重繪——重繪會把正在打字的游標踢掉。
+function cfPendingName(v){
+  cfState.pendingStu.name=v;
+  cfState.stuInput=v;
+  const top=document.getElementById('cf-stu-input');if(top)top.value=v;
+  const lbl=document.getElementById('cf-resolve-lbl');if(lbl)lbl.textContent=`「${v}」不在系統 → 現場建檔並加入`;
+}
 function cfPendingSeg(v){cfState.pendingStu.gradeSeg=v;if(!(GRADE_SEG_YEARS[v]||[]).length)cfState.pendingStu.grade=gradeCompose(v);else if(gradeDecompose(cfState.pendingStu.grade).seg!==v)cfState.pendingStu.grade='';renderCourseForm();}
 function cfPendingYear(yr){cfState.pendingStu.grade=gradeCompose(cfState.pendingStu.gradeSeg,yr);}
 // 現場建檔：走 makeNewStudent（與新增學生頁同一入口，欄位一致、資料不出入）→ 建好即加入本課
@@ -310,17 +357,47 @@ function renderCourseForm(){
   if(!onPage)document.getElementById('cf-modal-title').textContent=edit?'✎ 編輯課程':'＋ 新增課程';
   const noFee=(t==='練習課'||t==='試聽');
 
-  // 學生：建立時＝初始名單；編輯模式名單改在課程視窗加退（同一筆 enrollment，避免兩處打架）
+  // 名單：新增＝表單初始名單（送出時才寫登記簿）；編輯＝直接加退登記簿，即時生效（與課程視窗同一份）
+  const taken=cfTakenIds();
+  // 自動完成清單：還沒在名單上的在學學生（value＝姓名，選項文字附年級）
+  const dlOpts=getStudentList({activeOnly:true})
+    .filter(s=>!taken.has(s.id))
+    .sort((a,b)=>(a.name||'').localeCompare(b.name||'','zh-Hant'))
+    .map(s=>`<option value="${esc(s.name)}">${esc(s.name)}（${esc(s.grade||'')}）</option>`).join('');
+  // 同名多筆 → 選是哪一位；查無此人 → 現場建檔（兩種模式共用）
+  let extra='';
+  if(st.stuMatches){
+    extra=`<div class="cf-resolve"><div class="cf-resolve-lbl">系統有多位「${esc(st.stuInput)}」，是哪一位？</div>
+      ${st.stuMatches.map(id=>{const s=getStudentList().find(x=>x.id===id);return`<button class="btn btns" onclick="cfPickStudent(${id})">${esc(s.name)}（${esc(s.grade||'?')}・${esc(s.school||'學校未填')}）</button>`;}).join('')}
+      <button class="btn btns" onclick="cfState.pendingStu={name:cfState.stuInput,gradeSeg:'',grade:'',school:'',parentPhone:''};cfState.stuMatches=null;renderCourseForm()">都不是，建新檔</button>
+      <button class="btn btns" onclick="cfCancelStuAdd()">取消</button></div>`;
+  }else if(st.pendingStu){
+    const p=st.pendingStu;
+    extra=`<div class="cf-resolve"><div class="cf-resolve-lbl" id="cf-resolve-lbl">「${esc(p.name)}」不在系統 → 現場建檔並加入</div>
+      <div class="as-grid">
+        <div class="cm-sec"><div class="cm-lbl">姓名</div><input class="cm-input" name="search-newstu" autocomplete="off" value="${esc(p.name)}" oninput="cfPendingName(this.value)"></div>
+        <div class="cm-sec"><div class="cm-lbl">年級（必選）</div>${gradePickerHtml(p.gradeSeg,gradeDecompose(p.grade).yr,"cfPendingSeg(this.value)","cfPendingYear(this.value)")}</div>
+        <div class="cm-sec"><div class="cm-lbl">學校</div><input class="cm-input" name="search-school" autocomplete="off" value="${esc(p.school)}" oninput="cfPendingSet('school',this.value)"></div>
+        <div class="cm-sec"><div class="cm-lbl">家長聯絡方式</div><input class="cm-input" name="search-contact" autocomplete="off" value="${esc(p.parentPhone)}" oninput="cfPendingSet('parentPhone',this.value)"></div>
+      </div>
+      <div class="cf-foot"><span style="flex:1"></span><button class="btn btns" onclick="cfCancelStuAdd()">取消</button><button class="btn btns btnp" onclick="cfCreatePendingStudent()">建檔並加入</button></div></div>`;
+  }
+  const addBox=`<div class="co-add">
+      <input class="co-add-sel" id="cf-stu-input" name="search-student" autocomplete="off" list="cf-students-dl" placeholder="輸入學生姓名…" value="${esc(st.stuInput||'')}" oninput="cfStuInput(this.value)" onkeydown="if(enterSubmit(event)){cfResolveStudent()}">
+      <datalist id="cf-students-dl">${dlOpts}</datalist>
+      <button class="co-add-btn" onclick="cfResolveStudent()">＋ 加入</button>
+    </div>
+    ${extra}`;
+
   let stuSec;
   if(edit){
-    stuSec=`<div class="cm-sec"><div class="cm-lbl">名單</div><div class="cm-hint">名單加退、修課起訖（📅 插班／中途退出）在課程總覽點這門課的視窗裡操作，這裡只改課程本身。</div></div>`;
+    // 編輯既有課：名單就是登記簿本身（chips／📅 起訖／✕ 退課與課程視窗共用同一份 HTML）
+    const co=findCourseById(st.editId),ens=cfCourseEnrolls();
+    stuSec=`<div class="cm-sec"><div class="cm-lbl">名單${t==='練習課'?'（可加退、改科目）':''}<span class="cm-count">${ens.length}</span></div>
+      ${co?sysRosterHtml(co,ens):''}
+      ${addBox}
+      <div class="cm-hint">名單這裡改當下就生效，不用按「儲存變更」。📅＝修課起訖（插班／中途退出）、✕＝整筆退課。</div></div>`;
   }else{
-    const chosen=new Set(st.students);
-    // 自動完成清單：未選的在學學生（value＝姓名，選項文字附年級）
-    const dlOpts=getStudentList({activeOnly:true})
-      .filter(s=>!chosen.has(s.id))
-      .sort((a,b)=>(a.name||'').localeCompare(b.name||'','zh-Hant'))
-      .map(s=>`<option value="${esc(s.name)}">${esc(s.name)}（${esc(s.grade||'')}）</option>`).join('');
     let chips;
     if(t==='練習課'){
       // 練習課：每位學生一列，科目用可點選標籤（多選）＋自訂
@@ -331,7 +408,7 @@ function renderCourseForm(){
         const customs=cur.filter(x=>!CF_PRAC_SUBJECTS.includes(x)).map(x=>cfSubjTogBtn(sid,x,true)).join('');
         return`<div class="cf-prac-row">
           <div class="cf-prac-hd"><b>${esc(s?s.name:'（已刪除）')}</b><span class="cf-chip-g">${esc(s?.grade||'')}</span><button class="co-stu-x" title="移除學生" onclick="cfRemoveStudent(${sid})">✕</button></div>
-          <div class="cf-subj-tags">${common}${customs}<input class="cf-subj-add" list="cf-subjects" placeholder="＋其他" onkeydown="if(event.key==='Enter'){event.preventDefault();cfAddCustomPracSubj(${sid},this.value);this.value=''}"></div>
+          <div class="cf-subj-tags">${common}${customs}<input class="cf-subj-add" list="cf-subjects" placeholder="＋其他" onkeydown="if(enterSubmit(event)){cfAddCustomPracSubj(${sid},this.value);this.value=''}"></div>
         </div>`;
       }).join('');
       chips=rows?`<div class="cf-prac-list">${rows}</div>`:'';
@@ -342,32 +419,9 @@ function renderCourseForm(){
       }).join('');
       chips=inline?`<div class="cf-chips">${inline}</div>`:'';
     }
-    // 同名多筆 → 選是哪一位；或都不是就建新檔
-    let extra='';
-    if(st.stuMatches){
-      extra=`<div class="cf-resolve"><div class="cf-resolve-lbl">系統有多位「${esc(st.stuInput)}」，是哪一位？</div>
-        ${st.stuMatches.map(id=>{const s=getStudentList().find(x=>x.id===id);return`<button class="btn btns" onclick="cfPickStudent(${id})">${esc(s.name)}（${esc(s.grade||'?')}・${esc(s.school||'學校未填')}）</button>`;}).join('')}
-        <button class="btn btns" onclick="cfState.pendingStu={name:cfState.stuInput,gradeSeg:'',grade:'',school:'',parentPhone:''};cfState.stuMatches=null;renderCourseForm()">都不是，建新檔</button>
-        <button class="btn btns" onclick="cfCancelStuAdd()">取消</button></div>`;
-    }else if(st.pendingStu){
-      const p=st.pendingStu;
-      extra=`<div class="cf-resolve"><div class="cf-resolve-lbl">「${esc(p.name)}」不在系統 → 現場建檔並加入</div>
-        <div class="as-grid">
-          <div class="cm-sec"><div class="cm-lbl">姓名</div><input class="cm-input" name="search-newstu" autocomplete="off" value="${esc(p.name)}" oninput="cfPendingSet('name',this.value)"></div>
-          <div class="cm-sec"><div class="cm-lbl">年級（必選）</div>${gradePickerHtml(p.gradeSeg,gradeDecompose(p.grade).yr,"cfPendingSeg(this.value)","cfPendingYear(this.value)")}</div>
-          <div class="cm-sec"><div class="cm-lbl">學校</div><input class="cm-input" name="search-school" autocomplete="off" value="${esc(p.school)}" oninput="cfPendingSet('school',this.value)"></div>
-          <div class="cm-sec"><div class="cm-lbl">家長聯絡方式</div><input class="cm-input" name="search-contact" autocomplete="off" value="${esc(p.parentPhone)}" oninput="cfPendingSet('parentPhone',this.value)"></div>
-        </div>
-        <div class="cf-foot"><span style="flex:1"></span><button class="btn btns" onclick="cfCancelStuAdd()">取消</button><button class="btn btns btnp" onclick="cfCreatePendingStudent()">建檔並加入</button></div></div>`;
-    }
     stuSec=`<div class="cm-sec"><div class="cm-lbl">學生（初始名單，之後隨時可加退）${t==='練習課'?'<span class="cm-hint" style="margin:0 0 0 6px">點科目可選多個</span>':''}<span class="cm-count">${st.students.length}</span></div>
       ${chips}
-      <div class="co-add">
-        <input class="co-add-sel" id="cf-stu-input" name="search-student" autocomplete="off" list="cf-students-dl" placeholder="輸入學生姓名…" value="${esc(st.stuInput||'')}" oninput="cfStuInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();cfResolveStudent()}">
-        <datalist id="cf-students-dl">${dlOpts}</datalist>
-        <button class="co-add-btn" onclick="cfResolveStudent()">＋ 加入</button>
-      </div>
-      ${extra}</div>`;
+      ${addBox}</div>`;
   }
 
   const subjMenu=CF_SUBJECTS.map(s=>`<div class="cf-combo-opt${s===st.subject?' cur':''}" onmousedown="event.preventDefault();cfSubjPick('${s}')">${esc(s)}</div>`).join('');
@@ -437,7 +491,7 @@ function renderCourseForm(){
   const teacherSec=`<div class="cm-sec"><div class="cm-lbl">老師${t==='練習課'?'（預設輔導老師，當堂可換）':''}${st.teachers.length>1?`<span class="cm-count">${st.teachers.length}</span>`:''}</div>
     ${tChips?`<div class="cf-chips">${tChips}</div>`:''}
     <div class="co-add">
-      <input class="co-add-sel" name="search-teacher" autocomplete="off" list="cf-teachers-dl" placeholder="輸入老師姓名…" value="${esc(st.teacherInput)}" oninput="cfTeacherInput(this.value)" onkeydown="if(event.key==='Enter'){event.preventDefault();cfAddTeacher()}">
+      <input class="co-add-sel" name="search-teacher" autocomplete="off" list="cf-teachers-dl" placeholder="輸入老師姓名…" value="${esc(st.teacherInput)}" oninput="cfTeacherInput(this.value)" onkeydown="if(enterSubmit(event)){cfAddTeacher()}">
       <datalist id="cf-teachers-dl">${tDl}</datalist>
       <button class="co-add-btn" onclick="cfAddTeacher()">＋ 加入</button>
     </div>
@@ -663,7 +717,7 @@ function renderTeacherAdmin(){
   }).join('');
   box.innerHTML=(rows||'<div class="co-empty">還沒有老師。在下方新增，或在新增課程表單裡順手建。</div>')+
     `<div class="co-add">
-      <input class="cm-input" id="ta-new-name" placeholder="新老師姓名…" maxlength="10" onkeydown="if(event.key==='Enter'){event.preventDefault();taAdd()}">
+      <input class="cm-input" id="ta-new-name" placeholder="新老師姓名…" maxlength="10" onkeydown="if(enterSubmit(event)){taAdd()}">
       <button class="co-add-btn" onclick="taAdd()">＋ 新增</button>
     </div>`;
 }
@@ -744,25 +798,8 @@ function toggleSysNeedsGrade(id,on){
   renderSettings();
 }
 
-// 系統課的名單加入（打字姓名 → 對既有學生；與表單初始名單、學生卡「加入課程」寫同一筆 enrollment）
-function sysAddEnroll(btn,courseId){
-  const inp=btn.parentElement.querySelector('.co-add-sel');
-  const q=(inp&&inp.value||'').trim();
-  if(!q)return;
-  const co=findCourseById(courseId);
-  if(!co)return;
-  const enrolled=new Set(getEnrollments({periodId:yearPeriodId()}).filter(en=>en.courseId===courseId).map(en=>en.studentId));
-  const matches=getStudentList({activeOnly:true}).filter(s=>s.name===q&&!enrolled.has(s.id));
-  if(!matches.length)return toast(`系統查無在學學生「${q}」（要新學生請到「新增課程/學生」頁建檔）`,'err');
-  if(matches.length>1)return toast(`有多位「${q}」，請到課程編輯或用完整辨識再加`,'inf');
-  const sid=matches[0].id;
-  const list=getEnrollments().slice();
-  list.push(makeEnrollment({studentId:sid,courseTitle:courseNameOn(co,new Date()),periodId:yearPeriodId(),courseId}));
-  saveEnrollments(list);
-  toast(`已加入 ${studentName(sid)}：${co.name}`,'ok');
-  renderSettings();
-  refreshCourseModal();
-}
+// 名單加入的入口只剩 ✎ 編輯課程（cfEnrollNow）——課程視窗那顆加入框 2026-07-31 拿掉，
+// 它只認得既有學生、建不了新檔，留著就是兩套規則。
 function sysSetPracticeSubject(enId,val){
   const list=getEnrollments().slice();
   const en=list.find(e=>e.id===enId);
@@ -904,28 +941,62 @@ function sysSlotLabel(co){
   return out;
 }
 
+// ── 名單 chips（課程視窗與 ✎ 編輯課程共用同一份）──
+// 每個 pill＝一筆 enrollment：練習課帶科目、其餘顯示單價，設過起訖的淡色並標「X/X 起退出」。
+// ro=true（課程視窗）＝純看，不給按鈕；ro=false（編輯課程）＝可改科目、📅 設起訖、✕ 整筆退課。
+// 兩處共用是刻意的：名單只有登記簿一個真相，長相一致才不會以為是兩份資料。
+function sysRosterHtml(co,ens,ro){
+  if(!ens.length)return`<div class="co-empty">還沒有學生。</div>`;
+  const isPractice=co.type==='練習課',noFee=(co.type==='練習課'||co.type==='試聽');
+  const today=toDateStr(new Date());
+  const anyWindow=ens.some(en=>en.startDate||en.endDate);
+  return`<div class="co-roster${ro?' co-roster-ro':''}">`+ens.map(en=>{
+      const p=en.price??co.defaultPrice; // 系統課預設價在課程本體，不查價目表
+      const extra=isPractice
+        ?(ro
+          ?(en.practiceSubject?`<span class="co-stu-subj">${esc(pracSubjLabel(en.practiceSubject))}</span>`:'<span class="co-undef">未填科目</span>')
+          :`<input class="cf-chip-subj" list="cf-subjects" value="${esc(en.practiceSubject||'')}" placeholder="科目（多科用、分隔）" onchange="sysSetPracticeSubject(${en.id},this.value)">`)
+        :(noFee?'':`<span class="co-stu-price">${p==null?'<span class="co-undef">未定價</span>':p}</span>`);
+      const win=sysWindowChip(en);
+      const off=!enrollmentActiveOn(en,today); // 今天不在區間內＝淡色（已退出／還沒開始）
+      const btns=ro?''
+        :`<button class="co-stu-cal" title="設定修課起訖（插班／中途退出）" onclick="sysDateEditOpen(${en.id})">📅</button>`+
+         `<button class="co-stu-x" title="退課（整筆刪除）" onclick="coRemoveEnroll(${en.id})">✕</button>`;
+      return`<span class="co-stu${off?' co-stu-off':''}">${esc(studentName(en.studentId))}${extra}${win}${btns}</span>`;
+    }).join('')+`</div>`+(ro?'':sysDateEditorHtml(ens))+
+    (anyWindow?`<div class="cm-hint">淡色＝今天不在他的修課區間內；名單人數會依課堂日期自動變（過去的堂數不受影響）。</div>`:'');
+}
+
 // ── 系統課程詳情 modal（settings.js renderCourseModal 分流過來）──
+// 2026-07-31 起這扇視窗**只給看**：一張對齊的事實表＋名單，所有更動走 ✎ 編輯課程。
+// 為什麼：同一件事有兩個入口，就會有兩套規則慢慢走鐘（加入框在這裡建不了新學生就是一例）。
 function renderSysCourseModal(ctx){
   const co=ctx.c.sys;
-  // 標題＝今天生效的課名；課名分段（namePhases）時把之後要改的名字列在下面
+  // 標題＝今天生效的課名；課名分段（namePhases）時把之後要改的名字列進事實表
   document.getElementById('course-modal-title').textContent=courseNameOn(co,new Date());
   const noFee=(co.type==='練習課'||co.type==='試聽');
   const isPractice=co.type==='練習課';
-  const meta=[co.type,'👤 '+(courseTeacherNames(co).join('、')||'未指定'),sysSlotLabel(co),co.room||''].filter(Boolean).join('　·　');
-  const nameSched=courseNamePhases(co).map(p=>`${coDateMD(p.from)} 起改叫「${p.name}」`).join('、');
-
-  const info=`<div class="cm-sec"><div class="cm-lbl">費用與薪資</div>
-    <div class="cf-info-row">每堂收費：${noFee?'不收費（不進學費結算）':(co.defaultPrice!=null?co.defaultPrice+' 元/堂':'未定價')}</div>
-    <div class="cf-info-row">老師費率：${isPractice?'打卡制（不在系統）':(co.teacherRate!=null?co.teacherRate+' '+cfRateUnit(co.type):'未定')}</div>
-    ${co.type==='試聽'&&co.sourceChannel?`<div class="cf-info-row">來源管道：${esc(co.sourceChannel)}</div>`:''}
-  </div>`;
-
   const ens=getEnrollments({periodId:yearPeriodId()}).filter(en=>en.courseId===co.id);
-  const enrolledIds=new Set(ens.map(en=>en.studentId));
-  const dlOpts=getStudentList({activeOnly:true})
-    .filter(s=>!enrolledIds.has(s.id))
-    .sort((a,b)=>(a.name||'').localeCompare(b.name||'','zh-Hant'))
-    .map(s=>`<option value="${esc(s.name)}">${esc(s.name)}（${esc(s.grade||'')}）</option>`).join('');
+  const today=toDateStr(new Date());
+  const activeN=ens.filter(en=>enrollmentActiveOn(en,today)).length;
+
+  // 事實表：一行一件事、標籤對齊，掃一眼就看完（沒填的整行不出現）
+  const fact=(k,v)=>v?`<div class="cm-fact"><span class="cm-fact-k">${k}</span><span class="cm-fact-v">${v}</span></div>`:'';
+  const nameSched=courseNamePhases(co).map(p=>`${esc(coDateMD(p.from))} 起改叫「${esc(p.name)}」`).join('<br>');
+  const facts=`<div class="cm-facts">
+    ${fact('類型',`<span class="cm-tag">${esc(co.type||'未分類')}</span>${co.needsGrade?'<span class="cm-tag">需登記成績</span>':'<span class="cm-tag cm-tag-off">只點名</span>'}`)}
+    ${fact('時段',esc(sysSlotLabel(co))||'<span class="co-undef">未排時段</span>')}
+    ${fact('老師',esc(courseTeacherNames(co).join('、'))||'<span class="co-undef">未指定</span>')}
+    ${fact('教室',esc(co.room)||'不指定')}
+    ${fact('科目',esc(co.subject))}
+    ${fact('每堂收費',noFee
+      ?`不收費<span class="cm-fact-sub">${esc(co.type)}不進學費結算</span>`
+      :(co.defaultPrice!=null?`${co.defaultPrice} 元/堂<span class="cm-fact-sub">課程預設價，個別優惠看名單上的數字</span>`:'<span class="co-undef">未定價</span>'))}
+    ${fact('老師費率',isPractice?'打卡制<span class="cm-fact-sub">不在系統內設費率</span>'
+      :(co.teacherRate!=null?`${co.teacherRate} ${esc(cfRateUnit(co.type))}`:'<span class="co-undef">未定</span>'))}
+    ${fact('來源管道',co.type==='試聽'?esc(co.sourceChannel):'')}
+    ${fact('課名變更',nameSched)}
+  </div>`;
 
   // 練習課：先按年級、再按科目分組的唯讀總覽（#7）
   let groupView='';
@@ -936,40 +1007,22 @@ function renderSysCourseModal(ctx){
     const gkeys=Object.keys(byGrade).sort((a,b)=>{const ia=gradeOrder.indexOf(a),ib=gradeOrder.indexOf(b);return(ia<0?99:ia)-(ib<0?99:ib);});
     groupView=`<div class="cm-sec"><div class="cm-lbl">名單總覽（年級 → 科目）</div>`+gkeys.map(g=>{
       const bySubj={};
-      byGrade[g].forEach(en=>{const subs=(en.practiceSubject||'').split(/[、,，]/).map(x=>x.trim()).filter(Boolean);(subs.length?subs:['（未填科目）']).forEach(s=>{(bySubj[s]=bySubj[s]||[]).push(studentName(en.studentId));});});
+      byGrade[g].forEach(en=>{const subs=pracSubjCats(en.practiceSubject);(subs.length?subs:['（未填科目）']).forEach(s=>{(bySubj[s]=bySubj[s]||[]).push(studentName(en.studentId));});});
       return`<div class="pv-grade"><div class="pv-grade-hd">${esc(g)}</div>`+Object.entries(bySubj).map(([s,ns])=>`<div class="pv-subj"><span class="pv-subj-n">${esc(s)}</span>${esc(ns.join('、'))}</div>`).join('')+`</div>`;
     }).join('')+`</div>`;
   }
 
-  const today=toDateStr(new Date());
-  const anyWindow=ens.some(en=>en.startDate||en.endDate);
-  const roster=ens.length
-    ?`<div class="co-roster">`+ens.map(en=>{
-        const p=en.price??co.defaultPrice; // 系統課預設價在課程本體，不查價目表
-        const extra=isPractice
-          ?`<input class="cf-chip-subj" list="cf-subjects" value="${esc(en.practiceSubject||'')}" placeholder="科目（多科用、分隔）" onchange="sysSetPracticeSubject(${en.id},this.value)">`
-          :(noFee?'':`<span class="co-stu-price">${p==null?'<span class="co-undef">未定價</span>':p}</span>`);
-        const win=sysWindowChip(en);
-        const off=!enrollmentActiveOn(en,today); // 今天不在區間內＝淡色（已退出／還沒開始）
-        return`<span class="co-stu${off?' co-stu-off':''}">${esc(studentName(en.studentId))}${extra}${win}`+
-          `<button class="co-stu-cal" title="設定修課起訖（插班／中途退出）" onclick="sysDateEditOpen(${en.id})">📅</button>`+
-          `<button class="co-stu-x" title="退課（整筆刪除）" onclick="coRemoveEnroll(${en.id})">✕</button></span>`;
-      }).join('')+`</div>`+sysDateEditorHtml(ens)+
-      (anyWindow?`<div class="cm-hint">📅＝修課起訖。淡色＝今天不在他的修課區間內；名單人數會依課堂日期自動變（過去的堂數不受影響）。</div>`:'')
-    :`<div class="co-empty">還沒有學生。</div>`;
-  const adder=`<div class="co-add">
-    <input class="co-add-sel" id="sys-add-stu-${co.id}" list="sys-add-dl-${co.id}" placeholder="輸入學生姓名…">
-    <datalist id="sys-add-dl-${co.id}">${dlOpts}</datalist>
-    <button class="co-add-btn" onclick="sysAddEnroll(this,${co.id})">＋ 加入</button>
-  </div>`;
+  // 名單只顯示不編輯；今天在籍人數與登記人數不同時（有人已退出／還沒開始）把兩個數字都講出來
+  const rosterSec=`<div class="cm-sec"><div class="cm-lbl">名單<span class="cm-count">${ens.length}</span>${
+      ens.length&&activeN!==ens.length?`<span class="cm-lbl-sub">今天在籍 ${activeN} 人</span>`:''
+    }</div>${sysRosterHtml(co,ens,true)}</div>`;
 
   const btns=`<div class="cf-foot">
-    <button class="btn btns" onclick="closeCourseModal();openCourseForm(${co.id})">✎ 編輯課程</button>
+    <button class="btn btns btnp" onclick="closeCourseModal();openCourseForm(${co.id})">✎ 編輯課程</button>
     <button class="btn btns cf-danger" onclick="deleteCourse(${co.id})">🗑 刪除課程</button>
   </div>`;
 
   document.getElementById('course-modal-body').innerHTML=
-    `<div class="cm-meta">${esc(meta)}</div>`+
-    (nameSched?`<div class="cm-hint">📛 ${esc(nameSched)}</div>`:'')+info+groupView+
-    `<div class="cm-sec"><div class="cm-lbl">名單${isPractice?'（可加退、改科目）':''}<span class="cm-count">${ens.length}</span></div>${roster}${adder}</div>`+btns;
+    facts+groupView+rosterSec+
+    `<div class="cm-hint">這扇視窗只顯示現況。加退學生、設修課起訖、改時段／收費／課名 → 按 ✎ 編輯課程。</div>`+btns;
 }

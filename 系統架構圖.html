@@ -130,7 +130,7 @@ const COLS = ['⚡ 你做的動作', '課表畫面跟著變', '學生・行事�
 const CARDS = [
 // ── 第 1 欄：動作 ──
 { id:'courseCard', col:0, title:'🎴 課程卡', hint:'點開任一堂課', rows:[
-  { key:'absence', act:true, label:'標記請假', effects:[
+  { key:'absence', act:true, label:'請假', effects:[
     { t:'calendar.title',      note:'標題加【○○請假】' },
     { t:'coursePage.cards',    note:'課卡出現請假標記' },
     { t:'coursePage.stats',    note:'請假 +1・整堂取消則堂數 −1' },
@@ -344,7 +344,7 @@ document.addEventListener('click', e=>{
 });
 window.addEventListener('resize', ()=>{ if(active){ const a = findAction(active); drawWires(a, active); } });
 
-// 預設展示老闆舉的例子：標記請假
+// 預設展示老闆舉的例子：請假
 window.addEventListener('load', ()=>activate(rowEl('courseCard.absence')));
 </script>
 </body>

@@ -161,7 +161,7 @@ function renderPriceModal(){
   document.getElementById('price-modal-body').innerHTML=
     (rows||'<div style="font-size:13px;color:var(--tx3)">還沒有任何課程，先在下方新增課名</div>')+
     `<div class="price-add-wrap">
-      <input id="price-new-title" placeholder="新增課程名稱…" maxlength="30" onkeydown="if(event.key==='Enter'){event.preventDefault();addPriceRow()}">
+      <input id="price-new-title" placeholder="新增課程名稱…" maxlength="30" onkeydown="if(enterSubmit(event)){addPriceRow()}">
       <button class="btn btns" onclick="addPriceRow()">＋</button>
     </div>`;
 }

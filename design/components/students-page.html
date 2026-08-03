@@ -1,0 +1,1016 @@
+<!-- @dsCard group="全頁・整頁改版底稿" width="1280" -->
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Students Page · 學生管理頁（一頁多態）</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../../tokens.css">
+<link rel="stylesheet" href="../../style.css">
+<style>
+  /* 來源：補習班排程系統.html #panel-students（標頭四鈕、#stu-modal-wrap、#status-modal-wrap）
+     + js/students.js（renderStudents／renderStudentGradeSections／renderStudentCard／
+       renderStudentEditPanel／openStudentModal／buildStuGradesSec／stuCourseTagHtml）
+     + js/state.js periodTabsHtml。
+     靜態快照、假資料、已移除 onclick。情境＝暑假期別、在學 42 人／歷屆 8 人。
+
+     ── 這張卡是「一頁多態」：四個 screen 各是一次完整的學生管理頁 ──
+     互動態（你點了什麼）：
+       A 預設　　　　 沒點任何東西，在學分頁的靜止樣子
+       B 編輯面板　　 點學生卡右上的 ✎ → 編輯面板插在那個年級區的下面，把後面的年級往下推
+       C 學生詳情　　 點學生卡本體 → 遮罩蓋住整頁、420px 視窗浮在中間（最深的一層資訊）
+       D 歷屆分頁　　 點「歷屆」 → 先按狀態分區（畢業／離開／暫停），每區裡再按年級分
+
+     四個 screen 都是同一份版面骨架：
+     ① stu-panel-hd＝標題 + 四顆工具鈕（待補提示／升年級／價目表／新增學生）
+     ② stu-tab-bar＝在學 / 歷屆 分頁
+     ③ period-tabs＝期別（上學期／寒假／下學期／暑假）
+     ④ stu-grade-sec × N＝年級分區標籤 + stu-grid 學生卡格（aspect-ratio 2/3 的直立小卡）
+
+     學生頁重新設計以這張為基準：要重排分區、改卡片密度、或判斷「點開之後整頁對不對」，從這張改。 */
+
+  body{background:#EFECE4;margin:0;padding:28px;font-family:'Noto Sans TC',sans-serif}
+  .screens{display:flex;flex-direction:column;gap:34px;max-width:1224px;margin:0 auto}
+
+  .screen-lbl{display:flex;align-items:center;gap:9px;margin:0 0 10px;font-size:13px;font-weight:700;color:var(--tx)}
+  .screen-lbl .n{display:inline-flex;align-items:center;justify-content:center;width:21px;height:21px;border-radius:50%;
+                 background:var(--tx);color:#fff;font-size:11px;font-weight:700;flex-shrink:0}
+  .screen-lbl .note{font-weight:400;color:var(--tx3);font-size:12px}
+
+  /* screen＝一個完整頁面的取景框。position:relative 是為了讓下面的 modal 有東西可以貼齊。 */
+  .screen{position:relative;overflow:hidden;border:1px solid var(--brs);border-radius:var(--r);
+          background:var(--bg);box-shadow:0 1px 4px rgba(0,0,0,.06)}
+  .page{padding:24px}
+  .page .wrap{max-width:1160px}
+
+  /* ⚠️ 唯一一條為了預覽而改的規則（跟 courses-page.html 同一招）。
+     真實 app 的 .stu-modal-wrap 是 position:fixed —— 蓋滿整個瀏覽器視窗。
+     這裡降成 absolute，遮罩就只蓋住它所屬的那一個 screen，
+     四個整頁狀態才能疊在同一張卡裡並排比較（否則 modal 會蓋掉全部四頁）。
+     除此之外遮罩透明度、置中、box 尺寸圓角陰影全部照吃 style.css，零漂移。 */
+  .screen .stu-modal-wrap{position:absolute}
+  .screen .stu-modal-wrap.open{display:flex}
+  /* 同理，.stu-modal 的 max-height:80vh 量的是瀏覽器視窗高，在取景框裡會超出被裁掉。
+     改成量取景框（wrap 是 inset:0 + padding:20px，所以 100% 已扣掉留白）。
+     開視窗的那一格再給一個 min-height，讓整個視窗一次看完、不用在卡片裡捲。 */
+  .screen .stu-modal{max-height:100%}
+  .screen.tall{min-height:1080px}
+</style>
+</head>
+<body>
+<div class="screens">
+
+  <!-- ═══════════════════════════════════════════════════════════
+       A · 預設態（在學分頁）
+       ═══════════════════════════════════════════════════════════ -->
+  <div>
+    <div class="screen-lbl"><span class="n">A</span>預設<span class="note">沒點任何東西 · 在學分頁 · 暑假期別</span></div>
+    <div class="screen">
+      <div class="page">
+        <div class="wrap">
+
+          <div class="stu-panel-hd">
+            <h2>學生管理</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btns" title="切換顯示/隱藏「待補資料」提示">🔕 待補提示</button>
+              <button class="btn btns" title="國一~高二 +1、國三→高一、高三→畢業；國小/大學跳過">📅 升年級</button>
+              <button class="btn btns" title="每門課的預設每堂單價；個別學生的優惠價在學生編輯裡設定">💰 價目表</button>
+              <button class="btn btns btnp" title="到「新增課程/學生」頁建檔">＋ 新增學生</button>
+            </div>
+          </div>
+
+          <div id="stu-list">
+            <div class="stu-tab-bar">
+              <button class="stu-tab-btn active">在學（42）</button>
+              <button class="stu-tab-btn">歷屆（8）</button>
+            </div>
+            <div class="period-tabs">
+              <button class="period-tab">上學期</button>
+              <button class="period-tab">寒假</button>
+              <button class="period-tab">下學期</button>
+              <button class="period-tab active">暑假</button>
+            </div>
+
+            <div class="stu-grade-sec">
+              <div class="stu-grade-lbl">國小六　4 人</div>
+              <div class="stu-grid">
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">吳庭安</div>
+                    <div class="stu-card-school">實踐國小</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">周語彤</div>
+                    <div class="stu-card-school">實踐國小</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n gt0">1</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">黃柏睿</div>
+                  </div>
+                  <div class="stu-owed">
+                    <span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span>
+                    <span class="stu-info-chip">📝 待補資料</span>
+                  </div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">簡宥辰</div>
+                    <div class="stu-card-school">民權國小</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="stu-grade-sec">
+              <div class="stu-grade-lbl">國二　6 人</div>
+              <div class="stu-grid">
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">王小明</div>
+                    <div class="stu-card-school">松山國中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">陳大華</div>
+                    <div class="stu-card-school">明德國中</div>
+                  </div>
+                  <div class="stu-owed">
+                    <span class="stu-owed-n gt0">2</span><span class="stu-owed-l">欠課</span>
+                    <span class="stu-warn-chip">⚠ 多收費</span>
+                  </div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">林佳蓉</div>
+                    <div class="stu-card-school">介壽國中</div>
+                  </div>
+                  <div class="stu-owed">
+                    <span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span>
+                    <span class="stu-warn-chip">⚠ 同名</span>
+                  </div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">林佳蓉</div>
+                  </div>
+                  <div class="stu-owed">
+                    <span class="stu-owed-n gt0">1</span><span class="stu-owed-l">欠課</span>
+                    <span class="stu-warn-chip">⚠ 同名</span>
+                    <span class="stu-info-chip">📝 待補資料</span>
+                  </div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">許承翰</div>
+                    <div class="stu-card-school">中山國中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">蔡宜庭</div>
+                    <div class="stu-card-school">明德國中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="stu-grade-sec">
+              <div class="stu-grade-lbl">高一　3 人</div>
+              <div class="stu-grid">
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">趙偉倫</div>
+                    <div class="stu-card-school">成功高中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">郭思妤</div>
+                    <div class="stu-card-school">中山女高</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n gt0">3</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">葉家瑋</div>
+                    <div class="stu-card-school">大同高中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       B · 編輯面板展開
+       ═══════════════════════════════════════════════════════════ -->
+  <div>
+    <div class="screen-lbl"><span class="n">B</span>編輯面板<span class="note">點「王小明」卡右上的 ✎ → 面板插在國二區下面，把高一區整個往下推</span></div>
+    <div class="screen">
+      <div class="page">
+        <div class="wrap">
+
+          <div class="stu-panel-hd">
+            <h2>學生管理</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btns" title="切換顯示/隱藏「待補資料」提示">🔕 待補提示</button>
+              <button class="btn btns" title="國一~高二 +1、國三→高一、高三→畢業；國小/大學跳過">📅 升年級</button>
+              <button class="btn btns" title="每門課的預設每堂單價；個別學生的優惠價在學生編輯裡設定">💰 價目表</button>
+              <button class="btn btns btnp" title="到「新增課程/學生」頁建檔">＋ 新增學生</button>
+            </div>
+          </div>
+
+          <div id="stu-list">
+            <div class="stu-tab-bar">
+              <button class="stu-tab-btn active">在學（42）</button>
+              <button class="stu-tab-btn">歷屆（8）</button>
+            </div>
+            <div class="period-tabs">
+              <button class="period-tab">上學期</button>
+              <button class="period-tab">寒假</button>
+              <button class="period-tab">下學期</button>
+              <button class="period-tab active">暑假</button>
+            </div>
+
+            <div class="stu-grade-sec">
+              <div class="stu-grade-lbl">國小六　4 人</div>
+              <div class="stu-grid">
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">吳庭安</div>
+                    <div class="stu-card-school">實踐國小</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">周語彤</div>
+                    <div class="stu-card-school">實踐國小</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n gt0">1</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">黃柏睿</div>
+                  </div>
+                  <div class="stu-owed">
+                    <span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span>
+                    <span class="stu-info-chip">📝 待補資料</span>
+                  </div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">簡宥辰</div>
+                    <div class="stu-card-school">民權國小</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="stu-grade-sec">
+              <div class="stu-grade-lbl">國二　6 人</div>
+              <div class="stu-grid">
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">王小明</div>
+                    <div class="stu-card-school">松山國中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">陳大華</div>
+                    <div class="stu-card-school">明德國中</div>
+                  </div>
+                  <div class="stu-owed">
+                    <span class="stu-owed-n gt0">2</span><span class="stu-owed-l">欠課</span>
+                    <span class="stu-warn-chip">⚠ 多收費</span>
+                  </div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">林佳蓉</div>
+                    <div class="stu-card-school">介壽國中</div>
+                  </div>
+                  <div class="stu-owed">
+                    <span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span>
+                    <span class="stu-warn-chip">⚠ 同名</span>
+                  </div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">林佳蓉</div>
+                  </div>
+                  <div class="stu-owed">
+                    <span class="stu-owed-n gt0">1</span><span class="stu-owed-l">欠課</span>
+                    <span class="stu-warn-chip">⚠ 同名</span>
+                    <span class="stu-info-chip">📝 待補資料</span>
+                  </div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">許承翰</div>
+                    <div class="stu-card-school">中山國中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">蔡宜庭</div>
+                    <div class="stu-card-school">明德國中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+              </div>
+
+              <!-- 編輯面板：插在被編輯的那位所屬年級區的卡片格下面 -->
+              <div class="stu-edit-panel"><div class="stu-edit-form">
+                <div class="stu-edit-top">
+                  <input class="stu-edit-input" value="王小明" placeholder="姓名" maxlength="20">
+                  <select class="stu-edit-select">
+                    <option>國一</option><option selected>國二</option><option>國三</option><option>高一</option>
+                  </select>
+                  <button class="stu-edit-save">儲存</button>
+                  <button class="stu-edit-cancel">取消</button>
+                </div>
+                <div class="stu-edit-info-row">
+                  <label>學校
+                    <input value="松山國中" placeholder="例：松山國中" maxlength="30">
+                  </label>
+                  <label>出生年（西元）
+                    <input type="number" value="2011" placeholder="例：2010" min="1990" max="2030">
+                  </label>
+                  <label>家長電話
+                    <input value="0912345678" placeholder="例：0912xxxxxx" maxlength="15">
+                  </label>
+                </div>
+                <div class="stu-edit-courses-row">
+                  <span class="stu-edit-courses-lbl">修課（暑假）</span>
+                  <div class="stu-edit-courses-body">
+                    <div class="stu-edit-enroll-row">
+                      <span class="stu-edit-course-tag">國二數學班<button class="rm-course-btn">✕</button></span>
+                      <input type="number" class="stu-edit-price-input" value="400" placeholder="預設 450" min="0" inputmode="numeric">
+                      <span class="stu-edit-price-unit">元/堂</span>
+                    </div>
+                    <div class="stu-edit-enroll-row">
+                      <span class="stu-edit-course-tag">國二英文班<button class="rm-course-btn">✕</button></span>
+                      <input type="number" class="stu-edit-price-input" value="" placeholder="未定價" min="0" inputmode="numeric">
+                      <span class="stu-edit-price-unit">元/堂</span>
+                    </div>
+                    <div class="stu-edit-add-wrap">
+                      <input class="stu-edit-new-course" placeholder="新增修課…">
+                      <button class="stu-edit-add-btn">＋</button>
+                    </div>
+                  </div>
+                </div>
+                <div class="stu-edit-danger">
+                  <button class="stu-edit-del-btn">🗑️ 徹底刪除此學生</button>
+                  <span class="stu-edit-danger-hint">永久移除（含所有學期的修課登記），不可復原。給清測試帳號／重複資料用。</span>
+                </div>
+              </div></div>
+            </div>
+
+            <div class="stu-grade-sec">
+              <div class="stu-grade-lbl">高一　3 人</div>
+              <div class="stu-grid">
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">趙偉倫</div>
+                    <div class="stu-card-school">成功高中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">郭思妤</div>
+                    <div class="stu-card-school">中山女高</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n gt0">3</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">葉家瑋</div>
+                    <div class="stu-card-school">大同高中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       C · 學生詳情視窗（這一態是重新設計的重點：資訊最多的一層）
+       ═══════════════════════════════════════════════════════════ -->
+  <div>
+    <div class="screen-lbl"><span class="n">C</span>學生詳情<span class="note">點「陳大華」的卡本體 → 遮罩壓暗整頁、420px 視窗浮在中間（四格統計／出缺勤／修課／成績／請假紀錄五段）</span></div>
+    <div class="screen tall">
+      <div class="page">
+        <div class="wrap">
+
+          <div class="stu-panel-hd">
+            <h2>學生管理</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btns" title="切換顯示/隱藏「待補資料」提示">🔕 待補提示</button>
+              <button class="btn btns" title="國一~高二 +1、國三→高一、高三→畢業；國小/大學跳過">📅 升年級</button>
+              <button class="btn btns" title="每門課的預設每堂單價；個別學生的優惠價在學生編輯裡設定">💰 價目表</button>
+              <button class="btn btns btnp" title="到「新增課程/學生」頁建檔">＋ 新增學生</button>
+            </div>
+          </div>
+
+          <div id="stu-list">
+            <div class="stu-tab-bar">
+              <button class="stu-tab-btn active">在學（42）</button>
+              <button class="stu-tab-btn">歷屆（8）</button>
+            </div>
+            <div class="period-tabs">
+              <button class="period-tab">上學期</button>
+              <button class="period-tab">寒假</button>
+              <button class="period-tab">下學期</button>
+              <button class="period-tab active">暑假</button>
+            </div>
+
+            <div class="stu-grade-sec">
+              <div class="stu-grade-lbl">國小六　4 人</div>
+              <div class="stu-grid">
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">吳庭安</div>
+                    <div class="stu-card-school">實踐國小</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">周語彤</div>
+                    <div class="stu-card-school">實踐國小</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n gt0">1</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">黃柏睿</div>
+                  </div>
+                  <div class="stu-owed">
+                    <span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span>
+                    <span class="stu-info-chip">📝 待補資料</span>
+                  </div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">簡宥辰</div>
+                    <div class="stu-card-school">民權國小</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="stu-grade-sec">
+              <div class="stu-grade-lbl">國二　6 人</div>
+              <div class="stu-grid">
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">王小明</div>
+                    <div class="stu-card-school">松山國中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">陳大華</div>
+                    <div class="stu-card-school">明德國中</div>
+                  </div>
+                  <div class="stu-owed">
+                    <span class="stu-owed-n gt0">2</span><span class="stu-owed-l">欠課</span>
+                    <span class="stu-warn-chip">⚠ 多收費</span>
+                  </div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">林佳蓉</div>
+                    <div class="stu-card-school">介壽國中</div>
+                  </div>
+                  <div class="stu-owed">
+                    <span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span>
+                    <span class="stu-warn-chip">⚠ 同名</span>
+                  </div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">林佳蓉</div>
+                  </div>
+                  <div class="stu-owed">
+                    <span class="stu-owed-n gt0">1</span><span class="stu-owed-l">欠課</span>
+                    <span class="stu-warn-chip">⚠ 同名</span>
+                    <span class="stu-info-chip">📝 待補資料</span>
+                  </div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">許承翰</div>
+                    <div class="stu-card-school">中山國中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">蔡宜庭</div>
+                    <div class="stu-card-school">明德國中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+              </div>
+            </div>
+
+            <div class="stu-grade-sec">
+              <div class="stu-grade-lbl">高一　3 人</div>
+              <div class="stu-grid">
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">趙偉倫</div>
+                    <div class="stu-card-school">成功高中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">郭思妤</div>
+                    <div class="stu-card-school">中山女高</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n gt0">3</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+                <div class="stu-card">
+                  <div class="stu-card-actions">
+                    <button class="stu-card-act-btn" title="編輯">✎</button>
+                    <button class="stu-card-act-btn del" title="變更狀態">✕</button>
+                  </div>
+                  <div class="stu-card-name-wrap">
+                    <div class="stu-card-name">葉家瑋</div>
+                    <div class="stu-card-school">大同高中</div>
+                  </div>
+                  <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- 學生詳情視窗（真實 app 是 fixed 蓋滿瀏覽器；此處降 absolute 只蓋這一格） -->
+      <div class="stu-modal-wrap open">
+        <div class="stu-modal-overlay"></div>
+        <div class="stu-modal">
+          <div class="stu-modal-hd">
+            <div class="stu-modal-title">
+              <span class="stu-modal-name">陳大華</span>
+              <span class="stu-modal-grade">國二</span>
+            </div>
+            <button class="stu-modal-close">✕</button>
+          </div>
+          <div class="stu-modal-body">
+
+            <div class="stu-modal-grid">
+              <div class="smg"><div class="smg-n">2</div><div class="smg-l">請假</div></div>
+              <div class="smg"><div class="smg-n">1</div><div class="smg-l">調課</div></div>
+              <div class="smg smg-owed"><div class="smg-n">2</div><div class="smg-l">欠課</div></div>
+              <div class="smg"><div class="smg-n">1</div><div class="smg-l">加收半堂</div></div>
+            </div>
+
+            <div>
+              <div class="stu-modal-sec-lbl">出缺勤（暑假）</div>
+              <div class="stu-modal-warn">⚠ 國二數學班 已達額外收費標準</div>
+              <table class="stu-course-tbl">
+                <thead><tr><th>課程</th><th>調課</th><th>請假</th><th>欠課</th><th></th></tr></thead>
+                <tbody>
+                  <tr class="warn-row">
+                    <td>國二數學班 <span style="color:var(--tx3);font-weight:400;font-size:11px">7/8、7/22</span></td>
+                    <td>1</td><td>2</td><td>2</td>
+                    <td><span class="warn-badge">⚠ 多收費</span></td>
+                  </tr>
+                  <tr>
+                    <td>國二英文班</td>
+                    <td>0</td><td>0</td><td>0</td><td></td>
+                  </tr>
+                </tbody>
+              </table>
+              <div class="stu-modal-total">欠課合計：2 堂</div>
+              <div style="margin-top:8px;font-size:13px;display:flex;gap:12px;flex-wrap:wrap">
+                <span style="color:#C0504A">曠課 1 次</span>
+                <span style="color:#C16B36">加收 +1 堂</span>
+              </div>
+            </div>
+
+            <div>
+              <div class="stu-modal-sec-lbl">修課（暑假）</div>
+              <div class="stu-courses">
+                <span class="stu-course-tag">國二數學班<span class="stu-course-price">400 元/堂・自訂</span><button class="co-stu-x" title="退課">✕</button></span>
+                <span class="stu-course-tag">國二英文班<span class="stu-course-price undef">未定價</span><button class="co-stu-x" title="退課">✕</button></span>
+              </div>
+              <div class="co-add">
+                <select class="co-add-sel">
+                  <option selected>＋ 加入課程…</option>
+                  <option>國二理化班（一般課程・王老師・週三 19:00）</option>
+                  <option>國三理化練習（練習課・李老師・週六 15:00）</option>
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <div class="stu-modal-sec-lbl">成績（暑假）</div>
+              <div>
+                <div class="stu-gr-lbl">課堂成績</div>
+                <div class="stu-gr-list">
+                  <div class="stu-gr-row"><span class="stu-gr-date">7/29</span><span class="stu-gr-course">國二數學班</span><span class="gr-chip">小考 <b>88</b></span></div>
+                  <div class="stu-gr-row"><span class="stu-gr-date">7/15</span><span class="stu-gr-course">國二數學班</span><span class="gr-chip">隨堂 <b>92</b></span></div>
+                </div>
+                <div class="stu-gr-lbl" style="margin-top:10px">段考成績</div>
+                <div class="prac-grade-row">
+                  <span class="prac-grade">一段</span>
+                  <span style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                    <span class="gr-chip">數學 <b>85</b><button class="gr-x" title="刪除">✕</button></span>
+                    <span class="gr-chip">英文 <b>78</b><button class="gr-x" title="刪除">✕</button></span>
+                  </span>
+                </div>
+                <div style="margin-top:6px">
+                  <span class="gr-add" style="margin-left:0">
+                    <select><option selected>一段</option><option>二段</option><option>三段</option></select>
+                    <input class="gr-lab" style="width:72px" placeholder="科目" maxlength="8">
+                    <input class="gr-sc" type="number" inputmode="numeric" placeholder="分數">
+                    <button class="att-min ok" title="登記">✓</button>
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <div class="stu-modal-sec-lbl">請假紀錄</div>
+              <div class="stu-pair">
+                <div class="stu-pair-icon">✓</div>
+                <div class="stu-pair-body">
+                  <div class="stu-pair-course">國二數學班</div>
+                  <div class="stu-pair-abs">學生請假：7/8（二）</div>
+                  <div class="stu-pair-makeup done">✓ 已補課：7/12（六）</div>
+                </div>
+              </div>
+              <div class="stu-pair">
+                <div class="stu-pair-icon">○</div>
+                <div class="stu-pair-body">
+                  <div class="stu-pair-course">國二數學班</div>
+                  <div class="stu-pair-abs">學生請假：7/22（二）</div>
+                  <div class="stu-pair-makeup owed link">○ 尚未安排補課</div>
+                </div>
+              </div>
+              <div class="stu-pair">
+                <div class="stu-pair-icon">—</div>
+                <div class="stu-pair-body">
+                  <div class="stu-pair-course">國二英文班</div>
+                  <div class="stu-pair-abs">調課：7/17（四）</div>
+                  <div class="stu-pair-makeup" style="color:var(--tx3)">— 不補課（退半堂）</div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       D · 歷屆分頁
+       ═══════════════════════════════════════════════════════════ -->
+  <div>
+    <div class="screen-lbl"><span class="n">D</span>歷屆分頁<span class="note">點「歷屆」 → 先按狀態分區（畢業／離開／暫停），每區裡面再按年級分；卡片整體降彩度（.alumni）</span></div>
+    <div class="screen">
+      <div class="page">
+        <div class="wrap">
+
+          <div class="stu-panel-hd">
+            <h2>學生管理</h2>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btns" title="切換顯示/隱藏「待補資料」提示">🔕 待補提示</button>
+              <button class="btn btns" title="國一~高二 +1、國三→高一、高三→畢業；國小/大學跳過">📅 升年級</button>
+              <button class="btn btns" title="每門課的預設每堂單價；個別學生的優惠價在學生編輯裡設定">💰 價目表</button>
+              <button class="btn btns btnp" title="到「新增課程/學生」頁建檔">＋ 新增學生</button>
+            </div>
+          </div>
+
+          <div id="stu-list">
+            <div class="stu-tab-bar">
+              <button class="stu-tab-btn">在學（42）</button>
+              <button class="stu-tab-btn active">歷屆（8）</button>
+            </div>
+            <div class="period-tabs">
+              <button class="period-tab">上學期</button>
+              <button class="period-tab">寒假</button>
+              <button class="period-tab">下學期</button>
+              <button class="period-tab active">暑假</button>
+            </div>
+
+            <div class="stu-status-sec">
+              <div class="stu-status-sec-lbl">畢業　5 人</div>
+              <div class="stu-grade-sec">
+                <div class="stu-grade-lbl">國三　3 人</div>
+                <div class="stu-grid">
+                  <div class="stu-card alumni">
+                    <div class="stu-card-actions">
+                      <button class="stu-card-act-btn" title="編輯">✎</button>
+                      <button class="stu-card-act-btn del" title="變更狀態">🔄</button>
+                    </div>
+                    <div class="stu-card-name-wrap">
+                      <div class="stu-card-name">張志強</div>
+                      <div class="stu-card-school">介壽國中</div>
+                    </div>
+                    <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                  </div>
+                  <div class="stu-card alumni">
+                    <div class="stu-card-actions">
+                      <button class="stu-card-act-btn" title="編輯">✎</button>
+                      <button class="stu-card-act-btn del" title="變更狀態">🔄</button>
+                    </div>
+                    <div class="stu-card-name-wrap">
+                      <div class="stu-card-name">莊詠晴</div>
+                      <div class="stu-card-school">明德國中</div>
+                    </div>
+                    <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                  </div>
+                  <div class="stu-card alumni">
+                    <div class="stu-card-actions">
+                      <button class="stu-card-act-btn" title="編輯">✎</button>
+                      <button class="stu-card-act-btn del" title="變更狀態">🔄</button>
+                    </div>
+                    <div class="stu-card-name-wrap">
+                      <div class="stu-card-name">高子晏</div>
+                      <div class="stu-card-school">中山國中</div>
+                    </div>
+                    <div class="stu-owed"><span class="stu-owed-n gt0">1</span><span class="stu-owed-l">欠課</span></div>
+                  </div>
+                </div>
+              </div>
+              <div class="stu-grade-sec">
+                <div class="stu-grade-lbl">高三　2 人</div>
+                <div class="stu-grid">
+                  <div class="stu-card alumni">
+                    <div class="stu-card-actions">
+                      <button class="stu-card-act-btn" title="編輯">✎</button>
+                      <button class="stu-card-act-btn del" title="變更狀態">🔄</button>
+                    </div>
+                    <div class="stu-card-name-wrap">
+                      <div class="stu-card-name">彭冠廷</div>
+                      <div class="stu-card-school">成功高中</div>
+                    </div>
+                    <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                  </div>
+                  <div class="stu-card alumni">
+                    <div class="stu-card-actions">
+                      <button class="stu-card-act-btn" title="編輯">✎</button>
+                      <button class="stu-card-act-btn del" title="變更狀態">🔄</button>
+                    </div>
+                    <div class="stu-card-name-wrap">
+                      <div class="stu-card-name">羅怡萱</div>
+                      <div class="stu-card-school">中山女高</div>
+                    </div>
+                    <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="stu-status-sec">
+              <div class="stu-status-sec-lbl">離開　2 人</div>
+              <div class="stu-grade-sec">
+                <div class="stu-grade-lbl">國二　2 人</div>
+                <div class="stu-grid">
+                  <div class="stu-card alumni">
+                    <div class="stu-card-actions">
+                      <button class="stu-card-act-btn" title="編輯">✎</button>
+                      <button class="stu-card-act-btn del" title="變更狀態">🔄</button>
+                    </div>
+                    <div class="stu-card-name-wrap">
+                      <div class="stu-card-name">曾柏文</div>
+                      <div class="stu-card-school">松山國中</div>
+                    </div>
+                    <div class="stu-owed"><span class="stu-owed-n gt0">2</span><span class="stu-owed-l">欠課</span></div>
+                  </div>
+                  <div class="stu-card alumni">
+                    <div class="stu-card-actions">
+                      <button class="stu-card-act-btn" title="編輯">✎</button>
+                      <button class="stu-card-act-btn del" title="變更狀態">🔄</button>
+                    </div>
+                    <div class="stu-card-name-wrap">
+                      <div class="stu-card-name">溫語柔</div>
+                    </div>
+                    <div class="stu-owed">
+                      <span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span>
+                      <span class="stu-info-chip">📝 待補資料</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="stu-status-sec">
+              <div class="stu-status-sec-lbl">暫停　1 人</div>
+              <div class="stu-grade-sec">
+                <div class="stu-grade-lbl">高一　1 人</div>
+                <div class="stu-grid">
+                  <div class="stu-card alumni">
+                    <div class="stu-card-actions">
+                      <button class="stu-card-act-btn" title="編輯">✎</button>
+                      <button class="stu-card-act-btn del" title="變更狀態">🔄</button>
+                    </div>
+                    <div class="stu-card-name-wrap">
+                      <div class="stu-card-name">賴宥辰</div>
+                      <div class="stu-card-school">大同高中</div>
+                    </div>
+                    <div class="stu-owed"><span class="stu-owed-n">0</span><span class="stu-owed-l">欠課</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

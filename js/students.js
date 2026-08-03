@@ -350,7 +350,7 @@ function buildStuGradesSec(s){
   const addRow=`<span class="gr-add" style="margin-left:0">
     <select id="stu-exam-name" onchange="_stuExamPick=this.value">${STU_EXAM_NAMES.map(n=>`<option${n===_stuExamPick?' selected':''}>${n}</option>`).join('')}</select>
     <input class="gr-lab" id="stu-exam-subj" style="width:72px" placeholder="科目" maxlength="8" autocomplete="off" name="search-examsubj">
-    <input class="gr-sc" id="stu-exam-score" type="number" inputmode="numeric" placeholder="分數" onkeydown="if(event.key==='Enter'){event.preventDefault();stuExamAdd(${s.id})}">
+    <input class="gr-sc" id="stu-exam-score" type="number" inputmode="numeric" placeholder="分數" onkeydown="if(enterSubmit(event)){stuExamAdd(${s.id})}">
     <button class="att-min ok" title="登記" onclick="stuExamAdd(${s.id})">✓</button></span>`;
   return`<div class="stu-gr-lbl">課堂成績</div><div class="stu-gr-list">${classRows}</div>
     <div class="stu-gr-lbl" style="margin-top:10px">段考成績</div>
@@ -389,7 +389,7 @@ function stuCourseTagHtml(en){
   const co=en.courseId!=null?findCourseById(en.courseId):null;
   let priceStr;
   if(co&&co.type==='試聽')priceStr='試聽・不收費';
-  else if(co&&co.type==='練習課')priceStr=en.practiceSubject?esc(en.practiceSubject):'練習課';
+  else if(co&&co.type==='練習課')priceStr=en.practiceSubject?esc(pracSubjLabel(en.practiceSubject)):'練習課';
   else{
     const p=co?(en.price??co.defaultPrice):effectivePrice(en);
     priceStr=p!=null?`${p} 元/堂${en.price!=null?'・自訂':''}`:'未定價';
@@ -430,7 +430,7 @@ function renderStuAddCourse(sid){
       const common=CF_PRAC_SUBJECTS.map(x=>stuAcSubjBtn(x,st.subjects.includes(x))).join('');
       const customs=st.subjects.filter(x=>!CF_PRAC_SUBJECTS.includes(x)).map(x=>stuAcSubjBtn(x,true)).join('');
       extra=`<div class="cm-lbl" style="margin-top:8px">練習科目（點選，可多個）</div>
-        <div class="cf-subj-tags">${common}${customs}<input class="cf-subj-add" list="cf-subjects" placeholder="＋其他" onkeydown="if(event.key==='Enter'){event.preventDefault();stuAcAddSubj(this)}"></div>`;
+        <div class="cf-subj-tags">${common}${customs}<input class="cf-subj-add" list="cf-subjects" placeholder="＋其他" onkeydown="if(enterSubmit(event)){stuAcAddSubj(this)}"></div>`;
     }else if(co.type==='試聽'){
       extra=`<div class="cm-hint">試聽不收費、不進學費結算。</div>`;
     }else{
@@ -571,7 +571,7 @@ function buildEditCoursesHtml(id){
     </div>`;
   }).join('')+
   `<div class="stu-edit-add-wrap">
-    <input id="edit-new-course-${id}" class="stu-edit-new-course" placeholder="新增修課…" onkeydown="if(event.key==='Enter'){event.preventDefault();addEditCourse(${id})}">
+    <input id="edit-new-course-${id}" class="stu-edit-new-course" placeholder="新增修課…" onkeydown="if(enterSubmit(event)){addEditCourse(${id})}">
     <button class="stu-edit-add-btn" onclick="addEditCourse(${id})">＋</button>
   </div>`;
 }

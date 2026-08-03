@@ -231,12 +231,12 @@ function _dvEvHtml(it,axisStart,isToday,now){
     e.isAbsent?'<span class="dv-ev-badge">請假</span>':
     e.isNoShow?'<span class="dv-ev-badge">曠課</span>':'';
   const movable=!_dvDragWhyNot(e);
-  const cls='dv-ev'+(faded?' dv-faded':'')+(stat==='now'?' dv-now':'')+(stat==='past'?' dv-past':'')+(hgt<40?' dv-short':'')+(movable?' dv-movable':'');
+  const cls='dv-ev'+(faded?' dv-faded':'')+(stat==='now'?' dv-now':'')+(stat==='past'?' dv-past':'')+(hgt<40?' dv-short':'')+(movable?' dv-movable':'')+(e.id===dvSelId?' dv-sel':'');
   const sub=[`${_dvAP(e.startDt)} – ${_dvAP(e.endDt)}`];
   if(!(dvView==='day'&&dvRooms)&&e.classroom)sub.push(esc(e.classroom)); // 已依教室分欄時不重複寫教室
   if(hgt>=76&&e.teacher)sub.push(esc(e.teacher));
   const meta=hgt>=42?`<div class="dv-ev-meta">${sub.join(' · ')}</div>`:'';
-  return`<div class="${cls}" data-id="${esc(e.id)}" style="top:${top}px;height:${hgt-2}px;left:calc(${it.left.toFixed(2)}% + 2px);width:calc(${it.width.toFixed(2)}% - 4px);z-index:${2+(it.lv||0)};border-left-color:${bar};background:${bg};color:${txt}" onpointerdown="dvDragStart(event,'${esc(e.id)}')" onclick="dvEvClick(event,'${esc(e.id)}')" title="${esc(e.origTitle)}${movable?'（可拖曳改時間）':''}">`
+  return`<div class="${cls}" data-id="${esc(e.id)}" style="top:${top}px;height:${hgt-2}px;left:calc(${it.left.toFixed(2)}% + 2px);width:calc(${it.width.toFixed(2)}% - 4px);z-index:${2+(it.lv||0)};border-left-color:${bar};background:${bg};color:${txt}" onpointerdown="dvDragStart(event,'${esc(e.id)}')" onclick="dvEvClick(event,'${esc(e.id)}')" ondblclick="dvEvDbl(event,'${esc(e.id)}')" title="${esc(e.origTitle)}${movable?'（可拖曳改時間）':''}">`
     +`${isRepeat?`<span class="dv-ev-rep" style="color:${bar}">↻</span>`:''}`
     +`<div class="dv-ev-title${faded?' struck':''}">${esc(e.origTitle)}${badge}</div>${meta}</div>`;
 }
@@ -356,7 +356,7 @@ function _dvRenderMonth(evs,start){
     const chips=list.slice(0,DV_MONTH_CHIPS).map(e=>{
       const faded=e.isFullAbsent||e.isRescheduled;
       const {bar,txt,bg}=_dvColors(e.calName,faded);
-      return`<div class="dv-mchip${faded?' struck':''}" style="border-left-color:${bar};background:${bg};color:${txt}" onclick="event.stopPropagation();selectWeekEvent('${esc(e.id)}')" title="${esc(e.origTitle)}">${_dvAP(e.startDt)} ${esc(e.origTitle)}</div>`;
+      return`<div class="dv-mchip${faded?' struck':''}${e.id===dvSelId?' dv-sel':''}" data-id="${esc(e.id)}" style="border-left-color:${bar};background:${bg};color:${txt}" onclick="dvEvClick(event,'${esc(e.id)}')" ondblclick="dvEvDbl(event,'${esc(e.id)}')" title="${esc(e.origTitle)}">${_dvAP(e.startDt)} ${esc(e.origTitle)}</div>`;
     }).join('');
     const more=list.length>DV_MONTH_CHIPS?`<div class="dv-mmore">還有 ${list.length-DV_MONTH_CHIPS} 堂</div>`:'';
     cells+=`<div class="${cls}" onclick="dvOpenDay(${cd.getFullYear()},${cd.getMonth()},${cd.getDate()})" title="看這天的日檢視"><span class="dv-mnum">${cd.getDate()}</span>${chips}${more}</div>`;
@@ -387,6 +387,148 @@ function renderMiniMonth(){
     return`<div class="${cls}" onclick="dvNav(new Date(${c.date.getFullYear()},${c.date.getMonth()},${c.date.getDate()}))">${c.n}</div>`;
   }).join('');
   box.innerHTML=dows+days;
+}
+
+// ══════════════════════════════════════════════════════════════
+// 側欄詳情面板 inspector（2026-07-31）
+// ══════════════════════════════════════════════════════════════
+// 點課塊 → 右側欄下半部顯示這一堂的老師／教室／名冊／請假與點名狀態（Apple 行事曆的 inspector）。
+// 這裡**只負責看**：所有會寫資料的動作都是把既有的置中詳情視窗開起來（selectWeekEventAndXxx），
+// 寫入路徑維持單一入口，不在側欄裡另做一套。
+// 單擊＝選取、雙擊＝直接開置中視窗；側欄被藏起來時（≤820px）單擊照舊開視窗。
+
+var dvSelId=null;   // 目前選取的課堂 id（重繪時該課塊會帶 .dv-sel）
+
+function _dvSideVisible(){const s=document.querySelector('.dv-side');return !!s&&s.offsetParent!==null;}
+
+function dvSelect(id){
+  dvSelId=id;
+  document.querySelectorAll('#dv-grid .dv-ev,#dv-grid .dv-mchip')
+    .forEach(el=>el.classList.toggle('dv-sel',el.dataset.id===id));
+  renderDvInspector();
+}
+
+// 狀態色：同一組色票在深色底要亮一點、亮色底要暗一點（沿用課塊那套算法）
+function _dvTone(hex){return _dvShift(hex,dvLight?-.12:.38);}
+function _dvTag(txt,hex){return`<span class="dv-stu-tag" style="color:${_dvTone(hex)}">${txt}</span>`;}
+
+// 名冊每個人右邊那顆標籤：曠課／請假優先，其次才看點名紀錄
+function _dvStuTag(ev,r){
+  // 調課＝整堂移走，absentStudents 會被塞成全名冊——別把它寫成每個人都「請假」
+  if(ev.isRescheduled)return _dvTag('調課','#C0504A');
+  if((ev.noShowStudents||[]).includes(r.name))return _dvTag('曠課','#C0504A');
+  if((ev.absentStudents||[]).includes(r.name))return _dvTag('請假','#C16B36');
+  if(!canAttend(ev))return'';
+  if(r.studentId==null)return _dvTag('無法點名','#8A8276');
+  const a=getAtt(ev.id,r.studentId);
+  if(a&&a.status==='到')return a.lateMin>0?_dvTag(`遲到 ${a.lateMin} 分`,'#B98A4A'):_dvTag('到','#5C7E6A');
+  return _dvTag('未點名','#8A8276');
+}
+
+// 課堂 → 系統課 id。補課／調課場次自己沒有 courseId，從 originalId（sys:<課程id>:…）反查母課程；
+// 舊行事曆搬遷的快照紀錄兩邊都查不到 → null（那種課本來就不在系統裡，編不了）
+function dvCourseIdOf(ev){
+  if(!ev)return null;
+  if(ev.courseId!=null)return ev.courseId;
+  const m=String(ev.makeupOriginalId||'').match(/^sys:(\d+):/);
+  return m?Number(m[1]):null;
+}
+
+// 側欄「✎ 編輯課程」：開的就是課程管理那扇表單（openCourseForm），存檔後會重畫日曆
+function dvEditCourse(id){
+  const ev=dvEvents.find(x=>x.id===id)||findEventById(id);
+  const cid=dvCourseIdOf(ev);
+  if(cid==null)return;
+  openCourseForm(cid);
+}
+
+function renderDvInspector(){
+  const box=document.getElementById('dv-insp');if(!box)return;
+  const ev=dvSelId?dvEvents.find(x=>x.id===dvSelId):null;
+  if(!ev){   // 沒選、或選的那堂已經不在目前檢視範圍（翻頁／改期）
+    dvSelId=null;
+    box.innerHTML='<div class="dv-insp-none"><i>🗓</i><span>點一下課塊<br>這裡會顯示老師、教室、名冊與請假狀態</span></div>';
+    return;
+  }
+  const faded=ev.isFullAbsent||ev.isRescheduled;
+  const {bar}=_dvColors(ev.calName,false);
+  const now=new Date();
+
+  // ── 標頭的狀態 chips ──
+  const chips=[`<span class="dv-chip">${typeLbl(ev.type)}</span>`];
+  if(ev.calName&&ev.calName!=='一般課程')chips.push(`<span class="dv-chip" style="color:${_dvTone(calColor(ev.calName))}">${esc(ev.calName)}</span>`);
+  if(ev.isRescheduled)chips.push(`<span class="dv-chip" style="color:${_dvTone('#C0504A')}">調課</span>`);
+  else if(ev.isAbsent)chips.push(`<span class="dv-chip" style="color:${_dvTone('#C16B36')}">${ev.absType==='老師請假'?'老師請假':'請假 '+ev.absentStudents.length+' 人'}</span>`);
+  if(ev.isNoShow)chips.push(`<span class="dv-chip" style="color:${_dvTone('#C0504A')}">曠課 ${ev.noShowStudents.length} 人</span>`);
+  if(!faded&&_dvSameDay(ev.startDt,now)){
+    if(now>=ev.endDt)chips.push('<span class="dv-chip">已結束</span>');
+    else if(now>=ev.startDt)chips.push(`<span class="dv-chip" style="color:${_dvTone('#5C7E6A')}">進行中</span>`);
+  }
+
+  // ── 資訊列 ──
+  const row=(k,v,dim)=>`<div class="dv-insp-row"><span class="k">${k}</span><span class="v${dim?' dim':''}">${v}</span></div>`;
+  const rows=[
+    row('授課',ev.teacher?esc(ev.teacher):'未指定',!ev.teacher),
+    row('教室',ev.classroom?esc(ev.classroom):'未指定',!ev.classroom),
+  ];
+  if(ev.subject)rows.push(row('科目',esc(ev.subject)));
+  if(ev.isRescheduled)rows.push(row('原因',ev.rescheduleReason?esc(ev.rescheduleReason):'未輸入',!ev.rescheduleReason));
+  if(ev.isAbsent&&ev.absType!=='老師請假'&&ev.absentStudents.length)rows.push(row('請假',esc(ev.absentStudents.join('、'))));
+  if(ev.isNoShow)rows.push(row('曠課',esc(ev.noShowStudents.join('、'))));
+  if(ev.notes)rows.push(row('備註',esc(ev.notes)));
+  // 整堂沒上（請假／調課）就一定有補課或調課要排——排了沒排一眼看到
+  if(faded){
+    const lbl=ev.isRescheduled?'調課':'補課';
+    const rec=findMakeupScheduledById(ev.id);
+    if(rec){const sd=new Date(rec.scheduledDate);
+      rows.push(row(lbl,`${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${_dvHM(sd)}${rec.room?'・'+esc(rec.room):''}`));}
+    else rows.push(row(lbl,`<span style="color:${_dvTone('#C0504A')};font-weight:600">未安排</span>`));
+  }
+
+  // ── 名冊（附每人的請假／曠課／點名狀態）──
+  const roster=eventRosterWithId(ev);
+  const subjOf=new Map();   // 練習課：科目標在名字旁（同點名／成績面板）
+  (ev.studentGroups||[]).forEach(g=>g.students.forEach(nm=>subjOf.set(nm,subjOf.has(nm)?subjOf.get(nm)+'、'+g.subject:g.subject)));
+  let att='';
+  if(canAttend(ev)&&roster.length){
+    const s=attSummary(ev);
+    att=s.total&&s.here>=s.total?`<span class="r" style="color:${_dvTone('#5C7E6A')}">✓ 點名完成</span>`
+      :`<span class="r">點名 ${s.here}/${s.total}</span>`;
+  }
+  const stuHtml=roster.length
+    ?roster.map(r=>`<div class="dv-stu"><span class="dv-stu-nm">${esc(r.name)}</span>${subjOf.has(r.name)?`<span class="dv-stu-sub">${esc(subjOf.get(r.name))}</span>`:''}${_dvStuTag(ev,r)}</div>`).join('')
+    :'<div class="dv-insp-row"><span class="v dim">這堂還沒有人登記</span></div>';
+
+  // ── 動作：一律轉開既有的置中詳情視窗 ──
+  const b=(fn,txt,cls)=>`<button class="dv-insp-b${cls||''}" onclick="${fn}('${esc(ev.id)}')">${txt}</button>`;
+  const acts=[];
+  if(canAttend(ev))acts.push(b('selectWeekEventAndAtt','✓ 點名'));
+  if(canAttend(ev)&&evNeedsGrade(ev))acts.push(b('selectWeekEventAndGrade','✎ 成績'));
+  if(!ev.isMakeupOcc){
+    // 未調課：請假／調課併一顆，開視窗後再選；已調課：只剩補原因，直接展開調課面板
+    if(!ev.isRescheduled)acts.push(b('selectWeekEvent','↔ 請假/調課'));
+    else acts.push(b('selectWeekEventAndReschedule','↔ 調課原因'));
+  }
+  // 底下那顆：改課的時段／收費／名單走「✎ 編輯課程」（與課程管理同一扇表單）；
+  // 查不到系統課的舊紀錄沒得編輯，退回「開啟完整視窗」免得那格空著
+  acts.push(dvCourseIdOf(ev)!=null?b('dvEditCourse','✎ 編輯課程')
+                                  :b('selectWeekEvent','開啟完整視窗',' dv-insp-open'));
+
+  box.innerHTML=
+    `<div class="dv-insp-hd">
+       <div class="dv-insp-bar" style="background:${bar}"></div>
+       <div style="min-width:0">
+         <div class="dv-insp-title${faded?' struck':''}">${esc(ev.origTitle)}</div>
+         <div class="dv-insp-when">${_dvWhen(ev.startDt)}　${_dvHM(ev.startDt)}–${_dvHM(ev.endDt)}　${fmtDur(ev.durMins)}</div>
+       </div>
+     </div>
+     <div class="dv-insp-chips">${chips.join('')}</div>
+     <div class="dv-insp-rows">${rows.join('')}</div>
+     <div class="dv-insp-sec">
+       <div class="dv-insp-sec-hd">名冊 ${roster.length} 人${att}</div>
+       <div class="dv-insp-stu">${stuHtml}</div>
+     </div>
+     <div class="dv-insp-acts">${acts.join('')}</div>`;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -430,8 +572,16 @@ function _dvDragWhyNot(ev){
   return null;
 }
 
-// 點課塊：剛拖曳過就不要順手把詳情視窗也開起來
+// 點課塊：剛拖曳過就不要順手把詳情面板也點開
+// 單擊＝選取（右側欄 inspector 顯示細節）；雙擊＝直接開置中詳情視窗。
+// 側欄被 CSS 藏起來時（視窗 ≤820px）單擊直接開視窗，否則點了會像沒反應。
 function dvEvClick(e,id){
+  e.stopPropagation();
+  if(Date.now()-dvDragEndAt<300)return;
+  if(_dvSideVisible())dvSelect(id);
+  else selectWeekEvent(id);
+}
+function dvEvDbl(e,id){
   e.stopPropagation();
   if(Date.now()-dvDragEndAt<300)return;
   selectWeekEvent(id);
@@ -670,4 +820,9 @@ function renderDayView(){
   if(dvView==='week')_dvRenderWeek(dvEvents,start);
   else if(dvView==='month')_dvRenderMonth(dvEvents,start);
   else _dvRenderDay(dvEvents);
+  renderDvInspector();   // 選取的那堂可能已改期／翻頁不見了，重繪後一併對齊
 }
+
+// 開場先把側欄的「還沒選課塊」提示畫上：renderDayView 要登入＋切到日曆分頁才會跑，
+// 在那之前側欄下半部會是一塊空白框。
+renderDvInspector();

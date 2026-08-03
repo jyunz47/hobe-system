@@ -10,30 +10,44 @@
 
 ## ⏭ 下次開框先做（2026-07-31 老闆指定，穿插在開發路線之外）
 
-**桌面日曆側欄 inspector** — 見下方功能 backlog「桌面日曆再強化」第一項。桌面日曆右下角那塊寫死「No Event Selected」、永遠不會亮，改成點課塊就在側欄顯示老師／教室／名冊／請假狀態。純加法、低風險。
+**更新 `courses-page.html` 全頁卡** — 它是 2026-07-17 的快照，之後課卡四個動作全改成置中視窗（見進展紀錄同日「課程卡的四個動作統一成跳置中視窗」），B/C/D 三個互動態要重畫。**主畫面天天看，快照過期＝拿它改版會設計到舊版**。做法照下面「補一張卡的標準流程」，改完記得補 `_ds_manifest.json` 並推雲端。
 
-做完這顆再回開發路線的 **①收尾（練習課考卷／練習課名單）**。
+⚠️ 同理，`calendar-day-view.html` 也已過期：桌面日曆在 2026-07-31 加了拖曳改時間與**側欄詳情面板**（右下角不再是「No Event Selected」），那張卡還是舊的。
+
+⚠️ `course-modal.html` 也已過期：課程視窗在 2026-07-31 改成**唯讀事實表**（加入框／📅／✕ 全拿掉，資訊改成左標籤右內容的對齊表），那張卡還畫著舊的可編輯版本。
+
+做完再回開發路線的 **①收尾（練習課考卷／練習課名單）**。
 
 ---
 
-## Claude Design 元件 gallery（✅ 主體完成 · 剩兩顆 fill-on-demand）
+## Claude Design gallery（整頁改版用）
 
-> **狀態（2026-07-07）**：全站 UI 已補齊，gallery 現 26 張（新增課程分頁全頁快照 `courses-page.html`）、分組最外層先分裝置：**電腦版・App 骨架／電腦版・課程頁／電腦版・待補課頁／電腦版・學生頁／電腦版・設定後台／手機版／共用・基礎**。**雲端已同步（2026-07-07）**，同步筆記與 manifest 本機鏡本在 `.design-sync/`。
-> 剩新增課程/學生頁表單一顆，維持「動到那塊才補」。下面標準流程留作補件索引。
+> **狀態（2026-07-31）**：gallery 30 張、**雲端已同步**（含最新 `style.css`）。分組最前面是新的
+> **「全頁・整頁改版底稿」**（`courses-page`／`students-page`／`settings-page`／`calendar-day-view`），其後才是元件組
+> （電腦版・App 骨架／課程頁／待補課頁／學生頁／設定後台／手機版／共用・基礎）。
+> **全頁卡＝改版入口，元件卡＝零件庫**（規則寫在 `design/components/README.md`）。
+> 同步筆記與 manifest 本機鏡本在 `.design-sync/`。
+
+### 待補的全頁卡（要改版哪頁就先補那頁）
+- [ ] **待補課頁** — `js/makeup.js`（統計卡＋篩選列＋清單三態）＋ `#panel-makeup`
+- [ ] **新增課程/學生頁** — `js/courses.js` renderCourseForm、`js/students.js` renderAddStudentForm
+- [ ] **老師頁** — `#panel-teachers` + `js/teachers.js`
+- [ ] ⚠️ **更新 `courses-page.html`**：那是 2026-07-17 的快照，之後課卡動作全改成置中視窗，已跟線上對不上；拿它改版會設計到舊版
 
 > **這是什麼**：Claude Design 橋樑的本機端。每顆 UI 元件一個 preview 檔放 [`design/components/`](../design/components/)，第一行 `<!-- @dsCard group="…" -->` 讓 claude.ai/design 自動建卡片。詳細背景見 [`進展紀錄.md`](進展紀錄.md) 2026-06-18「搭起 Claude Design 橋樑」。
 > **雲端專案**：claude.ai/design 的「HOBE 設計系統」，projectId `a7832be0-d223-4060-8449-f85457458db6`。
 
-### 補一顆元件的標準流程
+### 補一張卡的標準流程
 1. 從來源撈**真實 markup**（不要自己編結構）：動態卡片在 `js/*.js` 的 render 函式（找 `class="…"` 反引號模板），靜態畫面在 `補習班排程系統.html`。對應的 CSS class 在 `style.css`（用區塊註解找）。
-2. 寫 `design/components/<name>.html`：第一行 `<!-- @dsCard group="…" -->`，group 填七組之一（電腦版・App 骨架／電腦版・課程頁／電腦版・待補課頁／電腦版・學生頁／電腦版・設定後台／手機版／共用・基礎；手機寬度 preview 一律「手機版」、通用件進「共用・基礎」），`<head>` link `../../tokens.css` + `../../style.css`（這樣長相跟線上一致），body 放範例假資料的 markup，移除 onclick。
+2. 寫 `design/components/<name>.html`：第一行 `<!-- @dsCard group="…" width="…" -->`，group 填八組之一（全頁・整頁改版底稿／電腦版・App 骨架／電腦版・課程頁／電腦版・待補課頁／電腦版・學生頁／電腦版・設定後台／手機版／共用・基礎；**整頁快照一律「全頁・整頁改版底稿」**、手機寬度 preview 一律「手機版」、通用件進「共用・基礎」），`<head>` link `../../tokens.css` + `../../style.css`（這樣長相跟線上一致），body 放範例假資料的 markup，移除 onclick。
+   - **全頁卡的寫法**：照 `courses-page.html` 的「一頁多態」——同一頁的每個互動狀態（預設／展開／modal／…）各排一份完整版面，外面包 `.screen` 取景框、上面掛 `.screen-lbl` 標籤；modal 的 `position` 由 fixed 降成 absolute，遮罩才只蓋自己那一格。
 3. 更新 `design/components/README.md` 的「目前涵蓋」清單。
 4. 推上雲端：DesignSync 工具 `list_projects`（拿 projectId）→ `finalize_plan`（writes 填新檔路徑、deletes 給 `[]`）→ `write_files`（用 localPath）。
 5. ⚠️ **新增元件必做：補 `_ds_manifest.json` 的 cards 陣列**。只推 component HTML 不會自動建卡片——雲端卡片索引讀 `_ds_manifest.json`（編譯快照），新檔不在裡面就不顯示。做法：`get_file` 讀 `_ds_manifest.json` → 在 cards 加 `{"path":"design/components/<name>.html","group":"<跟該檔第一行同組>"}`，**插進同組的相鄰位置**（面板組別順序＝cards 陣列首次出現順序）→ `finalize_plan` writes 填 `_ds_manifest.json` → `write_files` 用 inline `data` 推回。改完重整 gallery 頁就出現。
 6. ⚠️ 若過程順手改了 `style.css`/`tokens.css`，記得也 `write_files` 推一份上雲端，否則雲端 gallery 渲染會跟本機不一致；改 `style.css` 還要把 HTML 的 `style.css?v=N` 加一。
 
-### 待補（剩一顆，維持 fill-on-demand）
-- [ ] **新增課程/學生 頁表單** — 2026-07-04 上線的獨立頁（判型 chips＋自動命名＋多時段／學生表單＋同名警示），markup 在 `js/courses.js` renderCourseForm 與 `js/students.js` renderAddStudentForm；動到那塊再補
+### 待補的元件卡（維持 fill-on-demand）
+- [ ] **新增課程/學生 頁表單元件** — 判型 chips＋自動命名＋多時段／學生表單＋同名警示；動到那塊再補
 > 註：原列的「課表對帳 UI」已隨 2026-07-29 第 4 刀移除該功能而取消；舊 Add Course Inline Panel 也已連 markup 刪除。
 
 ---
@@ -164,8 +178,7 @@
 - [ ] **老師管理**：老師請假統計（薪資已升級為開發路線 ④ 老師薪資表；老師檔 CRUD 2026-07-04 已完成於獨立「老師管理」頁）
   - 註（2026-07-04 更新）：**授課薪資在系統算**（見 ④）；打卡制只剩**練習課輔導老師**（補習班既有打卡程式），怎麼串「要再想個辦法」
 
-- [ ] **桌面日曆再強化**（2026-07-30 做完 Week／Month 檢視、依教室分欄、點空白新增課程、亮/深色切換、cascade 疊法；2026-07-31 做完拖曳課塊改時間／換教室。見進展紀錄）：剩餘可選——
-  - [ ] **側欄詳情面板**：右下角那塊現在寫死「No Event Selected」，永遠不會亮。改成點課塊就在側欄顯示老師／教室／名冊／請假狀態（Apple 行事曆的 inspector）
+- [ ] **桌面日曆再強化**（2026-07-30 做完 Week／Month 檢視、依教室分欄、點空白新增課程、亮/深色切換、cascade 疊法；2026-07-31 做完拖曳課塊改時間／換教室＋側欄詳情面板。見進展紀錄）：剩餘可選——
   - [ ] Month 檢視每格塞得下更多筆時自動增高（現在固定最多 3 筆＋「還有 N 堂」）
   - [ ] 週檢視也支援「依教室」（現在只有日檢視有；七天 × 六間教室要另想版面）
   - [ ] 月檢視的課程 chip 也能拖到別天（現在拖曳只在日／週檢視的時間軸上）

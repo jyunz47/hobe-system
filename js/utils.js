@@ -16,6 +16,56 @@ function fmtDT(d){return`${d.getMonth()+1}/${d.getDate()} ${fmtT(d)}`;}
 function fmtDur(m){const h=Math.floor(m/60),r=m%60;return h>0?(r>0?`${h}小時${r}分`:`${h}小時`):`${r}分鐘`;}
 function toDateStr(d){return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
 
+// ── Enter 鍵：中文選字那一下不算「送出」（2026-07-31）──
+// 注音／拼音選完字按 Enter 是「確認選字」，瀏覽器照樣送出 keydown，
+// 直接聽 key==='Enter' 會把字送出去當表單確認。組字中的那一下 isComposing=true
+// （舊版 WebKit 只給 keyCode 229），兩個都擋掉才乾淨。
+function isEnterKey(e){return e&&e.key==='Enter'&&!e.isComposing&&e.keyCode!==229;}
+// 這一下 Enter 是「中文選字」（輸入法組字中）
+function isComposingEnter(e){return e&&e.key==='Enter'&&(e.isComposing||e.keyCode===229);}
+
+// ── 兩段式 Enter（2026-07-31 老闆要求）──
+// 規則：不管中文英數，**總共按兩次 Enter 才送出**。
+//   英數：第一下待命 → 第二下送出
+//   中文：選字那一下就算第一下（輸入法照樣收字，我們不攔）→ 第二下送出
+// 待命 4 秒內有效，繼續打字／點別處／換欄位都取消。
+// 待命時**不給任何畫面提示**（2026-07-31 老闆要求拿掉氣泡，嫌吵）。
+// 回傳 true＝這一下是「確認送出」，呼叫端才動作；輸入框的 onkeydown 一律 if(enterSubmit(event)){…}
+var _enterArm={el:null,t:0,timer:null};
+function enterSubmit(e,el){
+  if(!e||e.key!=='Enter')return false;
+  const node=el||e.target;
+  // 選字那一下：不 preventDefault（攔了輸入法會收不了字），只把它當第一段待命
+  if(isComposingEnter(e)){enterArm(node);return false;}
+  e.preventDefault();                       // 真正的 Enter：兩段都吃掉預設行為（避免換行／送表單）
+  if(_enterArm.el===node&&Date.now()-_enterArm.t<4000){enterDisarm();return true;}
+  enterArm(node);
+  return false;
+}
+function enterArm(node){
+  enterDisarm();
+  _enterArm={el:node,t:Date.now(),timer:setTimeout(enterDisarm,4000)};
+}
+function enterDisarm(){
+  if(_enterArm.timer)clearTimeout(_enterArm.timer);
+  _enterArm={el:null,t:0,timer:null};
+}
+// 繼續打字／點別處／離開欄位 → 待命取消（避免「上一個 Enter」隔很久還算數）
+document.addEventListener('keydown',e=>{if(_enterArm.el&&e.key!=='Enter'&&e.key!=='Escape')enterDisarm();},true);
+document.addEventListener('pointerdown',()=>{if(_enterArm.el)enterDisarm();},true);
+document.addEventListener('focusout',e=>{if(_enterArm.el&&e.target===_enterArm.el)enterDisarm();},true);
+
+// ── 練習課科目分類（2026-07-31 老闆定）──
+// 「數學＋理化」都練＝一種類別「數理」，不是兩科；其餘科目照原樣列（數學＋理化＋英文＝「數理、英文」）。
+// 只動顯示與分組，enrollment 存的仍是原本的「數學、理化」兩個標籤（chip 照舊點選、要改回來不用動資料）。
+function pracSubjSplit(s){return String(s||'').split(/[、,，]/).map(x=>x.trim()).filter(Boolean);}
+function pracSubjCats(subjects){
+  const list=[...new Set(Array.isArray(subjects)?subjects.map(x=>String(x||'').trim()).filter(Boolean):pracSubjSplit(subjects))];
+  if(!(list.includes('數學')&&list.includes('理化')))return list;
+  return['數理',...list.filter(s=>s!=='數學'&&s!=='理化')];
+}
+function pracSubjLabel(subjects){return pracSubjCats(subjects).join('、');}
+
 // ── 載入指示 / Toast / 錯誤橫條 ──
 function setUSt(s,n,sub){document.getElementById('udot').className='udot'+(s==='ok'?' ok':s==='busy'?' busy':'');document.getElementById('uname').textContent=n;document.getElementById('usub').textContent=sub;}
 function showErr(panel,msg){const el=document.getElementById('err-'+panel);if(el){el.textContent='⚠ '+msg;el.style.display='block';}}
@@ -64,7 +114,7 @@ function askClose(v){
 window.addEventListener('keydown',e=>{
   if(!_askResolve)return;
   if(e.key==='Escape'){e.preventDefault();askClose(false);}
-  else if(e.key==='Enter'){e.preventDefault();askClose(true);}
+  else if(isEnterKey(e)){e.preventDefault();askClose(true);}
 });
 
 // ── 日期切換 ──

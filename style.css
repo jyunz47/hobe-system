@@ -576,6 +576,8 @@ body.hide-todo-chip .stu-info-chip{display:none}
 .co-roster{display:flex;flex-wrap:wrap;gap:5px}
 .co-stu{display:inline-flex;align-items:center;gap:5px;padding:3px 6px 3px 8px;border-radius:99px;border:1px solid var(--br);background:var(--sf);font-size:12px;color:var(--tx)}
 .co-stu-price{font-size:10.5px;color:var(--tx3)}
+.co-stu-subj{font-size:10.5px;color:var(--tx2);background:var(--sf2);padding:1px 6px;border-radius:99px} /* 唯讀名單的練習科目 */
+.co-roster-ro .co-stu{padding:3px 10px} /* 只給看的名單沒有按鈕，左右留白補齊 */
 .co-undef{color:var(--cancel,#C0504A);font-size:10.5px}
 .co-stu-x{border:none;background:none;cursor:pointer;color:var(--tx3);font-size:12px;line-height:1;padding:1px 2px;border-radius:50%}
 .co-stu-x:hover{color:var(--cancel,#C0504A);background:var(--sf2)}
@@ -617,6 +619,15 @@ body.hide-todo-chip .stu-info-chip{display:none}
 .cm-price{max-width:140px}
 .cm-unit{font-size:12px;color:var(--tx3);white-space:nowrap}
 .cm-hint{font-size:11px;color:var(--tx3);margin-top:6px;line-height:1.5}
+.cm-lbl-sub{font-size:10.5px;font-weight:500;color:var(--tx3);letter-spacing:0}
+/* 事實表：課程視窗的唯讀總覽，標籤與值分兩欄對齊（一行一件事，掃一眼看完） */
+.cm-facts{display:grid;grid-template-columns:max-content 1fr;gap:9px 16px;margin-bottom:18px}
+.cm-fact{display:contents}
+.cm-fact-k{font-size:11px;font-weight:700;color:var(--tx3);letter-spacing:.04em;white-space:nowrap;padding-top:2px}
+.cm-fact-v{font-size:13px;color:var(--tx);line-height:1.5}
+.cm-fact-sub{display:block;font-size:11px;color:var(--tx3);line-height:1.45}
+.cm-tag{display:inline-block;font-size:11.5px;color:var(--ac);background:var(--al);border-radius:99px;padding:1px 9px;margin-right:5px}
+.cm-tag-off{color:var(--tx3);background:var(--sf2)}
 .switch{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
 .switch input{position:absolute;opacity:0;width:0;height:0}
 .switch-track{position:relative;width:34px;height:19px;border-radius:99px;background:var(--br);transition:background .15s;flex-shrink:0}
@@ -664,7 +675,6 @@ body.hide-todo-chip .stu-info-chip{display:none}
 .cf-verdict{background:var(--sf2);border-radius:var(--rs);padding:12px}
 .cf-foot{display:flex;gap:8px;align-items:center;margin-top:4px}
 .cf-danger{color:#C0504A;border-color:#C0504A}
-.cf-info-row{font-size:13px;color:var(--tx2);line-height:1.7}
 
 /* ── 老師管理（ta-*）── */
 .ta-row{padding:9px 0;border-bottom:1px solid var(--br);max-width:520px}

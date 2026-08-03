@@ -225,8 +225,8 @@ function buildGradePanel(e){
     return`<div class="gr-row"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}</span>
       ${chips}
       <span class="gr-add">
-        <input class="gr-lab" id="gr-lab-${eid}-${sid}" placeholder="標籤，如：課前考" maxlength="12" autocomplete="off" name="search-gradelabel" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();grAdd('${eid}',${sid})}">
-        <input class="gr-sc" id="gr-sc-${eid}-${sid}" type="number" inputmode="numeric" placeholder="分數" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter'){event.preventDefault();grAdd('${eid}',${sid})}">
+        <input class="gr-lab" id="gr-lab-${eid}-${sid}" placeholder="標籤，如：課前考" maxlength="12" autocomplete="off" name="search-gradelabel" onclick="event.stopPropagation()" onkeydown="if(enterSubmit(event)){grAdd('${eid}',${sid})}">
+        <input class="gr-sc" id="gr-sc-${eid}-${sid}" type="number" inputmode="numeric" placeholder="分數" onclick="event.stopPropagation()" onkeydown="if(enterSubmit(event)){grAdd('${eid}',${sid})}">
         <button class="att-min ok" title="登記" onclick="event.stopPropagation();grAdd('${eid}',${sid})">✓</button>
       </span></div>`;
   }).join('');
@@ -350,7 +350,7 @@ function buildAttPanel(e){
       const cur=getAtt(e.id,sid)?.lateMin||'';
       return`<div class="att-row att-picking">
         <span class="att-nm">${esc(r.name)}${subjTag(r.name)}</span>
-        <span class="att-lateedit">遲到 <input type="number" min="1" inputmode="numeric" class="att-mininput" id="lateinp-${eid}-${sid}" value="${cur}" onclick="event.stopPropagation()" onkeydown="if(event.key==='Enter')saveLate('${eid}',${sid});if(event.key==='Escape')cancelLate('${eid}')"> 分
+        <span class="att-lateedit">遲到 <input type="number" min="1" inputmode="numeric" class="att-mininput" id="lateinp-${eid}-${sid}" value="${cur}" onclick="event.stopPropagation()" onkeydown="if(enterSubmit(event))saveLate('${eid}',${sid});if(event.key==='Escape')cancelLate('${eid}')"> 分
         <button class="att-min ok" onclick="event.stopPropagation();saveLate('${eid}',${sid})">✓</button>
         <button class="att-min cancel" onclick="event.stopPropagation();cancelLate('${eid}')">✕</button></span>
       </div>`;
@@ -457,11 +457,12 @@ function pracRosterHtml(e){
   const byGrade=new Map();
   rows.forEach(r=>{const g=r.grade||'未填年級';if(!byGrade.has(g))byGrade.set(g,[]);byGrade.get(g).push(r);});
   const gOrder=g=>{const i=GRADES.indexOf(g);return i<0?99:i;};
-  const sOrder=s=>{if(s==='未填科目')return 999;const i=CF_PRAC_SUBJECTS.indexOf(s);return i<0?99:i;};
+  // 數理＝數學＋理化合併類，排在數學後面（其餘自訂科目 99、未填 999）
+  const sOrder=s=>{if(s==='未填科目')return 999;if(s==='數理')return CF_PRAC_SUBJECTS.indexOf('數學')+0.5;const i=CF_PRAC_SUBJECTS.indexOf(s);return i<0?99:i;};
   return `<div class="tcard2-prac">${[...byGrade.entries()].sort((a,b)=>gOrder(a[0])-gOrder(b[0])).map(([g,list])=>{
     const bySubj=new Map(); // 該年級內：科目 → 名字們
     list.forEach(r=>{
-      const subjects=(r.subjects||'').split(/[、,，]/).map(s=>s.trim()).filter(Boolean);
+      const subjects=pracSubjCats(r.subjects);   // 數學＋理化 → 「數理」一列，不拆兩列
       (subjects.length?subjects:['未填科目']).forEach(subj=>{
         if(!bySubj.has(subj))bySubj.set(subj,[]);
         bySubj.get(subj).push(r.name);
@@ -501,7 +502,8 @@ function tcardHtml(e){
   else if(e.isRescheduled)acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEvent('${id}')">看調課安排</button><button class="tc-act danger" onclick="event.stopPropagation();cancelReschedule('${id}')">取消調課</button>`;
   else if(e.isAbsent)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelAbs('${id}')">取消請假</button>`;
   else if(e.isNoShow)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelNoShow('${id}')">取消曠課</button>`;
-  else acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndAbs('${id}')">🗓 標記請假</button><button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndReschedule('${id}')">↔ 調課</button>`;
+  // 請假與調課併成一顆：開課程詳情視窗，視窗裡再選「請假」或「調課」（2026-07-31 老闆要求）
+  else acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEvent('${id}')">↔ 請假/調課</button>`;
   // 能點名的課：點名面板已列出名冊，不再放「名單」鈕（避免重複）；
   // 不能點名的課（試聽/整堂請假/調課原課）沒有點名面板 → 保留「名單」鈕當唯一名冊入口
   const attBtn=canAttend(e)?`<button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndAtt('${id}')">✓ 點名</button>`:'';

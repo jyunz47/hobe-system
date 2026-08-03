@@ -23,7 +23,7 @@ if(new URLSearchParams(location.search).get('app')==='dayview'){
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HOBE">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=44">
+<link rel="stylesheet" href="style.css?v=46">
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -324,7 +324,42 @@ if ('serviceWorker' in navigator) {
       .dv-mini-day.mute{color:var(--dvmute)}
       .dv-mini-day.today{background:#e0483d;color:#fff;font-weight:600}
       .dv-mini-day.sel{background:var(--dvbg3);color:var(--dvfg);font-weight:600}
-      .dv-noevt{flex:1;display:flex;align-items:center;justify-content:center;color:var(--dvfg3);font-size:14px;min-height:120px}
+      /* ── 側欄詳情面板（inspector）：點課塊就在這裡展開 ── */
+      .dv-insp{flex:1;min-height:0;margin-top:14px;padding-top:14px;border-top:1px solid var(--dvline);overflow-y:auto}
+      .dv-insp-none{height:100%;min-height:120px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+        text-align:center;color:var(--dvfg3);font-size:12.5px;line-height:1.75;gap:6px}
+      .dv-insp-none i{font-style:normal;font-size:20px;opacity:.5}
+      .dv-insp-hd{display:flex;gap:9px;align-items:stretch}
+      .dv-insp-bar{width:4px;border-radius:2px;flex-shrink:0}
+      .dv-insp-title{font-size:15px;font-weight:700;line-height:1.32;color:var(--dvfg);word-break:break-word}
+      .dv-insp-title.struck{text-decoration:line-through;opacity:.55}
+      .dv-insp-when{font-size:12px;color:var(--dvfg2);margin-top:3px}
+      .dv-insp-chips{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+      .dv-chip{font-size:11px;font-weight:600;padding:2px 7px;border-radius:6px;background:var(--dvbg2);color:var(--dvfg2);white-space:nowrap}
+      .dv-insp-rows{margin-top:12px;display:flex;flex-direction:column;gap:6px}
+      .dv-insp-row{display:flex;gap:9px;font-size:12.5px;line-height:1.5}
+      .dv-insp-row .k{width:34px;flex-shrink:0;color:var(--dvfg3);font-size:11.5px;padding-top:1px}
+      .dv-insp-row .v{color:var(--dvfg);min-width:0;word-break:break-word}
+      .dv-insp-row .v.dim{color:var(--dvfg3)}
+      .dv-insp-sec{margin-top:15px}
+      .dv-insp-sec-hd{display:flex;align-items:baseline;gap:6px;font-size:11px;font-weight:600;color:var(--dvfg3);margin-bottom:5px}
+      .dv-insp-sec-hd .r{margin-left:auto;font-weight:600}
+      /* 名冊自己捲，不要把下面的動作鈕擠出畫面（側欄高度被迷你月曆吃掉一大半）*/
+      .dv-insp-stu{max-height:186px;overflow-y:auto}
+      .dv-stu{display:flex;align-items:center;gap:7px;font-size:12.5px;padding:3px 0;color:var(--dvfg);border-top:1px solid var(--dvline2)}
+      .dv-stu:first-child{border-top:none}
+      .dv-stu-nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+      .dv-stu-sub{font-size:11px;color:var(--dvfg3);flex-shrink:0}
+      .dv-stu-tag{margin-left:auto;flex-shrink:0;font-size:10.5px;font-weight:600;padding:1px 6px;border-radius:5px;background:var(--dvbg2)}
+      .dv-insp-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
+      .dv-insp-b{border:1px solid var(--dvline);background:var(--dvbg2);color:var(--dvfg);border-radius:8px;
+        padding:6px 11px;font:inherit;font-size:12px;cursor:pointer}
+      .dv-insp-b:hover{background:var(--dvbg3)}
+      .dv-insp-b.dv-insp-open{border-color:transparent;background:transparent;color:var(--dvfg3)}
+      .dv-insp-b.dv-insp-open:hover{background:var(--dvbg2);color:var(--dvfg)}
+      /* 被選到的課塊：日／週用外框，月檢視 chip 用細框（chip 太小塞不下粗框）*/
+      .dv-ev.dv-sel{box-shadow:0 0 0 2px var(--dvfg2);z-index:30}
+      .dv-mchip.dv-sel{box-shadow:0 0 0 1.5px var(--dvfg2)}
       /* ── App 模式：獨立桌面視窗（?app=dayview）——藏系統側邊欄＋工具列、滿版 ── */
       body.dv-app{background:#1b1a19}
       body.dv-app:has(.dv-wrap.dv-light){background:#fff}
@@ -389,7 +424,8 @@ if ('serviceWorker' in navigator) {
               <button class="dv-mini-nav" onclick="dvShiftMonth(1)" aria-label="下個月">›</button>
             </div>
             <div class="dv-mini" id="dv-mini"></div>
-            <div class="dv-noevt">No Event Selected</div>
+            <!-- 側欄詳情面板：點課塊由 renderDvInspector() 填內容（沒選＝提示文字）-->
+            <div class="dv-insp" id="dv-insp"></div>
           </aside>
         </div>
         <!-- 拖曳課塊放開後的確認視窗：問這次移動要「只改這一天」還是「從這天起都改」。
@@ -509,19 +545,19 @@ if ('serviceWorker' in navigator) {
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <!-- 應用程式分模組（順序：state → utils → 解析 → 各 panel → init 最後）-->
 <script src="js/state.js?v=13"></script>
-<script src="js/utils.js?v=8"></script>
-<script src="js/schedule.js?v=6"></script>
-<script src="js/today.js?v=26"></script>
-<script src="js/week.js?v=15"></script>
-<script src="js/dayview.js?v=16"></script>
+<script src="js/utils.js?v=13"></script>
+<script src="js/schedule.js?v=7"></script>
+<script src="js/today.js?v=29"></script>
+<script src="js/week.js?v=16"></script>
+<script src="js/dayview.js?v=17"></script>
 <script src="js/absence.js?v=12"></script>
 <script src="js/makeup.js?v=11"></script>
-<script src="js/enrollment.js?v=12"></script>
-<script src="js/students.js?v=18"></script>
+<script src="js/enrollment.js?v=14"></script>
+<script src="js/students.js?v=21"></script>
 <script src="js/attendance.js?v=2"></script>
 <script src="js/grades.js?v=3"></script>
 <script src="js/settings.js?v=22"></script>
-<script src="js/courses.js?v=17"></script>
+<script src="js/courses.js?v=21"></script>
 <script src="js/init.js?v=25"></script>
 
 <div class="stu-modal-wrap" id="stu-modal-wrap">
@@ -587,7 +623,7 @@ if ('serviceWorker' in navigator) {
     <div class="stu-modal-body">
       <div id="delete-modal-info" style="font-size:13.5px;color:var(--tx2);margin-bottom:14px;line-height:1.6"></div>
       <div style="font-size:12px;color:var(--tx3);margin-bottom:6px">請輸入該學生的姓名以確認：</div>
-      <input id="delete-modal-confirm" class="del-modal-confirm-input" placeholder="輸入姓名" maxlength="20" onkeydown="if(event.key==='Enter')confirmDeleteStudent()">
+      <input id="delete-modal-confirm" class="del-modal-confirm-input" placeholder="輸入姓名" maxlength="20" onkeydown="if(enterSubmit(event))confirmDeleteStudent()">
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
         <button class="btn btns" onclick="closeDeleteModal()">取消</button>
         <button class="btn btns" style="background:#C0504A;color:#fff;border-color:#C0504A" onclick="confirmDeleteStudent()">永久刪除</button>

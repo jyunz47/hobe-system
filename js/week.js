@@ -179,6 +179,8 @@ function closeWeekModal(){
   document.querySelectorAll('.abs-panel.open').forEach(p=>p.classList.remove('open'));
   document.querySelectorAll('[id^="cancel-picker-"]').forEach(p=>p.remove());
   selectedWeekEvent=null;
+  // 桌面日曆側欄 inspector：視窗裡點名／登成績後，關掉視窗要看到最新狀態
+  if(typeof renderDvInspector==='function')renderDvInspector();
 }
 
 function selectWeekEventAndCancel(id){
@@ -187,13 +189,8 @@ function selectWeekEventAndCancel(id){
   setTimeout(()=>cancelAbs(id), 50);
 }
 
-// 今日卡「標記請假」改走 week-modal：開 modal 後自動展開請假面板
-function selectWeekEventAndAbs(id){
-  selectWeekEvent(id);
-  setTimeout(()=>toggleAbsPanelWeek(id),50);
-}
-
-// 今日卡「調課」：開 modal 後自動展開調課面板，免得 modal 裡還要再按一次調課
+// 桌面日曆側欄「調課原因」：開 modal 後自動展開調課面板
+// （2026-07-31 起請假／調課併成一顆「✓ 請假/調課」→ 直接開 modal 不預展開，故沒有 …AndAbs 了）
 function selectWeekEventAndReschedule(id){
   selectWeekEvent(id);
   setTimeout(()=>toggleReschedulePanel(id),50);
@@ -240,12 +237,12 @@ function selectWeekEvent(id){
         </div>
       </div>
       <div class="cc-actions">
-        ${ev.isMakeupOcc?`<span style="font-size:12px;color:var(--tx3)">補課／調課場次——要改期請到待補課清單「取消安排」後重排</span>`:`
+        ${ev.isMakeupOcc?`<span style="font-size:12px;color:var(--tx3)">補課／調課場次——要改期到桌面日曆把它拖到新時段，或在待補課清單「取消安排」後重排</span>`:`
         ${ev.isAbsent?`<button class="btn btns btnd" onclick="selectCard(this.closest('.cc'));cancelAbs('${esc(ev.id)}')">取消請假</button>`:''}
         ${ev.isNoShow?`<button class="btn btns btnd" onclick="selectCard(this.closest('.cc'));cancelNoShow('${esc(ev.id)}')">取消曠課</button>`:''}
         ${ev.isRescheduled?`<button class="btn btns btnd" onclick="cancelReschedule('${esc(ev.id)}')">取消調課</button>`:''}
-        ${!ev.isRescheduled?`<button class="btn btns" onclick="selectCard(this.closest('.cc'));toggleAbsPanelWeek('${esc(ev.id)}')">標記請假</button>`:''}
-        <button class="btn btns" onclick="toggleReschedulePanel('${esc(ev.id)}')">${ev.isRescheduled?(ev.rescheduleReason?'更新調課原因':'輸入調課原因'):'調課'}</button>`}
+        ${!ev.isRescheduled?`<button class="btn btns" onclick="selectCard(this.closest('.cc'));toggleAbsPanelWeek('${esc(ev.id)}')">🗓 請假</button>`:''}
+        <button class="btn btns" onclick="toggleReschedulePanel('${esc(ev.id)}')">↔ ${ev.isRescheduled?(ev.rescheduleReason?'更新調課原因':'輸入調課原因'):'調課'}</button>`}
         ${attBtn}${gradeBtn}
       </div>
     </div>

@@ -174,7 +174,11 @@ function closeCourseModal(){
   _courseModalKey=null;
   if(typeof _sysDateEdit!=='undefined')_sysDateEdit=null; // 未存的修課起訖編輯狀態一併丟棄
 }
-function refreshCourseModal(){if(courseModalOpen())renderCourseModal();}
+// 名單／起訖動過就重畫：課程視窗、以及 ✎ 編輯課程表單（兩邊都在看同一份登記簿）
+function refreshCourseModal(){
+  if(courseModalOpen())renderCourseModal();
+  if(courseFormOpen())renderCourseForm();
+}
 
 function renderCourseModal(){
   const ctx=_coCardCtx.get(_courseModalKey);
