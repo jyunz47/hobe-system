@@ -12,7 +12,9 @@ var ACT_KEEP_DAYS=60;
 var actEvents=[];   // 已依時間由舊到新排序
 var actTodos=[];
 var actLoaded=false;
-var actState={filter:'all',showDone:false,draft:'',adding:false};
+var actState={filter:'all',showDone:false,draft:'',adding:false,
+  progFor:null,progDraft:'',progAll:null,   // 正在加進度的那則／輸入內容／展開全部進度的那則
+  dayOpen:{}};                              // 系統動態按天收合：日期字串 → 手動點過的展開狀態
 var actUnsub=null;        // onSnapshot 的取消訂閱函式（登出時要叫，不然換帳號還在聽舊資料）
 var actPruned=false;      // 過期事件一個 session 只清一次（每次 snapshot 都清會白白多寫）
 var actHasNew=false;      // 不在動態頁時，別人做了事 → 側欄長一個小圓點
@@ -156,13 +158,56 @@ async function actTodoAdd(){
   catch(e){toast('待辦沒存上雲端：'+(e?.message||e),'err');}
 }
 
+// ── 狀態（2026-08-03 老闆定：進度串＋三段狀態）──
+// 舊待辦沒有 status 欄位 → 由「打勾了沒／有沒有人認領」推導，不用轉檔也不會壞。
+// 完成沿用既有的 done:true（不塞進 status），這樣「取消完成」才回得到原本那一段。
+var ACT_ST={open:'待處理',doing:'處理中',waiting:'等回覆',done:'完成'};
+function todoStatus(t){
+  if(!t)return'open';
+  if(t.done)return'done';
+  if(t.status==='doing'||t.status==='waiting'||t.status==='open')return t.status;
+  return t.claimedBy?'doing':'open';
+}
+
 // 認領／放掉：已經是自己認領的再按一次＝放掉，讓別人接手
+// 認領＝我在推它 → 一律進「處理中」；放掉時「等回覆」保持不動（卡在外部跟誰認領無關）
 function actTodoClaim(id){
   const email=actMe();
   actTodoMutate(list=>list.map(t=>{
     if(t.id!==id)return t;
-    if(t.claimedBy===email)return{...t,claimedBy:null,claimedName:'',claimedAt:null};
-    return{...t,claimedBy:email,claimedName:actName(email),claimedAt:new Date().toISOString()};
+    if(t.claimedBy===email)return{...t,claimedBy:null,claimedName:'',claimedAt:null,
+      status:todoStatus(t)==='waiting'?'waiting':'open'};
+    return{...t,claimedBy:email,claimedName:actName(email),claimedAt:new Date().toISOString(),status:'doing'};
+  }));
+}
+
+// 「等回覆」是 toggle：已經是等回覆就切回處理中
+function actTodoSetStatus(id,st){
+  actTodoMutate(list=>list.map(t=>
+    t.id!==id?t:{...t,status:todoStatus(t)===st?'doing':st}));
+}
+
+// ── 進度串：接力的關鍵，下一個人靠這個知道前面做到哪 ──
+function actProgOpen(id){
+  actState.progFor=actState.progFor===id?null:id;
+  actState.progDraft='';
+  renderActivity();
+  if(actState.progFor)requestAnimationFrame(()=>document.getElementById('act-prog-input')?.focus());
+}
+function actProgDraft(v){actState.progDraft=v;}
+function actProgAll(id){actState.progAll=actState.progAll===id?null:id;renderActivity();}
+
+function actTodoProgAdd(id){
+  const text=(actState.progDraft||'').trim();
+  if(!text)return toast('進度內容不能是空的','err');
+  const email=actMe();
+  const rec={id:actNewId(),text,by:email,byName:actName(email),at:new Date().toISOString()};
+  actState.progDraft='';actState.progFor=null;
+  actTodoMutate(list=>list.map(t=>{
+    if(t.id!==id)return t;
+    // 寫進度＝正在推它，「待處理」自動往前進一段；「等回覆」是刻意標的，不動它
+    const st=todoStatus(t);
+    return{...t,progress:[...(t.progress||[]),rec],status:st==='open'?'doing':(st==='done'?t.status:st)};
   }));
 }
 
@@ -213,13 +258,21 @@ function renderActivity(){
 
 // 遠端推播進來的重畫。整塊 innerHTML 換掉會把游標踢走、中文選字會被打斷，
 // 所以正在打字時先擱著，等游標離開輸入框再補畫（同事那邊寫了什麼不急這一秒）。
+// 這個分頁裡的哪個輸入框正在被用（新增待辦、加進度都算）
+function actTypingEl(){
+  const a=document.activeElement;
+  if(!a||!/^(INPUT|TEXTAREA)$/.test(a.tagName))return null;
+  return document.getElementById('act-wrap')?.contains(a)?a:null;
+}
 function renderActivityRemote(){
-  const inp=document.getElementById('act-todo-input');
-  if(inp&&document.activeElement===inp){actRenderPending=true;return;}
+  if(actTypingEl()){actRenderPending=true;return;}
   renderActivity();
 }
 document.addEventListener('focusout',e=>{
-  if(e.target&&e.target.id==='act-todo-input'&&actRenderPending)setTimeout(renderActivity,0);
+  if(!actRenderPending)return;
+  const el=e.target;
+  if(el&&/^(INPUT|TEXTAREA)$/.test(el.tagName)&&document.getElementById('act-wrap')?.contains(el))
+    setTimeout(()=>{if(!actTypingEl())renderActivity();},0);   // 從一個框跳到另一個框就先別畫
 },true);
 
 function actTodoHtml(){
@@ -233,7 +286,7 @@ function actTodoHtml(){
     <div class="sec-hd">待辦${open.length?`（${open.length}）`:''}<span class="sec-hd-line"></span>
       <button class="btn btns ${actState.adding?'':'btnp'}" style="flex-shrink:0" onclick="actToggleAdd()">${actState.adding?'收起':'＋ 新增待辦'}</button>
     </div>
-    <p class="set-card-sub">所有員工共用一張清單。誰都可以寫，看到自己要處理的就按「我來處理」把名字掛上（同一件事不會兩個人一起做），做完打勾。打勾的收在下面，紀錄留著。</p>
+    <p class="set-card-sub">所有員工共用一張清單。誰都可以寫，看到自己要處理的就按「我來處理」把名字掛上（同一件事不會兩個人一起做）。做到一半按「＋ 加進度」寫一行交代做到哪，下一個人接手就看得懂；卡在等家長回覆就按「等回覆」。做完打勾，收在下面、紀錄留著。</p>
     ${actState.adding?`
     <div class="act-add">
       <input id="act-todo-input" class="act-add-inp" value="${esc(actState.draft)}" placeholder="例：小明媽媽說要換時段，記得回電"
@@ -248,25 +301,81 @@ function actTodoHtml(){
   </div>`;
 }
 
+// 進度串：預設只露最後 2 筆（一則跑久了會很長），點「前面還有 N 筆」展開全部
+function actProgHtml(t){
+  const all=(t.progress||[]).slice().sort((a,b)=>(a.at||'')<(b.at||'')?-1:1);
+  if(!all.length)return'';
+  const expanded=actState.progAll===t.id;
+  const show=(expanded||all.length<=3)?all:all.slice(-2);
+  const hidden=all.length-show.length;
+  const items=show.map(p=>`
+    <div class="act-prog-item">
+      <div class="act-prog-meta">${fmtDT(new Date(p.at))} <b>${esc(p.byName)}</b></div>
+      <div class="act-prog-text">${esc(p.text)}</div>
+    </div>`).join('');
+  return`<div class="act-prog">
+    ${hidden>0?`<button class="act-prog-more" onclick="actProgAll('${esc(t.id)}')">▸ 前面還有 ${hidden} 筆</button>`:''}
+    ${expanded&&all.length>3?`<button class="act-prog-more" onclick="actProgAll('${esc(t.id)}')">▾ 收合</button>`:''}
+    ${items}
+  </div>`;
+}
+
 function actTodoRow(t){
   const me=actMe();
+  const st=todoStatus(t);
   const mine=t.claimedBy&&t.claimedBy===me;
   const claim=t.done?''
     :t.claimedBy
-      ?`<button class="act-claim ${mine?'mine':'taken'}" onclick="actTodoClaim('${esc(t.id)}')" title="${mine?'再按一次＝放掉，讓別人接手':'已有人認領'}">${esc(t.claimedName||'有人')} 處理中</button>`
+      ?`<button class="act-claim ${mine?'mine':'taken'}" onclick="actTodoClaim('${esc(t.id)}')" title="${mine?'再按一次＝放掉，讓別人接手':'已有人認領，按了會改掛你'}">${esc(t.claimedName||'有人')} 處理中</button>`
       :`<button class="act-claim" onclick="actTodoClaim('${esc(t.id)}')">我來處理</button>`;
   const meta=t.done
     ?`${esc(t.byName)} 寫於 ${fmtD(new Date(t.createdAt))} · <b>${esc(t.doneName||'')}</b> 於 ${fmtD(new Date(t.doneAt||t.createdAt))} 完成`
     :`${esc(t.byName)} 寫於 ${fmtD(new Date(t.createdAt))}`;
+  const acts=t.done?'':`
+    <button class="act-prog-btn" onclick="actProgOpen('${esc(t.id)}')">${actState.progFor===t.id?'收起':'＋ 加進度'}</button>
+    ${claim}
+    <button class="act-wait${st==='waiting'?' on':''}" onclick="actTodoSetStatus('${esc(t.id)}','waiting')" title="${st==='waiting'?'再按一次＝改回處理中':'卡在家長／外部回覆時標這個'}">等回覆</button>`;
   return`
-  <div class="act-todo${t.done?' done':''}">
+  <div class="act-todo st-${st}${t.done?' done':''}">
     <button class="act-check${t.done?' on':''}" onclick="actTodoDone('${esc(t.id)}')" title="${t.done?'取消完成':'標記完成'}">${t.done?'✓':''}</button>
     <div class="act-todo-body">
       <div class="act-todo-text">${esc(t.text)}</div>
-      <div class="act-todo-meta">${meta}</div>
+      <div class="act-todo-meta"><span class="act-status st-${st}">${ACT_ST[st]}</span>${meta}</div>
+      ${actProgHtml(t)}
+      ${actState.progFor===t.id?`
+      <div class="act-prog-add">
+        <input id="act-prog-input" class="act-add-inp" value="${esc(actState.progDraft)}" placeholder="做到哪了？例：已聯絡媽媽，要問過爸爸，週三前回覆"
+          oninput="actProgDraft(this.value)" onkeydown="if(enterSubmit(event))actTodoProgAdd('${esc(t.id)}')">
+        <button class="btn btns btnp" onclick="actTodoProgAdd('${esc(t.id)}')">記下來</button>
+      </div>`:''}
     </div>
-    <div class="act-todo-act">${claim}<button class="act-del" onclick="actTodoDelete('${esc(t.id)}')" title="刪掉這則">✕</button></div>
+    <div class="act-todo-act">${acts}<button class="act-del" onclick="actTodoDelete('${esc(t.id)}')" title="刪掉這則">✕</button></div>
   </div>`;
+}
+
+function actRowHtml(e){
+  const d=new Date(e.ts);
+  return`
+  <div class="act-row k-${esc(e.kind)}">
+    <span class="act-dot"></span>
+    <div class="act-row-body">
+      <div class="act-row-line"><b>${esc(e.byName)}</b> ${esc(e.text)}</div>
+      ${e.target||e.detail?`<div class="act-row-sub">${esc(e.target)}${e.target&&e.detail?' · ':''}${e.detail?`<span class="act-row-detail">${esc(e.detail)}</span>`:''}</div>`:''}
+    </div>
+    <div class="act-row-time">${fmtT(d)}</div>
+  </div>`;
+}
+
+// 某一天要不要展開。手動點過就照使用者的意思，沒點過就用預設：
+// 只有今天是攤開的，過去的日子收起來（老闆 2026-08-04 要求：跨過那天就自動收）。
+// 今天剛好沒動態時，改攤開最新的那一天——不然整頁都是收合的，看起來像壞掉。
+function actDayIsOpen(key,defKey){
+  const v=actState.dayOpen[key];
+  return v===undefined?key===defKey:v;
+}
+function actToggleDay(key,defKey){
+  actState.dayOpen[key]=!actDayIsOpen(key,defKey);
+  renderActivity();
 }
 
 function actFeedHtml(){
@@ -279,26 +388,31 @@ function actFeedHtml(){
   if(!actLoaded)body=`<div class="act-empty">載入中…</div>`;
   else if(!list.length)body=`<div class="act-empty">${actEvents.length?'這個分類還沒有紀錄。':'還沒有任何紀錄。從現在起，請假、排補課、加退學生、改課程時間都會自動記在這裡（只記從上線那天起發生的事，舊的補不回來）。'}</div>`;
   else{
-    let day='';
-    body=list.map(e=>{
-      const d=new Date(e.ts);
-      const dk=toDateStr(d);
-      const hd=dk!==day?(day=dk,`<div class="act-day">${actDayLabel(d)}</div>`):'';
-      return hd+`
-      <div class="act-row k-${esc(e.kind)}">
-        <span class="act-dot"></span>
-        <div class="act-row-body">
-          <div class="act-row-line"><b>${esc(e.byName)}</b> ${esc(e.text)}</div>
-          ${e.target||e.detail?`<div class="act-row-sub">${esc(e.target)}${e.target&&e.detail?' · ':''}${e.detail?`<span class="act-row-detail">${esc(e.detail)}</span>`:''}</div>`:''}
-        </div>
-        <div class="act-row-time">${fmtT(d)}</div>
+    // 依天分組（list 已是新→舊，所以組的順序也是新→舊）
+    const groups=[],at=new Map();
+    list.forEach(e=>{
+      const k=toDateStr(new Date(e.ts));
+      if(!at.has(k)){at.set(k,groups.length);groups.push({key:k,items:[]});}
+      groups[at.get(k)].items.push(e);
+    });
+    const today=toDateStr(new Date());
+    const defKey=at.has(today)?today:groups[0].key;
+    body=groups.map(g=>{
+      const open=actDayIsOpen(g.key,defKey);
+      return`<div class="act-day-grp">
+        <button class="act-day${open?' open':''}" onclick="actToggleDay('${g.key}','${defKey}')">
+          <span class="act-day-arrow">${open?'▾':'▸'}</span>
+          <span class="act-day-lbl">${actDayLabel(new Date(g.items[0].ts))}</span>
+          <span class="act-day-n">${g.items.length} 筆</span>
+        </button>
+        ${open?`<div class="act-day-body">${g.items.map(actRowHtml).join('')}</div>`:''}
       </div>`;
     }).join('');
   }
   return`
   <div class="set-card">
     <div class="sec-hd">系統動態<span class="sec-hd-line"></span></div>
-    <p class="set-card-sub">誰、什麼時候、對哪堂課做了什麼。系統自己記，不用人手動寫。保留最近 ${ACT_KEEP_DAYS} 天。</p>
+    <p class="set-card-sub">誰、什麼時候、對哪堂課做了什麼。系統自己記，不用人手動寫。<b>只有今天是攤開的</b>，過去的日子收起來，點日期那一列展開。保留最近 ${ACT_KEEP_DAYS} 天。</p>
     <div class="act-chips">${chips}</div>
     <div class="act-feed">${body}</div>
   </div>`;

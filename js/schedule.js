@@ -220,6 +220,9 @@ function _snapshotOccurrence(rec){
     durMins:Math.round((endDt-startDt)/60000),
     calId:null,calName:sn.calName||'一般課程',
     courseId:null,               // 沒有對應的系統課
+    // 回填過的話帶著（tools/backfill-courseid.js）。只給「這是不是同一門課」的比對用，
+    // 不寫進 courseId——那個欄位一旦有值，名冊反查、拖曳擋門員、成績判斷都會改走系統課路徑。
+    legacyCourseId:rec.courseId??null,
     isLegacyAbsence:true,        // 標記來源：走系統寫入路徑，但不長在今日/本週（那門課早已不排）
     ..._absFields(rec,roster),
   };

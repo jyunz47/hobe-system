@@ -104,11 +104,19 @@ function renderMakeup(){
     return`<span class="mk-badge mk-badge-student">學生請假</span>`;
   }
 
+  // 撤銷來源狀態：請假→取消請假、調課→取消調課（跟今日卡／週視窗同一套函式）
+  // 都跳置中視窗：單人＝確認、多人＝視窗裡挑要取消誰（見 absence.js cancelAbs）
+  function undoBtn(e){
+    if(e.absType==='調課')return`<button class="mk-btn-cancel" onclick="event.stopPropagation();cancelReschedule('${esc(e.id)}')">取消調課</button>`;
+    if(!e.isAbsent)return'';
+    return`<button class="mk-btn-cancel" onclick="event.stopPropagation();cancelAbs('${esc(e.id)}')">取消請假</button>`;
+  }
+
   function pendingCard(e){
     const d=e.startDt,de=e.endDt,color=calColor(e.calName);
     const mode=e.absType==='調課'?'reschedule':'makeup';
     const tutorB=needsMakeupDecision(e); // 課前1hr內、補/不補待確認（一對一家教 / 個別補課的一對二）
-    return`<div class="mk-list-card${tutorB?' mk-confirm':''}" onclick="openSlotPicker('${esc(e.id)}','${mode}')">
+    return`<div class="mk-list-card${tutorB?' mk-confirm':''}" id="mk-${esc(e.id)}" onclick="openSlotPicker('${esc(e.id)}','${mode}')">
       <div class="mk-list-bar" style="background:${color}"></div>
       <div class="mk-list-body">
         <div class="mk-list-top">
@@ -124,6 +132,7 @@ function renderMakeup(){
       </div>
       <div class="mk-list-actions">
         ${tutorB?`<button class="mk-btn-cancel" style="font-size:12px;padding:5px 10px;margin-left:0" onclick="event.stopPropagation();markMakeupSkip('${esc(e.id)}')">不補課</button>`:''}
+        ${undoBtn(e)}
         <button class="mk-btn-arrange" onclick="event.stopPropagation();openSlotPicker('${esc(e.id)}','${mode}')">安排</button>
       </div>
     </div>`;
@@ -131,7 +140,7 @@ function renderMakeup(){
 
   function skippedCard(e){
     const d=e.startDt,de=e.endDt,color=calColor(e.calName);
-    return`<div class="mk-list-card mk-completed">
+    return`<div class="mk-list-card mk-completed" id="mk-${esc(e.id)}">
       <div class="mk-list-bar" style="background:${color}"></div>
       <div class="mk-list-body">
         <div class="mk-list-top">
@@ -146,6 +155,7 @@ function renderMakeup(){
       </div>
       <div class="mk-list-actions">
         <button class="mk-btn-cancel" onclick="unmarkMakeupSkip('${esc(e.id)}')">改為補課</button>
+        ${undoBtn(e)}
       </div>
     </div>`;
   }
@@ -156,7 +166,7 @@ function renderMakeup(){
     const statusBadge=isCompleted
       ?`<span class="mk-badge mk-badge-done">✓ 已完成</span>`
       :`<span class="mk-badge mk-badge-arr">✓ 已安排</span>`;
-    return`<div class="mk-list-card${isCompleted?' mk-completed':' mk-arr'}">
+    return`<div class="mk-list-card${isCompleted?' mk-completed':' mk-arr'}" id="mk-${esc(e.id)}">
       <div class="mk-list-bar" style="background:${color}"></div>
       <div class="mk-list-body">
         <div class="mk-list-top">
@@ -177,6 +187,7 @@ function renderMakeup(){
           ${rec.room?`<span class="mk-dot">•</span><span>📍 ${esc(rec.room)}</span>`:''}
           ${!isCompleted?`<button class="mk-btn-cancel" onclick="event.stopPropagation();deleteMakeupScheduled('${esc(e.id)}')">取消安排</button>`:''}
         </div>
+        ${!isCompleted?`<div class="mk-list-undo">${undoBtn(e)}</div>`:''}
       </div>
     </div>`;
   }
@@ -619,6 +630,27 @@ async function deleteMakeupScheduled(originalId){
   }
   await Promise.all([loadToday(),loadWeek()]); // 場次從主頁課表移除
   renderMakeup();updateMakeupBadge();
+}
+
+// 取消請假後同步已排的補課（absence.js doCancel 呼叫）：
+// 沒人請假了 → 補課場次一併移除（不然主頁會留一場沒來由的課）；只撤部分人 → 補課名單跟著縮小。
+// 跟 cancelReschedule 的處置對齊（取消調課也會把已排時段撤掉）。
+function syncMakeupOnLeaveCancel(occId){
+  const prev=makeupMatchMap.get(occId);if(!prev)return;
+  const ab=getAbsences().find(a=>a.occId===occId);
+  const remain=((ab&&ab.leave)||[]).map(x=>x.name);
+  if(remain.length||(ab&&ab.resched)){
+    makeupMatchMap.set(occId,{...prev,absentStudents:remain});
+    driveData.makeupScheduled=getMakeupScheduledLS().map(x=>x.originalId===occId?{...x,absentStudents:remain}:x);
+    scheduleDriveSave();
+    return;
+  }
+  makeupMatchMap.delete(occId);
+  driveData.makeupScheduled=getMakeupScheduledLS().filter(x=>x.originalId!==occId);
+  scheduleDriveSave();
+  const s=new Date(prev.scheduledDate);
+  logAct('makeup',`取消${(prev.absentStudents||[]).length?` ${prev.absentStudents.join('、')} 的`:''}${prev.calName||'補課'}`,
+    `${fmtD(s)} ${fmtT(s)} ${prev.room||''} ${prev.origTitle||''}`.trim(),'原本的請假已取消，這場一併移除');
 }
 
 // 視窗縮放時重畫教室時間軸（無實際作用因 renderTL 是 no-op，但保留以維持原行為）

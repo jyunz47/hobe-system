@@ -19,8 +19,8 @@
 </head>
 <body>
 
-<h1>單元測試（enrollment.js + schedule.js + absence.js）</h1>
-<div class="hint">改 <code>js/enrollment.js</code>、<code>js/schedule.js</code> 或 <code>js/absence.js</code> 後，重新整理本頁即可看到所有測試結果。失敗的會用紅底顯示預期與實際差異。</div>
+<h1>單元測試（enrollment.js + schedule.js + absence.js + students.js）</h1>
+<div class="hint">改 <code>js/enrollment.js</code>、<code>js/schedule.js</code>、<code>js/absence.js</code> 或 <code>js/students.js</code> 後，重新整理本頁即可看到所有測試結果。失敗的會用紅底顯示預期與實際差異。</div>
 
 <div id="results"></div>
 
@@ -77,6 +77,21 @@ function saveMakeupScheduled(ev, sS, sE, room, calEventId, calName) {
 <script src="../js/dayview.js"></script>
 <script src="../js/courses.js"></script>
 <script src="../js/absence.js"></script>
+<script src="../js/makeup.js"></script>
+<script src="../js/students.js"></script>
+
+<!-- 1b. 測試用覆寫：makeup.js 帶著真身的 saveMakeupScheduled 進來，會蓋掉上面那顆記錄呼叫的
+     spy（dayview-move 的斷言靠 _mkCalls）。它載入之後再裝回去。 -->
+<script>
+function saveMakeupScheduled(ev, sS, sE, room, calEventId, calName) {
+  _mkCalls.push({ id: ev.id, students: ev.absentStudents, start: sS, end: sE, room, calName });
+  const list = getMakeupScheduledLS().filter(x => x.originalId !== ev.id);
+  list.push({ originalId: ev.id, origTitle: ev.origTitle, originalDate: ev.startDt.toISOString(),
+    scheduledDate: sS.toISOString(), scheduledEnd: sE.toISOString(), room, calName });
+  driveData.makeupScheduled = list;
+  makeupMatchMap.set(ev.id, { scheduledDate: sS.toISOString(), scheduledEnd: sE.toISOString(), room, calName });
+}
+</script>
 
 <!-- 2. 測試框架（會註冊 DOM 載入後自動跑） -->
 <script src="test-runner.js"></script>
@@ -86,6 +101,7 @@ function saveMakeupScheduled(ev, sS, sE, room, calEventId, calName) {
 <script src="dayview-move.test.js"></script>
 <script src="course-type.test.js"></script>
 <script src="leave-threshold.test.js"></script>
+<script src="student-stats.test.js"></script>
 
 </body>
 </html>

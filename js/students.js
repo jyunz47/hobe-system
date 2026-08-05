@@ -173,10 +173,19 @@ function getStudentStats(studentId,periodId){
   });
   const now=new Date();
   const pairs=absences.map(e=>({absence:e,makeup:scheduledMap.get(e.id)||null}));
+  // 按「哪一門課」分組，不是按課名字串：舊行事曆搬來的紀錄課名停在改年級之前
+  //（寫「高一數學班」但那批人現在在「高二數學班」），照字串分會把同一門課拆成兩列。
+  // 有課程編號就用編號（跟請假次數提醒同一套 courseKeyOf），沒有的舊紀錄才退回用課名。
+  // label＝現在的課名，這樣卡片上看到的跟課表、課程管理是同一個名字。
   const byCourse={};
   pairs.forEach(({absence:a,makeup:m})=>{
-    const c=a.origTitle;
-    if(!byCourse[c])byCourse[c]={total:0,owed:0,studentAbs:0,reschedules:0,teacherAbs:0,pairs:[],type:a.type};
+    const cid=courseKeyOf(a);
+    const c=cid!=null?'c:'+cid:'t:'+a.origTitle;
+    if(!byCourse[c]){
+      const co=cid!=null?findCourseById(cid):null;
+      byCourse[c]={total:0,owed:0,studentAbs:0,reschedules:0,teacherAbs:0,pairs:[],type:a.type,
+        label:co?courseNameOn(co,new Date()):a.origTitle};
+    }
     byCourse[c].total++;
     // 「不補課」（家教課前1hr內請假、確認不補）不算欠課
     if(!isMakeupSkipped(a)&&(!m||new Date(m.scheduledEnd)>=now))byCourse[c].owed++;
@@ -201,9 +210,11 @@ function getStudentStats(studentId,periodId){
   return{total:pairs.length,made:pairs.filter(p=>p.makeup&&new Date(p.makeup.scheduledEnd)<now).length,owed,pairs,byCourse,noShow,halfAdd,halfDeduct,pendingDecision};
 }
 
+// 多收費警示：2026-08-04 起不再限團班，與標記請假時跳的提醒視窗同範圍
+//（原本只有團班會亮，家教／一對二變成「標記當下講了、事後查不到」）
 function hasThresholdWarning(stats,pid){
   const t=getThreshold(pid||currentPeriodId);
-  return Object.values(stats.byCourse).some(c=>c.type==='group'&&c.studentAbs>=t);
+  return Object.values(stats.byCourse).some(c=>c.studentAbs>=t);
 }
 
 // ── 學生編輯 + modal 狀態 ──
@@ -232,7 +243,7 @@ function openStudentModal(id){
   document.getElementById('stu-modal-grade').textContent=s.grade;
   const period=getCurrentPeriod();
   const threshold=getThreshold(currentPeriodId);
-  const warnCourses=Object.entries(stats.byCourse).filter(([,c])=>c.type==='group'&&c.studentAbs>=threshold);
+  const warnCourses=Object.values(stats.byCourse).filter(c=>c.studentAbs>=threshold);
   const hasReschedules=Object.values(stats.byCourse).some(c=>c.reschedules>0);
   const leaveCnt=stats.pairs.filter(p=>p.absence.absType==='學生請假').length;
   const reschedCnt=stats.pairs.filter(p=>p.absence.absType==='調課').length;
@@ -247,16 +258,16 @@ function openStudentModal(id){
   // Per-course absence section
   body+=`<div><div class="stu-modal-sec-lbl">出缺勤（${period.label}）</div>`;
   if(warnCourses.length){
-    body+=`<div class="stu-modal-warn">⚠ ${warnCourses.map(([c])=>esc(c)).join('、')} 已達額外收費標準</div>`;
+    body+=`<div class="stu-modal-warn">⚠ ${warnCourses.map(c=>esc(c.label)).join('、')} 已達額外收費標準</div>`;
   }
   if(Object.keys(stats.byCourse).length){
     body+=`<table class="stu-course-tbl"><thead><tr><th>課程</th>${hasReschedules?'<th>調課</th>':''}<th>請假</th><th>欠課</th><th></th></tr></thead><tbody>`;
-    Object.entries(stats.byCourse).forEach(([course,c])=>{
-      const courseWarn=c.type==='group'&&c.studentAbs>=threshold;
+    Object.values(stats.byCourse).forEach(c=>{
+      const courseWarn=c.studentAbs>=threshold;
       // 該課的學生請假日期，接在課名後（資料來自實際 Calendar 請假，名字一定相符）
       const absDates=c.pairs.filter(p=>p.absence.absType==='學生請假').map(p=>`${p.absence.startDt.getMonth()+1}/${p.absence.startDt.getDate()}`);
       const dateStr=absDates.length?` <span style="color:var(--tx3);font-weight:400;font-size:11px">${absDates.join('、')}</span>`:'';
-      body+=`<tr${courseWarn?' class="warn-row"':''}><td>${esc(course)}${dateStr}</td>${hasReschedules?`<td>${c.reschedules||0}</td>`:''}<td>${c.studentAbs}</td><td>${c.owed}</td><td>${courseWarn?`<span class="warn-badge">⚠ 多收費</span>`:''}</td></tr>`;
+      body+=`<tr${courseWarn?' class="warn-row"':''}><td>${esc(c.label)}${dateStr}</td>${hasReschedules?`<td>${c.reschedules||0}</td>`:''}<td>${c.studentAbs}</td><td>${c.owed}</td><td>${courseWarn?`<span class="warn-badge">⚠ 多收費</span>`:''}</td></tr>`;
     });
     body+=`</tbody></table>`;
     if(stats.owed>0)body+=`<div class="stu-modal-total">欠課合計：${stats.owed} 堂</div>`;

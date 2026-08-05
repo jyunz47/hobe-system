@@ -1,5 +1,5 @@
 // 桌面日曆（Apple 風行事曆）：Day／Week／Month 三種檢視、垂直時間軸＋彩色課程塊、
-// 重疊的課往下錯開（每堂都露得出課名）、日檢視可「依教室分欄」、空白處點兩下新增課程、亮／深色切換。
+// 重疊的課等寬並排不互相蓋住（可按 ⊞ 攤成橫列）、日檢視可「依教室分欄」、空白處點兩下新增課程、亮／深色切換。
 //
 // 資料一律現算：由 schedule.js 的展開器（系統課表＋補課場次）依當前檢視的日期範圍展開，
 // 不依賴 today.js 的 dayEvents，所以週／月檢視翻到任何一週都拿得到課。
@@ -173,52 +173,51 @@ function dvLoadEvents(){
   return {start,end};
 }
 
-// ── 重疊的課：往下錯開，讓每堂的課名都露得出來（2026-08-03 改；原本是往右縮排）──
-// 舊做法是 Apple 的往右縮排疊放，好看，但被蓋住的那幾堂只露出左邊一小條（密集時只有二三十
-// px 寬），塞不下課名——看得出「疊了幾堂」卻看不出「是哪幾堂」。
+// ── 重疊的課：等寬並排、互不重疊（Google 行事曆的做法）──
+// 1. 分群：時間上連在一起的課歸成一群（transitive overlap）
+// 2. 群內貪婪配「欄」：每堂放進第一個放得下的欄 → 欄數 n＝這一群同時段最多幾堂
+// 3. 每堂寬度＝欄寬（100/n），左邊位置＝欄序 × 欄寬 → 誰都不會被蓋住
+// 4. 再「往右擴張」：右邊那幾欄在這堂的時間內沒人佔，就把寬度吃過去。少了這步，一群裡只要
+//    有一個時段特別擠，整群（含前後只有一兩堂的時段）都會被切成一樣細的長條
 //
-// 改成往下錯開：先分群（transitive overlap），群內依開始時間排序，逐一保證「這一堂的上緣至少
-// 比前一堂低 DV_LAP_GAP px」——那個高度剛好放得下一行課名。課塊一律滿欄寬，所以每堂露出的
-// 那條橫帶裡就是它自己的左側顏色條＋完整課名。
-//
-// 「至少」是關鍵：時間本來就錯開夠多的課完全不動（例：9–11 與 10–12 疊在一起，第二堂本來
-// 就在下面 62px，不會被再推），只有真的同時段（或只差幾分鐘）的才被往下推。被推的那幾堂
-// 底部維持在真實結束時間，所以高度跟著縮短，整組還是佔住原本的時間範圍。
-var DV_LAP_GAP=20;    // 疊在一起時每堂露出的高度（＝一行課名）
-var DV_LAP_GAP_MIN=17;// 群組高度不夠時可以縮到這麼小（再小課名就被切到）
-var DV_LAP_MIN=20;    // 被推到最下面那堂的最小高度（擠不下時寧可往下溢出，也不要壓成一條線）
-
-function _dvStackLayout(items,axisStart){
+// 沿革（2026-08-03 同一天內試過三種，老闆最後選這個）：原本是 Apple cascade 疊法（往右縮排、
+// 後者疊在前者上，被蓋住的看不到課名）→ 往下錯開＋滿欄寬（課塊左右佔滿，視覺太滿）→ 等寬並排。
+function _dvLayout(items,axisStart){
   items.sort((a,b)=>a.s-b.s||b.en-a.en);
   const clusters=[];let cur=[],curEnd=-1;
   for(const it of items){if(cur.length&&it.s>=curEnd){clusters.push(cur);cur=[];curEnd=-1;}cur.push(it);curEnd=Math.max(curEnd,it.en);}
   if(cur.length)clusters.push(cur);
   for(const cl of clusters){
-    // 錯開的間距：群組塞得下就用 20px，塞不下就縮（下限 17px），盡量讓整組待在自己的時間範圍內。
-    // 例：17:30–19:00（93px）併 5 堂 → 間距 18.25px，最後一堂剛好還有 20px 高，不會溢出
-    const ct=(Math.min(...cl.map(x=>x.s))-axisStart)/60*DV_HOUR_H;
-    const cb=(Math.max(...cl.map(x=>x.en))-axisStart)/60*DV_HOUR_H;
-    const gap=cl.length>1
-      ?Math.max(DV_LAP_GAP_MIN,Math.min(DV_LAP_GAP,(cb-ct-DV_LAP_MIN)/(cl.length-1)))
-      :DV_LAP_GAP;
-    let prev=-Infinity;
-    cl.forEach((it,i)=>{
-      const rt=(it.s-axisStart)/60*DV_HOUR_H,rb=(it.en-axisStart)/60*DV_HOUR_H;
-      it.top=Math.max(rt,prev+gap);
-      it.hgt=Math.max(rb-it.top,DV_LAP_MIN);
-      it.lv=i;                       // 疊放先後（z-index）：後開始的疊在前面上
-      it.left=0;it.width=100;
-      it.ck=cl[0].e.id;              // 群組代號（見 _dvStacks）
-      prev=it.top;
+    const colEnd=[];
+    for(const it of cl){
+      let placed=false;
+      for(let i=0;i<colEnd.length;i++){if(it.s>=colEnd[i]){it.lv=i;colEnd[i]=it.en;placed=true;break;}}
+      if(!placed){it.lv=colEnd.length;colEnd.push(it.en);}
+    }
+    const n=colEnd.length,colW=100/n;
+    cl.forEach(it=>{
+      let span=1;                            // 往右能多吃幾欄（碰到有人佔就停）
+      for(let j=it.lv+1;j<n;j++){
+        if(cl.some(o=>o.lv===j&&o.s<it.en&&o.en>it.s))break;
+        span++;
+      }
+      it.top=(it.s-axisStart)/60*DV_HOUR_H;
+      it.hgt=Math.max((it.en-it.s)/60*DV_HOUR_H,22);
+      it.left=it.lv*colW;it.width=span*colW;
+      it.ck=cl[0].e.id;                      // 群組代號（見 _dvStacks）
     });
   }
   return items;
 }
 
 // ── 重疊群組的 ⊞ 展開／⊟ 收合 ──
-// 往下錯開後每堂都露得出課名，但被壓住的那幾堂只看得到第一行（沒有時間、教室、老師那排）。
-// 所以**每個重疊群組**（≥2 堂）右上角都給一顆 `⊞ N`：按下去整組改成等高的橫列，每堂完整
-// 課名＋開始時間一次看完；再按一次（`⊟`）疊回去。時段太短又併太多堂、錯不開的時候特別有用。
+// 等寬並排下誰都不會被蓋住，但同時段一多每堂就被切得很細，課名只剩前兩個字。所以**每個重疊
+// 群組**（≥2 堂）右上角都給一顆 `⊞ N`：按下去整組改成橫列，完整課名＋開始時間一次看完；
+// 再按一次（`⊟`）排回去。（滑鼠移過去也會把那一堂浮到最上層。）
+//
+// 排法＝**一個開始時間一列**，同一時間開始的課平分那一列的寬度。16 堂只有 7 個不同的開始
+// 時間，就只排 7 列——比一堂一列省下一半以上的高度，整組通常塞得回原本的時間範圍裡。
+//
 // 展開只是「看」的模式——橫列的垂直位置是把群組時間範圍均分出來的，不代表真實時間，
 // 所以展開中的那幾堂不給拖曳（拖了會以為在改時間，其實起點就對不上）。
 var DV_STACK_ROW=22;          // 展開後每列的最小高度（太多堂時整組會往下長一點）
@@ -241,8 +240,17 @@ function _dvStacks(items,axisStart){
     const top=(s0-axisStart)/60*DV_HOUR_H;
     list.forEach(it=>{it.badged=true;});                        // ↻ 標記讓位給群組右上角的 ⊞ 鈕
     if(open){
-      const h=Math.max((e0-s0)/60*DV_HOUR_H/list.length,DV_STACK_ROW);
-      list.forEach((it,i)=>{it.px={top:top+i*h,hgt:h};dvStackRows.add(it.e.id);});
+      // 依開始時間分列（list 已依開始時間排好），同一列的課平分寬度
+      const rows=[];
+      list.forEach(it=>{
+        const r=rows[rows.length-1];
+        if(r&&r[0].s===it.s)r.push(it);else rows.push([it]);
+      });
+      const h=Math.max((e0-s0)/60*DV_HOUR_H/rows.length,DV_STACK_ROW);
+      rows.forEach((row,i)=>{
+        const w=100/row.length;
+        row.forEach((it,k)=>{it.px={top:top+i*h,hgt:h,left:k*w,width:w};dvStackRows.add(it.e.id);});
+      });
     }
     out.push({key,n:list.length,top:Math.max(0,top),open});
   });
@@ -272,10 +280,13 @@ function _dvHoursHtml(h0,h1){
 // ── 單一課塊的 HTML（day／week 共用）──
 function _dvEvHtml(it,axisStart,isToday,now){
   const e=it.e;
-  // 位置在 _dvStackLayout 就算好了（重疊時往下錯開）；it.px＝這堂正被畫成「展開的橫列」
+  // 位置在 _dvLayout 就算好了（重疊時等寬並排）；it.px＝這堂正被畫成「展開的橫列」
+  // ⚠️ 橫列的左右也要吃 it.px（一列裡同時段的課平分寬度），不能沿用並排版面算出來的窄寬度，
+  //    不然整組會變成一串斜著往下排的小方塊（2026-08-03 踩過）
   const rowMode=!!it.px;
   const top=rowMode?it.px.top:it.top;
   const hgt=Math.max(rowMode?it.px.hgt:it.hgt,22);
+  const left=rowMode?it.px.left:it.left,width=rowMode?it.px.width:it.width;
   const faded=e.isFullAbsent||e.isRescheduled;
   const {bar,txt,bg}=_dvColors(e.calName,faded);
   let stat='';if(!faded&&isToday){if(now>=e.endDt)stat='past';else if(now>=e.startDt)stat='now';}
@@ -296,13 +307,13 @@ function _dvEvHtml(it,axisStart,isToday,now){
   const meta=(hgt>=42&&sub.length)?`<div class="dv-ev-meta">${sub.join(' · ')}</div>`:'';
   // 展開的橫列可能只有一行高，時間就併進標題（不然只剩課名，看不出誰先誰後）
   const tm=rowMode?`<span class="dv-ev-time">${_dvAP(e.startDt)}</span>`:'';
-  return`<div class="${cls}" data-id="${esc(e.id)}" style="top:${top}px;height:${hgt-2}px;left:calc(${it.left.toFixed(2)}% + 2px);width:calc(${it.width.toFixed(2)}% - 4px);z-index:${rowMode?25:2+(it.lv||0)};border-left-color:${bar};background:${bg};color:${txt}" onpointerdown="dvDragStart(event,'${esc(e.id)}')" onclick="dvEvClick(event,'${esc(e.id)}')" ondblclick="dvEvDbl(event,'${esc(e.id)}')" title="${esc(e.origTitle)}${movable?'（可拖曳改時間）':''}">`
+  return`<div class="${cls}" data-id="${esc(e.id)}" style="top:${top}px;height:${hgt-2}px;left:calc(${left.toFixed(2)}% + 2px);width:calc(${width.toFixed(2)}% - 4px);z-index:${rowMode?25:2+(it.lv||0)};border-left-color:${bar};background:${bg};color:${txt}" onpointerdown="dvDragStart(event,'${esc(e.id)}')" onclick="dvEvClick(event,'${esc(e.id)}')" ondblclick="dvEvDbl(event,'${esc(e.id)}')" title="${esc(e.origTitle)}${movable?'（可拖曳改時間）':''}">`
     +`${isRepeat&&!rowMode?`<span class="dv-ev-rep" style="color:${bar}">↻</span>`:''}`
     +`<div class="dv-ev-title${faded?' struck':''}">${tm}${esc(e.origTitle)}${badge}</div>${meta}</div>`;
 }
 
 // ── 分欄時間軸（day 與 week 共用）──
-// cols：[{date, room, evs}]；每欄各自算疊放，欄背景點兩下＝在那個日期／時間／教室新增課程
+// cols：[{date, room, evs}]；每欄各自算版面，欄背景點兩下＝在那個日期／時間／教室新增課程
 function _dvRenderColumns(cols,axis){
   const grid=document.getElementById('dv-grid');
   const {h0,h1}=axis,axisStart=h0*60,totalH=(h1-h0)*DV_HOUR_H;
@@ -315,7 +326,7 @@ function _dvRenderColumns(cols,axis){
   let colsHtml='';
   cols.forEach((c,i)=>{
     const isToday=_dvSameDay(c.date,today);
-    const items=_dvStackLayout(c.evs.map(e=>({e,s:e.startDt.getHours()*60+e.startDt.getMinutes(),en:e.endDt.getHours()*60+e.endDt.getMinutes()})),axisStart);
+    const items=_dvLayout(c.evs.map(e=>({e,s:e.startDt.getHours()*60+e.startDt.getMinutes(),en:e.endDt.getHours()*60+e.endDt.getMinutes()})),axisStart);
     const stacks=_dvStacks(items,axisStart);   // 要先跑：展開中的群組會改寫課塊幾何
     const evHtml=items.map(it=>_dvEvHtml(it,axisStart,isToday,now)).join('');
     const stackHtml=stacks.map(s=>`<div class="dv-stack${s.open?' on':''}" style="top:${s.top.toFixed(1)}px" onclick="event.stopPropagation();dvToggleStack('${esc(s.key)}')" title="${s.open?'收合，疊回原本的時間位置':`這個時段有 ${s.n} 堂課疊在一起，點開看是哪幾堂`}">${s.open?'⊟':'⊞&nbsp;'+s.n}</div>`).join('');

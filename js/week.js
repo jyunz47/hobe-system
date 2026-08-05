@@ -177,7 +177,6 @@ function closeWeekModal(){
   document.getElementById('week-modal').classList.remove('open');
   document.querySelectorAll('.week-course.selected').forEach(el=>el.classList.remove('selected'));
   document.querySelectorAll('.abs-panel.open').forEach(p=>p.classList.remove('open'));
-  document.querySelectorAll('[id^="cancel-picker-"]').forEach(p=>p.remove());
   selectedWeekEvent=null;
   // 桌面日曆側欄 inspector：視窗裡點名／登成績後，關掉視窗要看到最新狀態
   if(typeof renderDvInspector==='function')renderDvInspector();
@@ -295,8 +294,12 @@ async function confirmReschedule(id){
 }
 
 // 取消調課：清調課旗標（已排的新時段一併取消），紀錄清空即刪
+// 跟取消請假一樣先跳置中視窗（2026-08-04）——以前是按了就走，已排好的新時段會無聲消失
 async function cancelReschedule(id){
   const ev=findEventById(id);if(!ev)return;
+  if(!await uiConfirm({title:'取消調課',
+    html:`要取消這堂的調課嗎？<div class="ask-sub">${esc(actEvLabel(ev))}</div>${makeupWarnHtml(id,true)}`,
+    ok:'確認取消調課',danger:true}))return;
   let list=getAbsences().slice();
   const rec=list.find(a=>a.occId===id);
   if(rec){
@@ -309,4 +312,5 @@ async function cancelReschedule(id){
   toast('已取消調課','ok');
   closeWeekModal();
   await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
+  refreshMakeupPanel(); // 從待補課清單按的話，那張卡要當場消失
 }

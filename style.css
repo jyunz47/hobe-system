@@ -93,6 +93,7 @@ input[type=date]:focus{border-color:var(--ac)}
 .ask-list{background:var(--sf2);border:1px solid var(--br);border-radius:var(--rs);padding:9px 12px;margin:0 0 10px;font-size:13px;color:var(--tx2);line-height:1.8}
 .ask-note{background:var(--sf2);border-left:3px solid var(--ac);border-radius:8px;padding:9px 12px;font-size:12.5px;color:var(--tx2);line-height:1.7}
 .ask-note.ask-warn{background:var(--dl);border-left-color:#C0504A;color:var(--dg)}
+.ask-sub{font-size:12.5px;color:var(--tx2);margin-top:4px}   /* 確認視窗裡那行「哪一天哪堂課」 */
 
 /* Absence panel */
 .abs-panel{display:none;border-top:1px solid var(--br);background:var(--sf2);padding:14px 15px}
@@ -248,7 +249,8 @@ input[type=date]:focus{border-color:var(--ac)}
 .mk-list-makeup{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12px;color:var(--tx2);border:1px solid var(--br);border-radius:var(--rs);padding:5px 10px;margin-top:6px}
 .mk-list-makeup-lbl{font-weight:600}
 .mk-dot{color:var(--tx3)}
-.mk-list-actions{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:6px;padding:8px 10px;flex-shrink:0}
+.mk-list-actions{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:6px;padding:8px 10px;flex-shrink:0;flex-wrap:wrap}
+.mk-list-undo{display:flex;justify-content:flex-end;margin-top:4px}
 .mk-list-chevron{display:flex;align-items:center;padding:0 12px;color:var(--tx3);font-size:11px;flex-shrink:0}
 .mk-btn-arrange{font-size:12px;padding:5px 10px;background:var(--ac);color:#fff;border:none;border-radius:var(--rs);cursor:pointer;white-space:nowrap;font-family:'Noto Sans TC',sans-serif}
 .mk-btn-arrange:hover{background:#5C7E6A}
@@ -1178,6 +1180,29 @@ body:has(#panel-login.active) .content{padding:0}
 .ni.has-new .ni-txt::after{content:"";display:inline-block;width:6px;height:6px;margin-left:6px;border-radius:50%;background:#D38A5D;vertical-align:middle}
 .ni.has-new.active .ni-txt::after{background:#2A1A0E}
 
+/* 待辦狀態與進度串（接力用，2026-08-03）*/
+.act-status{display:inline-block;padding:1px 8px;margin-right:8px;border-radius:99px;font-size:11px;font-weight:500;border:1px solid transparent}
+.act-status.st-open{background:var(--sf2);color:var(--tx2);border-color:var(--brd)}
+.act-status.st-doing{background:var(--al);color:var(--am);border-color:var(--ac)}
+.act-status.st-waiting{background:var(--wl);color:var(--wn);border-color:var(--wn)}
+.act-status.st-done{background:var(--sf2);color:var(--tx3);border-color:var(--br)}
+/* 卡在等回覆的用左緣色條標出來，一排掃過去看得到哪幾件不是我們不做 */
+.act-todo.st-waiting{border-left:3px solid var(--wn)}
+.act-todo.st-doing{border-left:3px solid var(--ac)}
+
+.act-prog{margin-top:8px;padding-left:11px;border-left:2px solid var(--br);display:flex;flex-direction:column;gap:7px}
+.act-prog-item{font-size:12.5px;line-height:1.55}
+.act-prog-meta{font-size:11px;color:var(--tx3);font-family:'DM Mono',monospace}
+.act-prog-meta b{font-family:'Noto Sans TC',sans-serif;color:var(--tx2);font-weight:500}
+.act-prog-text{color:var(--tx);word-break:break-word}
+.act-prog-more{align-self:flex-start;padding:1px 0;border:none;background:none;color:var(--tx3);font-family:'Noto Sans TC',sans-serif;font-size:11.5px;cursor:pointer}
+.act-prog-more:hover{color:var(--tx2)}
+.act-prog-add{display:flex;gap:8px;margin-top:9px}
+.act-prog-btn,.act-wait{padding:4px 11px;border:1px solid var(--brd);border-radius:99px;background:var(--sf);color:var(--tx2);font-family:'Noto Sans TC',sans-serif;font-size:11.5px;cursor:pointer;white-space:nowrap;transition:all .12s}
+.act-prog-btn:hover{border-color:var(--ac);color:var(--ac)}
+.act-wait:hover{border-color:var(--wn);color:var(--wn)}
+.act-wait.on{background:var(--wl);border-color:var(--wn);color:var(--wn);font-weight:500}
+
 /* 動態：分類 chips */
 .act-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px}
 .act-chip{padding:4px 12px;border:1px solid var(--brd);border-radius:99px;background:var(--sf);color:var(--tx2);font-family:'Noto Sans TC',sans-serif;font-size:12px;cursor:pointer;transition:all .12s}
@@ -1186,8 +1211,16 @@ body:has(#panel-login.active) .content{padding:0}
 
 /* 動態：時間軸 */
 .act-feed{display:flex;flex-direction:column}
-.act-day{font-size:11.5px;font-weight:600;color:var(--tx3);letter-spacing:.02em;padding:14px 0 7px;border-bottom:1px solid var(--br);margin-bottom:4px}
-.act-feed .act-day:first-child{padding-top:0}
+.act-day-grp{display:flex;flex-direction:column}
+/* 日期那一列＝可點的收合開關（老闆 2026-08-04：只有今天攤開，過去的點一下才展開）*/
+.act-day{display:flex;align-items:center;gap:7px;width:100%;padding:11px 2px 7px;border:none;border-bottom:1px solid var(--br);background:none;cursor:pointer;text-align:left;font-family:'Noto Sans TC',sans-serif;font-size:11.5px;font-weight:600;color:var(--tx3);letter-spacing:.02em;transition:color .12s}
+.act-day:hover{color:var(--tx)}
+.act-day-arrow{width:9px;flex-shrink:0;color:var(--tx3)}
+.act-day-lbl{flex:1}
+.act-day-n{font-family:'DM Mono',monospace;font-weight:400;color:var(--tx3)}
+.act-day.open{color:var(--tx2)}
+.act-day-body{padding-top:4px}
+.act-feed .act-day-grp:first-child .act-day{padding-top:0}
 .act-row{display:flex;align-items:flex-start;gap:10px;padding:8px 2px}
 .act-dot{flex-shrink:0;width:7px;height:7px;margin-top:7px;border-radius:50%;background:var(--tx3)}
 .act-row.k-absence .act-dot{background:var(--dg)}

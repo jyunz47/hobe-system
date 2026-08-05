@@ -70,7 +70,6 @@ function toggleAbsPanelWeek(id){
   const isOpen=panel.classList.contains('open'); // 先判斷再清，否則永遠收不起來
   // 收掉所有面板（調課、點名、成績），確保 modal 裡一次只開一塊
   document.querySelectorAll('.abs-panel.open').forEach(p=>p.classList.remove('open'));
-  document.querySelectorAll('[id^="cancel-picker-"]').forEach(p=>p.remove());
   const rp=document.getElementById('rp-'+id);if(rp)rp.style.display='none';
   closeEventPanels(id,'abs');
   if(isOpen)return; // 本來開著 → 收合即可
@@ -81,7 +80,6 @@ function toggleAbsPanelWeek(id){
 
 function toggleAbsPanel(id,ctx){
   document.querySelectorAll('.abs-panel.open').forEach(p=>p.classList.remove('open'));
-  document.querySelectorAll('[id^="cancel-picker-"]').forEach(p=>p.remove());
   const panel=document.getElementById('absp-'+id);if(!panel)return;
   const isOpen=panel.classList.contains('open');
   if(isOpen){panel.classList.remove('open');return;}
@@ -221,13 +219,29 @@ function logAbsenceAct(ev,state){
 // 同事馬上知道要跟家長講收費。計數口徑跟那個標籤一致：只算「學生自己請假」
 //（調課、老師請假、曠課都不算，因為 leave[] 裡本來就只有請假的人），同一門課、同一期別內累計。
 // 期別看「這堂課的日期」落在哪期，不是學生頁上面選的分頁。
-function countStudentLeaves(courseId,studentId,name,period,excludeOccId){
-  if(courseId==null||!period)return 0;
-  return getAbsences().filter(a=>{
-    if(a.courseId!==courseId||a.occId===excludeOccId)return false;
-    const d=new Date(a.date);
-    if(d<period.start||d>period.end)return false;
-    return (a.leave||[]).some(x=>(studentId!=null&&x.studentId!=null)?x.studentId===studentId:x.name===name);
+// 「同一門課」怎麼認：兩邊都認得出課程編號就比編號（課程改名也對得上），
+// 否則退回比課名。會沒有編號的是補課/調課場次與舊行事曆搬遷的快照紀錄；
+// 後者回填過就有 legacyCourseId（見 tools/backfill-courseid.js）。
+// ⚠ 退回比課名時，同名的不同課會被當成同一門（例如三門都叫「國二數學班」）→ 次數會多算。
+function courseKeyOf(e){return e.courseId??e.legacyCourseId??null;}
+function sameCourseAs(a,b){
+  const ka=courseKeyOf(a),kb=courseKeyOf(b);
+  return(ka!=null&&kb!=null)?ka===kb:(a.origTitle||'')===(b.origTitle||'');
+}
+// 這位學生在這門課、這個期別內請過幾次假。
+// 資料源用 makeupList（＝學生卡片「⚠ 多收費」讀的同一份），兩邊數字才對得起來；
+// 名單比對優先用 studentId（從原始紀錄取），同名學生不互相污染，舊紀錄沒 id 才退回比名字。
+function countStudentLeaves(ev,studentId,name,period,excludeOccId){
+  if(!period)return 0;
+  const recByOcc=new Map(getAbsences().map(a=>[a.occId,a]));
+  return makeupList.filter(e=>{
+    if(e.id===excludeOccId)return false;
+    if(!e.startDt||e.startDt<period.start||e.startDt>period.end)return false;
+    if(e.absType!=='學生請假')return false;   // 調課、老師請假不算；純曠課的 absType 是空字串
+    if(!sameCourseAs(e,ev))return false;
+    const leave=(recByOcc.get(e.id)||{}).leave;
+    return leave?leave.some(x=>(studentId!=null&&x.studentId!=null)?x.studentId===studentId:x.name===name)
+                :(e.absentStudents||[]).includes(name);
   }).length;
 }
 
@@ -240,7 +254,7 @@ function leaveThresholdWarnings(ev,state){
   const idOf=new Map(eventRosterWithId(ev).map(r=>[r.name,r.studentId]));
   const newOnes=state.type==='student-auto'?ev.students.slice(0,1):(state.students||[]);
   return newOnes
-    .map(n=>({name:n,count:countStudentLeaves(ev.courseId,idOf.get(n)??null,n,period,ev.id)+1}))
+    .map(n=>({name:n,count:countStudentLeaves(ev,idOf.get(n)??null,n,period,ev.id)+1}))
     .filter(x=>x.count>=threshold)
     .map(x=>Object.assign(x,{period,threshold}));
 }
@@ -277,64 +291,60 @@ async function confirmAbs(id,sfx){
 }
 
 // ── 取消請假流程 ──
-function cancelAbs(id){
+// 2026-08-04 起一律跳置中視窗（跟課卡其他動作同一個手感，也不用管這顆鈕長在哪一頁）：
+// 單人／老師請假＝確認視窗，多人＝視窗裡挑要取消誰。原本插在卡片下方的選人面板已拿掉。
+async function cancelAbs(id){
   document.querySelectorAll('.abs-panel.open').forEach(p=>p.classList.remove('open'));
-  document.querySelectorAll('[id^="cancel-picker-"]').forEach(p=>p.remove());
   const ev=findEventById(id);if(!ev)return;
   if(ev.type==='one'||ev.absentStudents.length<=1){
-    doCancel(id,ev,[]);
+    await doCancel(id,ev,[]);
     return;
   }
-  showCancelPicker(ev);
+  const picked=await pickUndoStudents(ev.absentStudents,{
+    title:'取消請假',lbl:'選擇要取消請假的學生（可多選）',ok:'確認取消請假',
+    extra:makeupWarnHtml(id,false)});
+  if(picked)await doCancel(id,ev,picked,true);
 }
 
-function showCancelPicker(ev){
-  const id=ev.id;
-  const existing=document.getElementById('cancel-picker-'+id);
-  if(existing){existing.classList.toggle('open');return;}
-  const card=document.getElementById('cc-'+id)||document.getElementById('wc-'+id);
-  if(!card)return;
-  const picker=document.createElement('div');
-  picker.id='cancel-picker-'+id;
-  picker.className='abs-panel open';
-  picker.style.borderTop='1px solid var(--br)';
-  picker.style.gridColumn='1/-1'; // 今日課程是兩欄格線（.tgrid），佔滿整列才不會跑到卡片旁邊
-  picker.innerHTML=`
-    <div class="abs-title">選擇要取消請假的學生</div>
-    <div class="stu-chips" id="cancel-chips-${esc(id)}">${
-      ev.absentStudents.map(s=>`<div class="stu-chip" data-name="${esc(s)}" onclick="this.classList.toggle('checked')">${esc(s)}</div>`).join('')
-    }</div>
-    <div class="abs-confirm" style="margin-top:10px">
-      <div class="abs-preview" style="font-size:12px;color:var(--tx2)">取消選取學生的請假狀態</div>
-      <button class="btn btns" onclick="document.getElementById('cancel-picker-${esc(id)}').remove();document.getElementById('cc-${esc(id)}')?.classList.remove('card-active');closeWeekModal()">取消</button>
-      <button class="btn btns btnp" onclick="confirmCancel('${esc(id)}')">確認取消請假</button>
-    </div>`;
-  const weekModal=document.getElementById('week-modal');
-  const absWeekPanel=document.getElementById('absp-w-'+id);
-  const absTodayPanel=document.getElementById('absp-'+id);
-  if(weekModal&&weekModal.classList.contains('open')&&selectedWeekEvent===id&&absWeekPanel){
-    absWeekPanel.after(picker);
-  } else if(absTodayPanel){
-    absTodayPanel.after(picker);
-  } else if(card){
-    card.after(picker);
+// 視窗裡的選人器（取消請假／取消曠課共用）：沒勾人不關視窗、勾好的不會因為提示而不見
+async function pickUndoStudents(names,o){
+  let sel=[];
+  for(;;){
+    const chips=names.map(s=>`<div class="stu-chip${sel.includes(s)?' checked':''}" data-name="${esc(s)}" onclick="this.classList.toggle('checked')">${esc(s)}</div>`).join('');
+    const ok=await uiConfirm({title:o.title,ok:o.ok,danger:true,
+      html:`<div class="abs-title" style="margin-bottom:8px">${o.lbl}</div>
+        <div class="stu-chips" id="ask-pick-chips">${chips}</div>${o.extra||''}`});
+    if(!ok)return null;
+    sel=[...document.querySelectorAll('#ask-pick-chips .stu-chip.checked')].map(el=>el.dataset.name);
+    if(sel.length)return sel;
+    toast('請至少選一位學生','inf');
   }
 }
 
-async function confirmCancel(id){
-  const ev=findEventById(id);if(!ev)return;
-  const picker=document.getElementById('cancel-picker-'+id);if(!picker)return;
-  const toCancel=[...picker.querySelectorAll('.stu-chip.checked')].map(el=>el.dataset.name);
-  if(toCancel.length===0){toast('請選擇要取消請假的學生','inf');return;}
-  picker.remove();
-  doCancel(id,ev,toCancel);
+// 已排好的補課／調課會被連帶撤掉 → 確認視窗裡要講清楚是哪一場
+// definite=true：這次一定會撤（單人取消）；false：要看等下勾了誰（多人選人器）
+function makeupWarnHtml(id,definite){
+  const rec=findMakeupScheduledById(id);if(!rec)return'';
+  const s=new Date(rec.scheduledDate);
+  const what=esc(rec.calName||'補課');
+  return`<div class="ask-note ask-warn" style="margin-top:12px">⚠ 這堂已排好${what}：<b>${fmtD(s)} ${fmtT(s)}${rec.room?'　'+esc(rec.room):''}</b><br>${definite?`取消後這場${what}會一併移除。`:`若取消後沒人請假，這場${what}會一併移除。`}</div>`;
 }
 
 // 取消請假：從請假紀錄移除（保留曠課群組），紀錄清空即刪整筆
-async function doCancel(id,ev,cancelStudents){
+// preConfirmed：多人選人器本身就是確認視窗，不用再問第二次
+async function doCancel(id,ev,cancelStudents,preConfirmed){
   const clearAll=(cancelStudents.length===0||ev.type==='one');
   // 動態要記「取消了誰的請假」——名單得在改資料之前先抄下來
   const undone=clearAll?(ev.absType==='老師請假'?['老師']:(ev.absentStudents||[])):cancelStudents;
+  // 取消後還有沒有人請假：全清空的話，已排好的補課會跟著撤（確認視窗要寫出來）
+  const remainAfter=clearAll?[]:(ev.absentStudents||[]).filter(n=>!cancelStudents.includes(n));
+  if(!preConfirmed){
+    const whoTxt=ev.absType==='老師請假'?'老師請假':`${undone.join('、')} 的請假`;
+    const warn=(!remainAfter.length&&!ev.isRescheduled)?makeupWarnHtml(id,true):'';
+    if(!await uiConfirm({title:'取消請假',
+      html:`要取消 <b>${esc(whoTxt)}</b> 嗎？<div class="ask-sub">${esc(actEvLabel(ev))}</div>${warn}`,
+      ok:'確認取消請假',danger:true}))return;
+  }
   let list=getAbsences().slice();
   const rec=list.find(a=>a.occId===id);
   if(rec){
@@ -345,70 +355,41 @@ async function doCancel(id,ev,cancelStudents){
     if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length&&!rec.resched)list=list.filter(a=>a!==rec);
     saveAbsences(list);
   }
+  syncMakeupOnLeaveCancel(id); // 已排的補課跟著撤掉／名單縮小
   if(undone.length)logAct('absence',`取消 ${undone.join('、')} 的請假`,actEvLabel(ev),'');
   toast('已取消請假','ok');
   await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
   closeWeekModal();
+  refreshMakeupPanel();
 }
 
-// ── 取消曠課流程（與取消請假對稱）：單人直接取消、多人跳選人 picker，只動曠課群組 ──
-function cancelNoShow(id){
+// 從待補課清單按取消請假／取消曠課時，清單自己要重畫（loadMakeup(true) 是靜默的、不重畫）
+function refreshMakeupPanel(){
+  if(currentPanel!=='makeup')return;
+  populateMkFilters();renderMakeup();updateMakeupBadge();
+}
+
+// ── 取消曠課流程（與取消請假對稱）：一樣跳置中視窗，單人＝確認、多人＝視窗裡挑人 ──
+async function cancelNoShow(id){
   document.querySelectorAll('.abs-panel.open').forEach(p=>p.classList.remove('open'));
-  document.querySelectorAll('[id^="cancel-picker-"]').forEach(p=>p.remove());
   const ev=findEventById(id);if(!ev)return;
   if((ev.noShowStudents||[]).length<=1){
-    doCancelNoShow(id,ev,[]);
+    await doCancelNoShow(id,ev,[]);
     return;
   }
-  showNoShowCancelPicker(ev);
-}
-
-function showNoShowCancelPicker(ev){
-  const id=ev.id;
-  const pickerId='cancel-picker-ns-'+id; // 共用 cancel-picker- 前綴，方便一起清掉
-  const existing=document.getElementById(pickerId);
-  if(existing){existing.classList.toggle('open');return;}
-  const card=document.getElementById('cc-'+id)||document.getElementById('wc-'+id);
-  if(!card)return;
-  const picker=document.createElement('div');
-  picker.id=pickerId;
-  picker.className='abs-panel open';
-  picker.style.borderTop='1px solid var(--br)';
-  picker.style.gridColumn='1/-1'; // 同上：整列顯示
-  picker.innerHTML=`
-    <div class="abs-title">選擇要取消曠課的學生</div>
-    <div class="stu-chips">${
-      ev.noShowStudents.map(s=>`<div class="stu-chip" data-name="${esc(s)}" onclick="this.classList.toggle('checked')">${esc(s)}</div>`).join('')
-    }</div>
-    <div class="abs-confirm" style="margin-top:10px">
-      <div class="abs-preview" style="font-size:12px;color:var(--tx2)">取消選取學生的曠課狀態</div>
-      <button class="btn btns" onclick="document.getElementById('${pickerId}').remove();document.getElementById('cc-${esc(id)}')?.classList.remove('card-active');closeWeekModal()">取消</button>
-      <button class="btn btns btnp" onclick="confirmCancelNoShow('${esc(id)}')">確認取消曠課</button>
-    </div>`;
-  const weekModal=document.getElementById('week-modal');
-  const absWeekPanel=document.getElementById('absp-w-'+id);
-  const absTodayPanel=document.getElementById('absp-'+id);
-  if(weekModal&&weekModal.classList.contains('open')&&selectedWeekEvent===id&&absWeekPanel){
-    absWeekPanel.after(picker);
-  } else if(absTodayPanel){
-    absTodayPanel.after(picker);
-  } else if(card){
-    card.after(picker);
-  }
-}
-
-async function confirmCancelNoShow(id){
-  const ev=findEventById(id);if(!ev)return;
-  const picker=document.getElementById('cancel-picker-ns-'+id);if(!picker)return;
-  const toCancel=[...picker.querySelectorAll('.stu-chip.checked')].map(el=>el.dataset.name);
-  if(toCancel.length===0){toast('請選擇要取消曠課的學生','inf');return;}
-  picker.remove();
-  doCancelNoShow(id,ev,toCancel);
+  const picked=await pickUndoStudents(ev.noShowStudents,{
+    title:'取消曠課',lbl:'選擇要取消曠課的學生（可多選）',ok:'確認取消曠課'});
+  if(picked)await doCancelNoShow(id,ev,picked,true);
 }
 
 // 取消曠課：從曠課群組移除（保留請假群組），紀錄清空即刪整筆
-async function doCancelNoShow(id,ev,cancelStudents){
+async function doCancelNoShow(id,ev,cancelStudents,preConfirmed){
   const undone=cancelStudents.length?cancelStudents:(ev.noShowStudents||[]);   // 同 doCancel：改資料前先抄名單
+  if(!preConfirmed){
+    if(!await uiConfirm({title:'取消曠課',
+      html:`要取消 <b>${esc(undone.join('、'))} 的曠課</b> 嗎？<div class="ask-sub">${esc(actEvLabel(ev))}</div>`,
+      ok:'確認取消曠課',danger:true}))return;
+  }
   let list=getAbsences().slice();
   const rec=list.find(a=>a.occId===id);
   if(rec){
@@ -421,4 +402,5 @@ async function doCancelNoShow(id,ev,cancelStudents){
   toast('已取消曠課','ok');
   await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
   closeWeekModal();
+  refreshMakeupPanel();
 }
