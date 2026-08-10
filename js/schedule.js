@@ -249,9 +249,14 @@ function isSysEvent(ev){return !!ev&&(ev.courseId!=null||ev.isLegacyAbsence===tr
 
 // 已排補課/調課（makeupScheduled 紀錄）→ 課堂物件（第 3 刀起主頁直接長補課場次，不靠 Google Calendar）
 // 紀錄本身帶齊顯示所需（時段/教室/名單/原課名）；老師從原系統課反查（舊行事曆紀錄查無就留空）
+// 一堂請假可以排出好幾場（每場補不同的人，2026-08-05）→ 這裡一筆紀錄長一堂課，
+// 課堂 id 用那場自己的 id（'mk:'+rec.id），不能再用 originalId（多場會撞在一起、只剩一堂）。
 function expandMakeupForRange(start,end){
   const out=[];
-  (driveData.makeupScheduled||[]).forEach(rec=>{
+  (driveData.makeupScheduled||[]).map(normalizeMakeupRec).forEach(rec=>{
+    // 併班補課（第 2 刀）不長自己的一堂——那幾個人是疊進「另一堂已經存在的課」的名冊裡
+    //（見 enrollment.js eventRoster）。這裡再長一堂的話課表會多出一筆重複的課。
+    if(isJoinRec(rec))return;
     const sD=new Date(rec.scheduledDate),eD=new Date(rec.scheduledEnd);
     if(!(sD>=start&&sD<=end))return;
     const m=String(rec.originalId).match(/^sys:(\d+):/);
@@ -260,7 +265,7 @@ function expandMakeupForRange(start,end){
     // 補課場次的課型看實到人數（團班一人請假的補課＝一對一），練習課補課維持練習課
     const type=co&&co.type==='練習課'?'practice':(students.length>=3?'group':students.length===2?'pair':'one');
     out.push({
-      id:'mk:'+rec.originalId,
+      id:'mk:'+rec.id,
       title:rec.origTitle,origTitle:rec.origTitle,
       desc:'',notes:'',
       teacher:co?courseTeacherNames(co).join('、'):'',
@@ -272,7 +277,8 @@ function expandMakeupForRange(start,end){
       calId:null,calName:rec.calName==='調課'?'調課':'補課',
       courseId:null,               // 不走系統課請假路徑
       isMakeupOcc:true,            // 主頁動作列不出請假/調課鈕（要改期→待補課清單取消安排重排）
-      makeupOriginalId:rec.originalId,
+      makeupOriginalId:rec.originalId, // 來源請假課堂（反查母課程用）
+      makeupRecId:rec.id,              // 這一場自己的 id（拖曳改時段要改的就是這筆）
       isAbsent:false,isPartialAbsent:false,isFullAbsent:false,isRescheduled:false,
       rescheduleReason:'',absentWho:'',absType:'',absentStudents:[],
       isNoShow:false,noShowStudents:[],absenceTiming:{},makeupSkip:[],

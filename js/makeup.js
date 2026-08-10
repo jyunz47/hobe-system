@@ -9,20 +9,29 @@ function jumpToMkCompleted(){
   document.getElementById('mk-sec-completed')?.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
+// 科目認定：課程本體的 subject 欄優先，沒填就從課名撈關鍵字。
+// 清單篩選（populateMkFilters）與併班補課的「同科目」判斷共用這一份，兩邊才不會各認各的。
+var MK_SUBJECTS=['數學','英文','理化','物理','化學','國文','生物','歷史','地理','社會','自然','寫作','作文'];
+// 回傳科目名，認不出來就空字串（decorate 會再補成「其他」）
+function mkSubjectOf(ev){
+  if(!ev)return'';
+  if(ev.subject&&MK_SUBJECTS.includes(ev.subject))return ev.subject;
+  return MK_SUBJECTS.find(s=>String(ev.origTitle||'').includes(s))||'';
+}
+
 // ── 載入補課清單 + 媒合 ──
 async function loadMakeup(silent=false){
   if(!isSignedIn())return;
   if(!silent)showL('讀取待補課/調課清單...');
   try{
-    const SUBJECTS=['數學','英文','理化','物理','化學','國文','生物','歷史','地理','社會','自然','寫作','作文'];
     const decorate=ev=>({...ev,
-      subject:ev.subject&&SUBJECTS.includes(ev.subject)?ev.subject:(SUBJECTS.find(s=>ev.origTitle.includes(s))||'其他'),
+      subject:mkSubjectOf(ev)||'其他',
       extraNote:(ev.desc||'').split('\n').slice(1).filter(Boolean).join(' · ')});
     // 清單來源＝系統請假紀錄（driveData.absences）：系統課堂的請假/曠課/調課，
     // 以及第 4 刀從舊行事曆搬進來的快照紀錄。不再掃 Google Calendar。
     makeupList=sysAbsenceEvents().map(decorate).sort((a,b)=>a.startDt-b.startDt);
     // 已排的補課/調課＝系統紀錄本身（第 3 刀起排補課只寫紀錄、不建 Calendar 事件）
-    makeupMatchMap=new Map(getMakeupScheduledLS().map(rec=>[rec.originalId,{...rec,calName:rec.calName||'補課'}]));
+    rebuildMakeupMatchMap();
     if(!silent){hideErr('makeup');populateMkFilters();renderMakeup();}
     const pendingCount=updateMakeupBadge();
     if(!silent)toast(`找到 ${pendingCount} 筆待安排`,'ok');
@@ -51,21 +60,60 @@ function needsMakeupDecision(e){
   return small&&(e.absentStudents||[]).some(s=>(e.absenceTiming||{})[s]==='B');
 }
 
+// 老師請假的請假名單是空的（整堂不上、沒有個別學生要補）→ 用「這堂排了沒」判斷，不數人頭
+function mkByHead(e){return(e.absentStudents||[]).length>0;}
+function mkPendingCount(e){return mkByHead(e)?mkPendingNames(e).length:(getMakeupsFor(e.id).length?0:1);}
+// 這堂總共要排幾人份（扣掉決定不補課的）。老師請假／調課不數人頭＝1 份。
+// 待補課卡、今日卡、週檢視、桌面日曆的「已安排 N/總」共用這個分母
+function mkTotalCount(e){return mkByHead(e)?(e.absentStudents||[]).filter(n=>!(e.makeupSkip||[]).includes(n)).length:1;}
+// 一筆請假的四種狀態。多人請假只排了一部分＝還是 pending（卡片會標「已安排 1/3」）
+function mkStatusOf(e,now){
+  const recs=getMakeupsFor(e.id);
+  if(!recs.length)return isMakeupSkipped(e)?'skipped':'pending';
+  if(mkPendingCount(e)>0)return'pending';
+  return recs.every(r=>new Date(r.scheduledEnd)<now)?'completed':'scheduled';
+}
+
+// 這位學生在這堂請假底下對應的補課場次。一堂可以排好幾場，只認名單含他的那場——
+// 不然「三人請假、只幫小明排了」會讓小華小美的欠課數也一起被消掉（安靜地少算）。
+// 老師請假的場次沒有個別名單（整堂補）→ 退回這堂的第一場。
+function makeupForStudent(e,name){
+  const recs=getMakeupsFor(e.id);
+  if(!recs.length)return null;
+  return recs.find(r=>(r.absentStudents||[]).includes(name))||(mkByHead(e)?null:recs[0]);
+}
+
+// 「補課排哪天」的小標籤，一場一顆＋沒排完再補一顆紅的。
+// 週檢視課卡與桌面日曆側欄共用（以前各自寫一份、都假設只有一場）
+function mkChipsHtml(ev){
+  if(!ev.isFullAbsent&&!ev.isRescheduled)return'';
+  const lbl=ev.isRescheduled?'調課':'補課';
+  const okCss='color:#5C7E6A;font-weight:500;background:#EDF0EA;border:1px solid #CFE0D5;padding:2px 8px;border-radius:6px;font-size:12px';
+  const noCss='color:#C0504A;font-weight:500;background:#F8EDEA;border:1px solid #E8C5BF;padding:2px 8px;border-radius:6px;font-size:12px';
+  const recs=getMakeupsFor(ev.id);
+  if(!recs.length)return`<span style="${noCss}">未安排${lbl}</span>`;
+  const chips=recs.map(rec=>{
+    const sd=new Date(rec.scheduledDate);
+    const who=(rec.absentStudents||[]).join('、');
+    const where=mkWhereTxt(rec);
+    return`<span style="${okCss}">${lbl}${recs.length>1&&who?'・'+esc(who):''}：${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${fmtT(sd)}${where?' '+esc(where):''}</span>`;
+  }).join('');
+  const left=mkPendingNames(ev);
+  return chips+(left.length?`<span style="${noCss}">${esc(left.join('、'))} 未安排${lbl}</span>`:'');
+}
+
 function renderMakeup(){
   const period=getCurrentPeriod();
   const fs=document.getElementById('f-subject').value;
   const ft=document.getElementById('f-type').value;
   const fq=(document.getElementById('f-search')?.value||'').trim().toLowerCase();
   const now=new Date();
-  const scheduledAll=getMakeupScheduled();
-  const completedIds=new Set(scheduledAll.filter(s=>new Date(s.scheduledEnd)<now).map(s=>s.originalId));
-  const scheduledFutureIds=new Set(scheduledAll.filter(s=>new Date(s.scheduledEnd)>=now).map(s=>s.originalId));
 
   // 純曠課事件雖收在 makeupList（供學生統計），但不進補課清單
   const allInPeriod=makeupList.filter(e=>e.startDt>=period.start&&e.startDt<=period.end&&!isPureNoShow(e));
-  const pendingStatCnt=allInPeriod.filter(e=>!completedIds.has(e.id)&&!scheduledFutureIds.has(e.id)&&!isMakeupSkipped(e)).length;
-  const scheduledStatCnt=allInPeriod.filter(e=>scheduledFutureIds.has(e.id)).length;
-  const completedStatCnt=allInPeriod.filter(e=>completedIds.has(e.id)).length;
+  const statusOf=new Map(allInPeriod.map(e=>[e.id,mkStatusOf(e,now)]));
+  const cnt=st=>allInPeriod.filter(e=>statusOf.get(e.id)===st).length;
+  const pendingStatCnt=cnt('pending'),scheduledStatCnt=cnt('scheduled'),completedStatCnt=cnt('completed');
 
   function matchesFilter(e){
     if(fs&&e.subject!==fs)return false;
@@ -75,10 +123,9 @@ function renderMakeup(){
   }
 
   const filteredAll=allInPeriod.filter(matchesFilter);
-  const pending=filteredAll.filter(e=>!completedIds.has(e.id)&&!scheduledFutureIds.has(e.id)&&!isMakeupSkipped(e));
-  const scheduledList=filteredAll.filter(e=>scheduledFutureIds.has(e.id));
-  const completedList=filteredAll.filter(e=>completedIds.has(e.id));
-  const skippedList=filteredAll.filter(e=>isMakeupSkipped(e)&&!scheduledFutureIds.has(e.id)&&!completedIds.has(e.id));
+  const byStatus=st=>filteredAll.filter(e=>statusOf.get(e.id)===st);
+  const pending=byStatus('pending'),scheduledList=byStatus('scheduled'),
+        completedList=byStatus('completed'),skippedList=byStatus('skipped');
 
   document.getElementById('rc').textContent=`共 ${filteredAll.length} 筆`;
 
@@ -112,16 +159,43 @@ function renderMakeup(){
     return`<button class="mk-btn-cancel" onclick="event.stopPropagation();cancelAbs('${esc(e.id)}')">取消請假</button>`;
   }
 
+  // 一場已排的補課／調課（一堂請假可以有好幾場，每場補不同的人）。
+  // 已經上完的那場不給取消（跟「已完成」區同一個口徑：課都上完了不給改）
+  function mkSessionRow(e,rec){
+    const sd=new Date(rec.scheduledDate),se=new Date(rec.scheduledEnd);
+    const done=se<now;
+    const who=(rec.absentStudents||[]).join('、');
+    const join=isJoinRec(rec);
+    return`<div class="mk-list-makeup">
+      <span class="mk-list-makeup-lbl">${join?'併班補課':(e.absType==='調課'?'調課':'補課')}${who&&mkByHead(e)?`・${esc(who)}`:''}：</span>
+      <span>${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）</span>
+      <span class="mk-dot">•</span>
+      <span>${fmtT(sd)}–${fmtT(se)}</span>
+      ${join?`<span class="mk-dot">•</span><span>👥 併入 ${esc(rec.hostTitle||'另一堂課')}</span>`:''}
+      ${rec.room?`<span class="mk-dot">•</span><span>📍 ${esc(rec.room)}</span>`:''}
+      ${done?'<span class="mk-dot">•</span><span style="color:var(--tx3)">已上完</span>':`<button class="mk-btn-cancel" onclick="event.stopPropagation();deleteMakeupScheduled('${esc(rec.id)}')">取消安排</button>`}
+    </div>`;
+  }
+
   function pendingCard(e){
     const d=e.startDt,de=e.endDt,color=calColor(e.calName);
     const mode=e.absType==='調課'?'reschedule':'makeup';
     const tutorB=needsMakeupDecision(e); // 課前1hr內、補/不補待確認（一對一家教 / 個別補課的一對二）
-    return`<div class="mk-list-card${tutorB?' mk-confirm':''}" id="mk-${esc(e.id)}" onclick="openSlotPicker('${esc(e.id)}','${mode}')">
+    const recs=getMakeupsFor(e.id);
+    // 多人請假可以分開排 → 排到一半的卡片要講清楚還差幾個人，不然看起來跟完全沒排一樣
+    const total=mkTotalCount(e);
+    const left=mkPendingCount(e);
+    const doneN=Math.max(0,total-left);
+    const stBadge=doneN>0
+      ?`<span class="mk-badge mk-badge-part">已安排 ${doneN}/${total}</span>`
+      :`<span class="mk-badge mk-badge-un">未安排</span>`;
+    const waitWho=mkByHead(e)?mkPendingNames(e):[];
+    return`<div class="mk-list-card${tutorB?' mk-confirm':''}" id="mk-${esc(e.id)}" onclick="startMakeupArrange('${esc(e.id)}','${mode}')">
       <div class="mk-list-bar" style="background:${color}"></div>
       <div class="mk-list-body">
         <div class="mk-list-top">
           <span class="mk-list-title">${mkCardTitle(e)}</span>
-          ${absBadge(e)}<span class="mk-badge mk-badge-un">未安排</span>${tutorB?'<span class="mk-badge" style="background:#F8EDEA;color:#C0504A;border:1px solid #E8C5BF" title="課前1小時內請假，補課要與家長確認。去排補課＝補（多收半堂）；不補則退半堂">⚠ 待確認補課</span>':''}
+          ${absBadge(e)}${stBadge}${tutorB?'<span class="mk-badge" style="background:#F8EDEA;color:#C0504A;border:1px solid #E8C5BF" title="課前1小時內請假，補課要與家長確認。去排補課＝補（多收半堂）；不補則退半堂">⚠ 待確認補課</span>':''}
         </div>
         <div class="mk-list-meta">
           <span>📅 ${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）</span>
@@ -129,11 +203,13 @@ function renderMakeup(){
           ${e.classroom?`<span>📍 ${esc(e.classroom)}</span>`:''}
           ${e.teacher?`<span>👤 ${esc(e.teacher)}</span>`:''}
         </div>
+        ${recs.map(r=>mkSessionRow(e,r)).join('')}
+        ${doneN>0&&waitWho.length?`<div class="mk-list-wait">還沒排：<b>${esc(waitWho.join('、'))}</b></div>`:''}
       </div>
       <div class="mk-list-actions">
         ${tutorB?`<button class="mk-btn-cancel" style="font-size:12px;padding:5px 10px;margin-left:0" onclick="event.stopPropagation();markMakeupSkip('${esc(e.id)}')">不補課</button>`:''}
         ${undoBtn(e)}
-        <button class="mk-btn-arrange" onclick="event.stopPropagation();openSlotPicker('${esc(e.id)}','${mode}')">安排</button>
+        <button class="mk-btn-arrange" onclick="event.stopPropagation();startMakeupArrange('${esc(e.id)}','${mode}')">${doneN>0?'排剩下的':'安排'}</button>
       </div>
     </div>`;
   }
@@ -160,12 +236,11 @@ function renderMakeup(){
     </div>`;
   }
 
-  function scheduledCard(e,rec,isCompleted){
+  function scheduledCard(e,recs,isCompleted){
     const d=e.startDt,de=e.endDt,color=calColor(e.calName);
-    const sd=new Date(rec.scheduledDate),se=new Date(rec.scheduledEnd);
     const statusBadge=isCompleted
       ?`<span class="mk-badge mk-badge-done">✓ 已完成</span>`
-      :`<span class="mk-badge mk-badge-arr">✓ 已安排</span>`;
+      :`<span class="mk-badge mk-badge-arr">✓ 已安排${recs.length>1?` ${recs.length} 場`:''}</span>`;
     return`<div class="mk-list-card${isCompleted?' mk-completed':' mk-arr'}" id="mk-${esc(e.id)}">
       <div class="mk-list-bar" style="background:${color}"></div>
       <div class="mk-list-body">
@@ -179,14 +254,7 @@ function renderMakeup(){
           ${e.classroom?`<span>📍 ${esc(e.classroom)}</span>`:''}
           ${e.teacher?`<span>👤 ${esc(e.teacher)}</span>`:''}
         </div>
-        <div class="mk-list-makeup">
-          <span class="mk-list-makeup-lbl">${e.absType==='調課'?'調課':'補課'}：</span>
-          <span>${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）</span>
-          <span class="mk-dot">•</span>
-          <span>${fmtT(sd)}–${fmtT(se)}</span>
-          ${rec.room?`<span class="mk-dot">•</span><span>📍 ${esc(rec.room)}</span>`:''}
-          ${!isCompleted?`<button class="mk-btn-cancel" onclick="event.stopPropagation();deleteMakeupScheduled('${esc(e.id)}')">取消安排</button>`:''}
-        </div>
+        ${recs.map(r=>mkSessionRow(e,r)).join('')}
         ${!isCompleted?`<div class="mk-list-undo">${undoBtn(e)}</div>`:''}
       </div>
     </div>`;
@@ -203,7 +271,7 @@ function renderMakeup(){
   // 已安排
   html+=`<div class="mk-sec"><div class="mk-sec-head"><span class="mk-sec-dot" style="background:#6B8F7A"></span>已安排<span class="mk-sec-pill">${scheduledList.length}</span></div>`;
   if(!scheduledList.length){html+=`<div class="empty" style="padding:14px 0">尚無已安排補課</div>`;}
-  else{scheduledList.forEach(e=>{const rec=scheduledAll.find(s=>s.originalId===e.id);if(rec)html+=scheduledCard(e,rec,false);});}
+  else{scheduledList.forEach(e=>{const recs=getMakeupsFor(e.id);if(recs.length)html+=scheduledCard(e,recs,false);});}
   html+=`</div>`;
 
   // 已完成安排（最近完成的在上）
@@ -212,10 +280,11 @@ function renderMakeup(){
     html+=`<div id="mk-sec-completed" class="mk-sec-lbl mk-sec-gap mk-sec-toggle" style="margin-top:24px" onclick="toggleMkSec('completed')"><span class="mk-sec-arrow">${open?'▾':'▸'}</span>已完成安排（${completedList.length}）</div>`;
     if(open){
       completedList
-        .map(e=>({e,rec:scheduledAll.find(s=>s.originalId===e.id)}))
-        .filter(x=>x.rec)
-        .sort((a,b)=>new Date(b.rec.scheduledDate)-new Date(a.rec.scheduledDate))
-        .forEach(x=>{html+=scheduledCard(x.e,x.rec,true);});
+        .map(e=>({e,recs:getMakeupsFor(e.id)}))
+        .filter(x=>x.recs.length)
+        // 最近完成的在上：多場的話看最後一場
+        .sort((a,b)=>new Date(b.recs[b.recs.length-1].scheduledDate)-new Date(a.recs[a.recs.length-1].scheduledDate))
+        .forEach(x=>{html+=scheduledCard(x.e,x.recs,true);});
     }
   }
 
@@ -269,9 +338,71 @@ async function gotoMakeupEvent(id, ts){
 }
 
 function updateBadge(n){const b=document.getElementById('badge-makeup');b.textContent=n;b.style.display=n>0?'inline':'none';}
-function updateMakeupBadge(){const period=getCurrentPeriod();const scheduledIds=new Set(getMakeupScheduled().map(x=>x.originalId));const n=makeupList.filter(e=>!scheduledIds.has(e.id)&&e.startDt>=period.start&&e.startDt<=period.end&&!isPureNoShow(e)&&!isMakeupSkipped(e)).length;updateBadge(n);return n;}
+// 側欄紅點＝本期還有幾筆沒排完（只排掉一部分人的也算，跟清單「待安排」區同一個判斷）
+function updateMakeupBadge(){
+  const period=getCurrentPeriod(),now=new Date();
+  const n=makeupList.filter(e=>e.startDt>=period.start&&e.startDt<=period.end&&!isPureNoShow(e)
+    &&mkStatusOf(e,now)==='pending').length;
+  updateBadge(n);return n;
+}
+
+// ── 安排補課的入口：多人請假時先問「這次要幫誰排」──
+// 2026-08-05 起補課可以拆開排（三人同缺 → 各排各的時段），所以按「安排」不再直接跳時段選擇器。
+// 只剩一個人、或整堂性質的（老師請假、調課）沒得挑，直接進時段選擇器。
+async function startMakeupArrange(id,mode){
+  const e=findEventById(id);if(!e)return;
+  const pend=mkPendingNames(e);
+  if(mode==='reschedule'||!mkByHead(e)||pend.length<=1){
+    openSlotPicker(id,mode,pend.length?pend:null);
+    return;
+  }
+  const picked=await pickMakeupStudents(e,pend);
+  if(picked)openSlotPicker(id,mode,picked);
+}
+
+// 選人視窗：**預設一個都不選、自己挑**（2026-08-05 老闆定；一度做成預設全選，
+// 但全亮的樣子跟「你剛剛選的」分不出來）。整團一起補按「全選」一下就好。
+// chip 前面的 ✓ 與上面的即時計數留著，選了誰一眼看得出來。
+function mkPickToggle(el){el.classList.toggle('checked');mkPickSync();}
+function mkPickAll(on){
+  document.querySelectorAll('#ask-pick-chips .stu-chip').forEach(c=>c.classList.toggle('checked',on));
+  mkPickSync();
+}
+function mkPickSync(){
+  const all=[...document.querySelectorAll('#ask-pick-chips .stu-chip')];
+  const n=all.filter(c=>c.classList.contains('checked')).length;
+  const el=document.getElementById('mk-pick-n');if(el)el.textContent=n;
+}
+
+async function pickMakeupStudents(e,names){
+  let sel=[];
+  for(;;){
+    const chips=names.map(s=>`<div class="stu-chip${sel.includes(s)?' checked':''}" data-name="${esc(s)}" onclick="mkPickToggle(this)"><span class="mk-pick-tick">✓</span>${esc(s)}</div>`).join('');
+    const ok=await uiConfirm({title:'這次要幫誰排補課？',ok:'下一步：選時段',
+      html:`<div class="abs-title" style="margin-bottom:8px">${esc(e.origTitle)}　${fmtD(e.startDt)} ${fmtT(e.startDt)} 請假</div>
+        <div class="mk-pick-head">
+          <span>已選 <b id="mk-pick-n">${sel.length}</b> / ${names.length} 人</span>
+          <span class="mk-pick-acts">
+            <button type="button" class="btn btns" onclick="mkPickAll(true)">全選</button>
+            <button type="button" class="btn btns" onclick="mkPickAll(false)">全不選</button>
+          </span>
+        </div>
+        <div class="stu-chips" id="ask-pick-chips">${chips}</div>
+        <div class="ask-note" style="margin-top:12px">挑這次要一起補的人（整團一起補按<b>全選</b>）。沒選到的留在待安排，可以另外排別的時段。</div>`});
+    if(!ok)return null;
+    sel=[...document.querySelectorAll('#ask-pick-chips .stu-chip.checked')].map(el=>el.dataset.name);
+    if(sel.length)return sel;
+    toast('請至少選一位學生','inf');
+  }
+}
 
 // ── Slot Picker（補課/調課時段選擇器）──
+// 這次要補的人（可能只是請假名單的一部分）。時長、課型、教室容量都看這一份，不看整堂請假名單
+function spStudents(){
+  const s=slotPicker.students;
+  return(s&&s.length)?s:(slotPicker.ev?.absentStudents||[]);
+}
+
 function getEffectiveDur(){
   const d=slotPicker.ev?.durMins||60;
   // 補課維持原時長：練習課、家教一對一（type==='one'）。其餘（一對二 pair、團班 group）砍半堂
@@ -282,7 +413,7 @@ function getEffectiveDur(){
 function getEffectiveType(){
   const ev=slotPicker.ev;
   if(slotPicker.mode==='makeup'&&ev.type==='group'){
-    const n=ev.absentStudents.length||1;
+    const n=spStudents().length||1;
     return n===1?'one':n===2?'pair':'group';
   }
   return ev.type;
@@ -290,18 +421,21 @@ function getEffectiveType(){
 
 function getEffectiveStudentCount(){
   const ev=slotPicker.ev;
-  if(slotPicker.mode==='makeup'&&ev.type==='group')return Math.max(1,ev.absentStudents.length);
+  if(slotPicker.mode==='makeup'&&ev.type==='group')return Math.max(1,spStudents().length);
   return ev.students.length||1;
 }
 
-function openSlotPicker(id,mode){
+// students＝這次要補的人（null＝整堂請假名單）；recId＝改期既有那場（null＝新排一場）
+function openSlotPicker(id,mode,students,recId){
   const ev=findEventById(id);
   if(!ev)return;
   const branch=ev.classroom==='石牌分校'?'石牌':'北投';
-  slotPicker={ev,mode,date:null,time:null,room:null,avail:null,branch};
+  slotPicker={ev,mode,date:null,time:null,room:null,avail:null,branch,students:students||null,recId:recId||null,join:null};
   const d=ev.startDt;
   const ds=`${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）${fmtT(d)}  ⏱ ${fmtDur(ev.durMins)}`;
-  document.getElementById('sp-title').textContent=mode==='makeup'?`安排補課：${ev.origTitle}`:`安排調課：${ev.origTitle}`;
+  const who=mkByHead(ev)?spStudents():[];
+  document.getElementById('sp-title').textContent=(mode==='makeup'?'安排補課：':'安排調課：')
+    +(who.length?`${who.join('、')} — ${ev.origTitle}`:ev.origTitle);
   document.getElementById('sp-sub').textContent=(mode==='makeup'?'缺課日期：':'調課日期：')+ds+(ev.teacher?`  👤 ${ev.teacher}`:'');
   renderSpBody();
   document.getElementById('sp-modal').classList.add('open');
@@ -309,23 +443,32 @@ function openSlotPicker(id,mode){
 
 function closeSlotPicker(){
   document.getElementById('sp-modal').classList.remove('open');
-  slotPicker={ev:null,mode:null,date:null,time:null,room:null,avail:null,branch:null};
+  slotPicker={ev:null,mode:null,date:null,time:null,room:null,avail:null,branch:null,students:null,recId:null,join:null};
+}
+
+// 併班補課只對「學生請假的補課」開放：調課是整堂移走、老師請假沒有個別名單，
+// 兩者都沒有「把某幾個人塞進別班」這回事
+function spCanJoin(){
+  return slotPicker.mode==='makeup'&&mkByHead(slotPicker.ev)&&spStudents().length>0;
 }
 
 function renderSpBody(){
   const body=document.getElementById('sp-body');
   body.innerHTML='';
-  const step=!slotPicker.date?1:!slotPicker.time?2:!slotPicker.room?3:4;
-  body.appendChild(buildSpStepper(step));
+  const joined=!!slotPicker.join;
+  const step=!slotPicker.date?1:joined?3:!slotPicker.time?2:!slotPicker.room?3:4;
+  body.appendChild(buildSpStepper(step,joined));
   body.appendChild(buildSpDateSection());
+  if(slotPicker.date&&spCanJoin())body.appendChild(buildSpJoinSection());
+  if(joined){body.appendChild(buildSpConfirm());return;} // 併班＝時間教室都跟主課，不用再選
   if(slotPicker.date)body.appendChild(buildSpTimeSection());
   if(slotPicker.time)body.appendChild(buildSpRoomSection());
   if(slotPicker.room)body.appendChild(buildSpConfirm());
 }
 
 // B4 視覺指示 stepper（純反映目前進度，不影響流程）
-function buildSpStepper(cur){
-  const steps=['日期','時段','教室','確認'];
+function buildSpStepper(cur,joined){
+  const steps=joined?['日期','併班','確認']:['日期','時段','教室','確認'];
   const wrap=document.createElement('div');
   wrap.className='sp-stepper';
   wrap.innerHTML=steps.map((s,i)=>{
@@ -389,12 +532,53 @@ function buildSpDateSection(){
 
 async function selectSpDate(ds){
   if(slotPicker.date===ds)return;
-  slotPicker={...slotPicker,date:ds,time:null,room:null,avail:null};
+  slotPicker={...slotPicker,date:ds,time:null,room:null,avail:null,join:null};
   const [y,m,d]=ds.split('-').map(Number);
   const dayStart=new Date(y,m-1,d,0,0,0),dayEnd=new Date(y,m-1,d,23,59,59);
   // 空檔改掃系統課表（系統課程＋已排補課/調課場次），不再讀 Google Calendar
   slotPicker.avail=[...expandCoursesForRange(dayStart,dayEnd),...expandMakeupForRange(dayStart,dayEnd)];
   renderSpBody();
+}
+
+// ── 併班補課：選一堂當天的課，讓這幾個人進去一起上 ──
+// 選了就跳過「時段／教室」——時間、教室都跟著主課走，沒得挑
+function selectSpJoin(occId){
+  slotPicker={...slotPicker,join:slotPicker.join===occId?null:occId,time:null,room:null};
+  renderSpBody();
+}
+
+// 只列三個條件全中的（同科目＋同年級＋同老師）。差一項就不列——
+// 2026-08-10 老闆定：「三個條件都不滿足就不用列了」，沒有「攤開看全部」那條路。
+// 一堂都沒有時只留一行灰字（讓人知道系統找過了），下面的「選時段 → 選教室」照走。
+function buildSpJoinSection(){
+  const sec=document.createElement('div');
+  const ev=slotPicker.ev,who=spStudents();
+  const list=mkJoinCandidates(ev,slotPicker.avail,who).filter(c=>c.exact);
+  const crit=mkJoinCriteriaTxt(ev,who);
+  if(!list.length){
+    sec.innerHTML=`<div class="sp-join-empty">當天沒有可以併班的課${crit?`（找的是${esc(crit)}）`:''}——往下選時段另開一場</div>`;
+    return sec;
+  }
+  sec.innerHTML=`<div class="sp-lbl">⭐ 併進當天的課${crit?`（${esc(crit)}）`:''}</div>
+    <div class="sp-join-note">${esc(who.join('、'))} 直接進那堂一起上，<b>不另開場次</b>。只列<b>同科目、同年級、同老師</b>的課；進度合不合請自己看。</div>
+    <div class="sp-join-list"></div>
+    <div class="sp-join-or">或　另開一場補課 ↓</div>`;
+  const box=sec.querySelector('.sp-join-list');
+  list.forEach(({occ})=>{
+    const roster=eventRoster(occ);
+    const already=roster.filter(n=>who.includes(n));
+    const addN=who.filter(n=>!roster.includes(n)).length;
+    const cap=ROOM_CAP[occ.classroom];
+    const over=cap&&roster.length+addN>cap;
+    const el=document.createElement('div');
+    el.className='sp-join'+(slotPicker.join===occ.id?' sp-sel':'');
+    el.innerHTML=`<div class="sp-join-t">${esc(occ.origTitle)}</div>
+      <div class="sp-join-m">${fmtT(occ.startDt)}–${fmtT(occ.endDt)}${occ.classroom?'・'+esc(occ.classroom):''}${occ.teacher?'・'+esc(occ.teacher):''}</div>
+      <div class="sp-join-m">名單 ${roster.length} 人 → <b>${roster.length+addN} 人</b>${over?`<span class="sp-join-w">⚠ 超過 ${esc(occ.classroom)} 上限 ${cap}</span>`:''}${already.length?`<span class="sp-join-w">${esc(already.join('、'))} 已在名單</span>`:''}</div>`;
+    el.onclick=()=>selectSpJoin(occ.id);
+    box.appendChild(el);
+  });
+  return sec;
 }
 
 function overlaps(s1,e1,s2,e2){return s1<e2&&e1>s2;}
@@ -463,7 +647,7 @@ function buildSpTimeSection(){
     return el;
   };
   if(isPracticeMakeup){
-    const newStu=slotPicker.ev.absentStudents?.length||1;
+    const newStu=spStudents().length||1;
     const joinSlots=[],freeSlots=[];
     for(let total=startMin;total<=endMin-dur;total+=30){
       const h=Math.floor(total/60),mi=total%60;
@@ -571,6 +755,20 @@ function selectSpRoom(room){
 function buildSpConfirm(){
   const sec=document.createElement('div');
   const ev=slotPicker.ev;
+  // 併班：時間、教室都是主課的，只確認「併進哪一堂」
+  if(slotPicker.join){
+    const host=(slotPicker.avail||[]).find(o=>o.id===slotPicker.join);
+    if(!host){sec.innerHTML='<div class="sp-warn">那堂課不見了，請重選</div>';return sec;}
+    const who=spStudents();
+    sec.innerHTML=`<div class="sp-cfm">
+      <div class="sp-cfm-info"><b>併入</b>　${esc(host.origTitle)}<br>
+        <b>時間</b>　${host.startDt.getMonth()+1}/${host.startDt.getDate()}（週${WD[host.startDt.getDay()]}）${fmtT(host.startDt)}–${fmtT(host.endDt)}<br>
+        <b>教室</b>　${esc(host.classroom||'未設定')}<br>
+        <b>補課學生</b>　${esc(who.join('、'))}</div>
+      <button class="btn btns btnp" style="white-space:nowrap" onclick="confirmSlotPicker()">✓ 確認併班補課</button>
+    </div>`;
+    return sec;
+  }
   const [y,m,d]=slotPicker.date.split('-').map(Number);
   const {h,mi}=slotPicker.time;
   const sS=new Date(y,m-1,d,h,mi),sE=new Date(y,m-1,d,h,0,0);sE.setMinutes(mi+getEffectiveDur());
@@ -587,11 +785,22 @@ function buildSpConfirm(){
 // 主頁的補課/調課場次由展開器從紀錄直接長出（expandMakeupForRange）。
 async function confirmSlotPicker(){
   const ev=slotPicker.ev;
+  const mode=slotPicker.mode;
+  if(slotPicker.join){
+    const host=(slotPicker.avail||[]).find(o=>o.id===slotPicker.join);
+    if(!host){toast('那堂課不見了，請重選','inf');return;}
+    saveMakeupJoin(ev,host,spStudents(),slotPicker.recId);
+    toast('併班補課已安排 🎉','ok');
+    closeSlotPicker();
+    await Promise.all([loadToday(),loadWeek()]);
+    renderMakeup();updateMakeupBadge();
+    return;
+  }
   const [y,m,d]=slotPicker.date.split('-').map(Number);
   const {h,mi}=slotPicker.time;
   const sS=new Date(y,m-1,d,h,mi),sE=new Date(y,m-1,d,h,0,0);sE.setMinutes(mi+getEffectiveDur());
-  const room=slotPicker.room,mode=slotPicker.mode;
-  saveMakeupScheduled(ev,sS,sE,room,null,mode==='makeup'?'補課':'調課');
+  const room=slotPicker.room;
+  saveMakeupScheduled(ev,sS,sE,room,null,mode==='makeup'?'補課':'調課',spStudents(),slotPicker.recId);
   toast(mode==='makeup'?'補課已安排 🎉':'調課時段已安排 🎉','ok');
   closeSlotPicker();
   await Promise.all([loadToday(),loadWeek()]); // 場次立即長回主頁課表
@@ -599,29 +808,181 @@ async function confirmSlotPicker(){
 }
 
 // ── 補課排程記錄 ──
+// 2026-08-05 起「一堂請假 → 多場補課」：每場自己一個 id、自己帶一份名單（absentStudents＝
+// 這場補的人，不是整堂請假的人）。以前是 originalId 當唯一鍵，三人同缺只能一起排同一個時段。
 function getMakeupScheduledLS(){return driveData.makeupScheduled||[];}
-function getMakeupScheduled(){return[...makeupMatchMap.entries()].map(([originalId,v])=>({originalId,...v}));}
+function mkNewRecId(){return'mk_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,7);}
 
-function saveMakeupScheduled(ev,sS,sE,room,calEventId,calName='補課'){
-  const prev=makeupMatchMap.get(ev.id);   // 已經排過＝這次是「改時段」，動態要講得出差別
-  const rec={originalId:ev.id,origTitle:ev.origTitle,originalDate:ev.startDt.toISOString(),scheduledDate:sS.toISOString(),scheduledEnd:sE.toISOString(),room,calEventId:calEventId||null,absentStudents:ev.absentStudents||[],calName};
-  makeupMatchMap.set(ev.id,{calEventId:calEventId||null,scheduledDate:sS.toISOString(),scheduledEnd:sE.toISOString(),room,origTitle:ev.origTitle,absentStudents:ev.absentStudents||[],calName});
-  const list=getMakeupScheduledLS().filter(x=>x.originalId!==ev.id);
-  list.push(rec);
-  driveData.makeupScheduled=list;
+// 舊資料（一堂一筆、沒有 id）讀進來時補上 id，語意不變：那一筆就是「補全部請假學生」的那場。
+// 純讀取端補值，不主動改寫 Firestore；下次存檔時新形狀自然帶上去。
+function normalizeMakeupRec(rec){
+  return rec.id?rec:{...rec,id:rec.originalId};
+}
+// 這堂請假已經被排走的人（多場相加）
+function mkCoveredNames(occId){
+  return new Set([].concat(...getMakeupsFor(occId).map(r=>r.absentStudents||[])));
+}
+// 這堂請假還沒排補課的人：請假名單扣掉已排的、扣掉決定不補課的。
+// 老師請假／調課的 absentStudents 是全名冊（見 schedule.js _absFields），同一套算法就對。
+function mkPendingNames(e){
+  const covered=mkCoveredNames(e.id);
+  const skip=new Set(e.makeupSkip||[]);
+  return (e.absentStudents||[]).filter(n=>!covered.has(n)&&!skip.has(n));
+}
+
+// ── 併班補課（第 2 刀，2026-08-05 老闆拍板）──
+// 請假的學生直接「進另一堂同進度的班一起上」，不另開一場。進度由人判斷——
+// 系統只負責把當天同科目的課列出來，不加「進度分組」這種會過期的欄位。
+// 資料形狀刻意跟一般補課共用：kind:'join' + hostOccId，時間/教室照抄那堂主課，
+// 所以待補課清單、學生統計、欠課消帳、已完成判斷全部沿用原本那套，不必各自特判。
+// 唯二的差別：① expandMakeupForRange 不為它另長一堂（否則課表會多出一筆重複的課）
+//             ② 那些人疊進主課的名冊（點名／成績／日曆都看得到，標「補」）
+function isJoinRec(rec){return !!rec&&rec.kind==='join';}
+// 這堂主課（hostOccId）今天多了哪些併班補課的紀錄
+function joinRecsOn(hostOccId){
+  if(!hostOccId)return[];
+  return getMakeupScheduledLS().map(normalizeMakeupRec).filter(r=>isJoinRec(r)&&r.hostOccId===hostOccId);
+}
+// 補課學生的 studentId：優先查來源請假紀錄的雙存欄位（同名終結），
+// 查不到才退回學生檔的唯一同名比對（兩個同名就給 null，寧可不給也不要點錯人）
+function mkStudentIdOf(rec,name){
+  const ab=getAbsences().find(a=>a.occId===rec.originalId);
+  const hit=ab&&[...(ab.leave||[]),...(ab.noShow||[])].find(x=>x.name===name);
+  if(hit&&hit.studentId!=null)return hit.studentId;
+  const same=getStudentList().filter(s=>s.name===name);
+  return same.length===1?same[0].id:null;
+}
+// 這堂主課今天多收幾個補課生（課卡標一顆「+N 補課生」用）
+function joinCountOn(hostOccId){
+  return joinRecsOn(hostOccId).reduce((n,r)=>n+((r.absentStudents||[]).length),0);
+}
+// 主課名冊要疊上去的那幾列（形狀對齊 eventRosterWithId：{studentId,name}＋來源標記）
+function joinRosterOn(hostOccId){
+  const out=[];
+  joinRecsOn(hostOccId).forEach(rec=>(rec.absentStudents||[]).forEach(n=>{
+    out.push({studentId:mkStudentIdOf(rec,n),name:n,join:true,fromTitle:rec.origTitle,recId:rec.id});
+  }));
+  return out;
+}
+
+// ── 「同一種課」的三個條件（2026-08-10 老闆補的）──
+// 光同科目太寬：高二數學的學生請假，只該看到「同一個老師的高二數學班」。
+// 年級課程本體沒這個欄位（自動命名的「高二數學班」是從名單長出來的字），所以現算：
+// 那堂在籍學生的年級集合。混年級的課會有多個年級，只要交集到就算同年級。
+function mkGradeSet(occ,names){
+  const byId=new Map(getStudentList().map(s=>[s.id,s]));
+  const out=new Set();
+  eventRosterWithId(occ).forEach(r=>{
+    if(names&&!names.includes(r.name))return;
+    const g=byId.get(r.studentId)?.grade;
+    if(g)out.add(g);
+  });
+  return out;
+}
+// 老師身分：兩邊都是系統課就比 teacherIds（老師改名也對得上），
+// 有一邊是舊行事曆快照（沒有課程本體）才退回比名字。一邊完全沒老師資料時不當作「不合」。
+function _setsHit(a,b){for(const x of a)if(b.has(x))return true;return false;}
+function mkTeacherIds(occ){
+  const co=(occ.courseId!=null&&typeof findCourseById==='function')?findCourseById(occ.courseId):null;
+  return new Set(co?courseTeacherIds(co).map(id=>'t:'+id):[]);
+}
+function mkTeacherNames(occ){return new Set(String(occ.teacher||'').split('、').filter(Boolean));}
+function mkSameTeacher(a,b){
+  const ia=mkTeacherIds(a),ib=mkTeacherIds(b);
+  if(ia.size&&ib.size)return _setsHit(ia,ib);
+  const na=mkTeacherNames(a),nb=mkTeacherNames(b);
+  return(!na.size||!nb.size)?true:_setsHit(na,nb);
+}
+
+// 併班補課的候選主課：那天有哪些課可以讓這幾個人插進去一起上。
+// 先篩掉「插進去也上不了」的：自己那堂、整堂沒上的（請假/調課）、試聽、
+// 練習課（它本來就有自己的「加入現有練習課」路徑）、以及人已經在名單上的那堂。
+// 剩下的每一堂標記三個條件對不對得上（科目／年級／老師）。
+// **預設只顯示三者全中的**（exact）；差一項就要人自己按「顯示當天全部」才看得到，
+// 每張卡上會寫清楚差在哪。進度合不合仍然是人看的，系統不猜。
+function mkJoinCandidates(ev,avail,students){
+  const subj=mkSubjectOf(ev);
+  const grades=mkGradeSet(ev,students&&students.length?students:null);
+  const who=students||[];
+  return (avail||[]).filter(o=>{
+    if(o.id===ev.id||o.courseId==null)return false;
+    if(o.isFullAbsent||o.isRescheduled)return false;
+    if(o.calName==='試聽'||o.type==='practice')return false;
+    const roster=new Set(eventRoster(o));
+    return who.some(n=>!roster.has(n));   // 全都已經在名單上＝沒得補
+  }).map(o=>{
+    // 有一邊算不出年級／老師時不當作「不合」（舊資料常缺），只有兩邊都有值才比
+    const og=mkGradeSet(o,null);
+    const sameSubject=!!subj&&mkSubjectOf(o)===subj;
+    const sameGrade=!grades.size||!og.size||_setsHit(grades,og);
+    const sameTeacher=mkSameTeacher(ev,o);
+    return{occ:o,sameSubject,sameGrade,sameTeacher,exact:sameSubject&&sameGrade&&sameTeacher};
+  }).sort((a,b)=>(b.exact-a.exact)||(b.sameSubject-a.sameSubject)||(a.occ.startDt-b.occ.startDt));
+}
+// 「高二數學・王老師」這種描述字串，給併班區的標題與空狀態用
+function mkJoinCriteriaTxt(ev,students){
+  const grade=[...mkGradeSet(ev,students&&students.length?students:null)].join('／');
+  const head=grade+(mkSubjectOf(ev)||'');
+  return[head,[...mkTeacherNames(ev)].join('、')].filter(Boolean).join('・');
+}
+
+// 存一筆併班補課。recId＝改掛到另一堂（沿用同一筆），省略＝新排一場
+function saveMakeupJoin(ev,host,students,recId){
+  const who=(students||[]).slice();
+  const list=getMakeupScheduledLS().map(normalizeMakeupRec);
+  const prev=recId?list.find(x=>x.id===recId):null;
+  const rec={id:recId||mkNewRecId(),kind:'join',originalId:ev.id,hostOccId:host.id,
+    hostTitle:host.origTitle,origTitle:ev.origTitle,
+    originalDate:ev.startDt.toISOString(),
+    scheduledDate:host.startDt.toISOString(),scheduledEnd:host.endDt.toISOString(),
+    room:host.classroom||'',calEventId:null,absentStudents:who,calName:'補課'};
+  driveData.makeupScheduled=[...list.filter(x=>x.id!==rec.id),rec];
+  rebuildMakeupMatchMap();
+  scheduleDriveSave();
+  logAct('makeup',`${prev?'改了':'排好'}${who.length?` ${who.join('、')} 的`:''}併班補課`,
+    `${fmtD(host.startDt)} ${fmtT(host.startDt)} ${host.classroom||''} ${host.origTitle}`.trim(),
+    `跟著這堂一起上、不另開場次（原課堂 ${fmtD(ev.startDt)} ${fmtT(ev.startDt)} ${ev.origTitle||''}）`.trim());
+}
+// 待補課清單／課卡／側欄講「這場排在哪」時共用：併班的講「併入○○」，一般的講教室
+function mkWhereTxt(rec){
+  return isJoinRec(rec)?`併入 ${rec.hostTitle||'另一堂課'}`:(rec.room||'');
+}
+
+// students＝這一場補誰（省略就吃事件的全部請假學生，維持舊呼叫端語意）
+// recId＝改期既有的那場；省略＝新排一場
+function saveMakeupScheduled(ev,sS,sE,room,calEventId,calName='補課',students,recId){
+  const who=(students||ev.absentStudents||[]).slice();
+  const list=getMakeupScheduledLS().map(normalizeMakeupRec);
+  const prev=recId?list.find(x=>x.id===recId):null;   // 改時段：動態要講得出差別
+  const rec={id:recId||mkNewRecId(),originalId:ev.id,origTitle:ev.origTitle,
+    originalDate:ev.startDt.toISOString(),scheduledDate:sS.toISOString(),scheduledEnd:sE.toISOString(),
+    room,calEventId:calEventId||null,absentStudents:who,calName};
+  driveData.makeupScheduled=[...list.filter(x=>x.id!==rec.id),rec];
+  rebuildMakeupMatchMap();
   scheduleDriveSave();
   // 動態：排定／改時段（補課與調課共用這支，calName 就是類別）
-  const who=(ev.absentStudents||[]).join('、');
-  logAct('makeup',`${prev?'改了':'排好'}${who?` ${who} 的`:''}${calName}`,
+  logAct('makeup',`${prev?'改了':'排好'}${who.length?` ${who.join('、')} 的`:''}${calName}`,
     `${fmtD(sS)} ${fmtT(sS)}–${fmtT(sE)} ${room||''} ${ev.origTitle||''}`.trim(),
     prev?`原本排在 ${fmtD(new Date(prev.scheduledDate))} ${fmtT(new Date(prev.scheduledDate))} ${prev.room||''}`
         :`原課堂 ${fmtD(ev.startDt)} ${fmtT(ev.startDt)}`);
 }
 
-async function deleteMakeupScheduled(originalId){
-  const prev=makeupMatchMap.get(originalId);   // 刪掉之前先抄，動態才講得出取消的是哪一場
-  makeupMatchMap.delete(originalId);
-  driveData.makeupScheduled=getMakeupScheduledLS().filter(x=>x.originalId!==originalId);
+// makeupScheduled → makeupMatchMap（occId → 場次陣列）。存檔與載入共用同一支，
+// 免得兩邊各自維護 map 又漏掉一處。
+function rebuildMakeupMatchMap(){
+  makeupMatchMap=new Map();
+  getMakeupScheduledLS().map(normalizeMakeupRec).forEach(rec=>{
+    const r={...rec,calName:rec.calName||'補課'};
+    if(!makeupMatchMap.has(rec.originalId))makeupMatchMap.set(rec.originalId,[]);
+    makeupMatchMap.get(rec.originalId).push(r);
+  });
+}
+
+// 取消單一場補課（recId＝那場自己的 id，不是請假課堂的 id）
+async function deleteMakeupScheduled(recId){
+  const prev=findMakeupRec(recId);   // 刪掉之前先抄，動態才講得出取消的是哪一場
+  driveData.makeupScheduled=getMakeupScheduledLS().map(normalizeMakeupRec).filter(x=>x.id!==recId);
+  rebuildMakeupMatchMap();
   scheduleDriveSave();
   if(prev){
     const s=new Date(prev.scheduledDate);
@@ -632,25 +993,74 @@ async function deleteMakeupScheduled(originalId){
   renderMakeup();updateMakeupBadge();
 }
 
-// 取消請假後同步已排的補課（absence.js doCancel 呼叫）：
-// 沒人請假了 → 補課場次一併移除（不然主頁會留一場沒來由的課）；只撤部分人 → 補課名單跟著縮小。
-// 跟 cancelReschedule 的處置對齊（取消調課也會把已排時段撤掉）。
-function syncMakeupOnLeaveCancel(occId){
-  const prev=makeupMatchMap.get(occId);if(!prev)return;
-  const ab=getAbsences().find(a=>a.occId===occId);
-  const remain=((ab&&ab.leave)||[]).map(x=>x.name);
-  if(remain.length||(ab&&ab.resched)){
-    makeupMatchMap.set(occId,{...prev,absentStudents:remain});
-    driveData.makeupScheduled=getMakeupScheduledLS().map(x=>x.originalId===occId?{...x,absentStudents:remain}:x);
-    scheduleDriveSave();
-    return;
-  }
-  makeupMatchMap.delete(occId);
-  driveData.makeupScheduled=getMakeupScheduledLS().filter(x=>x.originalId!==occId);
+// 取消這堂請假／調課排出去的**所有**場次（取消調課用：整堂移走的那場一定要跟著撤）
+async function deleteMakeupsForOcc(occId){
+  const recs=getMakeupsFor(occId);
+  if(!recs.length)return;
+  driveData.makeupScheduled=getMakeupScheduledLS().map(normalizeMakeupRec).filter(x=>x.originalId!==occId);
+  rebuildMakeupMatchMap();
   scheduleDriveSave();
-  const s=new Date(prev.scheduledDate);
-  logAct('makeup',`取消${(prev.absentStudents||[]).length?` ${prev.absentStudents.join('、')} 的`:''}${prev.calName||'補課'}`,
-    `${fmtD(s)} ${fmtT(s)} ${prev.room||''} ${prev.origTitle||''}`.trim(),'原本的請假已取消，這場一併移除');
+  recs.forEach(prev=>{
+    const s=new Date(prev.scheduledDate);
+    logAct('makeup',`取消${(prev.absentStudents||[]).length?` ${prev.absentStudents.join('、')} 的`:''}${prev.calName||'補課'}`,
+      `${fmtD(s)} ${fmtT(s)} ${prev.room||''} ${prev.origTitle||''}`.trim(),'回到待安排清單');
+  });
+  await Promise.all([loadToday(),loadWeek()]);
+  renderMakeup();updateMakeupBadge();
+}
+
+// 取消請假後同步已排的補課（absence.js doCancel 呼叫）：
+// 那場補的人全都不請假了 → 整場移除（不然主頁會留一場沒來由的課）；只撤部分人 → 那場名單跟著縮小。
+// 跟 cancelReschedule 的處置對齊（取消調課也會把已排時段撤掉）。多場各自判斷。
+function syncMakeupOnLeaveCancel(occId){
+  const recs=getMakeupsFor(occId);if(!recs.length)return;
+  const ab=getAbsences().find(a=>a.occId===occId);
+  const remain=new Set(((ab&&ab.leave)||[]).map(x=>x.name));
+  const stillResched=!!(ab&&ab.resched);
+  const removed=[];
+  const kept=getMakeupScheduledLS().map(normalizeMakeupRec).filter(rec=>{
+    if(rec.originalId!==occId)return true;
+    // 調課場次的名單是全名冊，請假撤光不代表調課要撤 → 只要那堂還在調課就留著
+    if(stillResched)return true;
+    const left=(rec.absentStudents||[]).filter(n=>remain.has(n));
+    if(!left.length){removed.push(rec);return false;}
+    rec.absentStudents=left;
+    return true;
+  });
+  driveData.makeupScheduled=kept;
+  rebuildMakeupMatchMap();
+  scheduleDriveSave();
+  removed.forEach(prev=>{
+    const s=new Date(prev.scheduledDate);
+    logAct('makeup',`取消${(prev.absentStudents||[]).length?` ${prev.absentStudents.join('、')} 的`:''}${prev.calName||'補課'}`,
+      `${fmtD(s)} ${fmtT(s)} ${prev.room||''} ${prev.origTitle||''}`.trim(),'原本的請假已取消，這場一併移除');
+  });
+}
+
+// 把某幾個人「從請假改標成曠課」時，他們原本排好的補課要跟著撤（曠課不排補課）——
+// 不然主頁會留一場沒來由的課。整堂性質的場次（老師請假／調課，名單是空的）不歸這裡管。
+// 跟 syncMakeupOnLeaveCancel 分開寫：那支看的是「還有誰在請假」，這支只動被點名的那幾個。
+function dropMakeupsForNoShow(occId,names){
+  if(!names.length||!getMakeupsFor(occId).length)return;
+  const removed=[];
+  const kept=getMakeupScheduledLS().map(normalizeMakeupRec).filter(rec=>{
+    if(rec.originalId!==occId)return true;
+    const who=rec.absentStudents||[];
+    if(!who.length)return true;
+    const left=who.filter(n=>!names.includes(n));
+    if(left.length===who.length)return true;    // 這場沒補到被改標的人
+    if(!left.length){removed.push(rec);return false;}
+    rec.absentStudents=left;
+    return true;
+  });
+  driveData.makeupScheduled=kept;
+  rebuildMakeupMatchMap();
+  scheduleDriveSave();
+  removed.forEach(prev=>{
+    const s=new Date(prev.scheduledDate);
+    logAct('makeup',`取消${(prev.absentStudents||[]).length?` ${prev.absentStudents.join('、')} 的`:''}${prev.calName||'補課'}`,
+      `${fmtD(s)} ${fmtT(s)} ${prev.room||''} ${prev.origTitle||''}`.trim(),'改標成曠課，這場一併移除');
+  });
 }
 
 // 視窗縮放時重畫教室時間軸（無實際作用因 renderTL 是 no-op，但保留以維持原行為）

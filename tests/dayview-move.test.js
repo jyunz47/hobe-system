@@ -159,7 +159,7 @@ suite('換教室與其他排法', () => {
     assertEq(new Date(rec.scheduledDate).getHours(), 18);
     assertEq(rec.room, '309');
     // O(1) 快取沒同步的話，畫面會繼續顯示舊教室
-    assertEq(makeupMatchMap.get('sys:7:2026-08-11:0').room, '309');
+    assertEq(getMakeupsFor('sys:7:2026-08-11:0')[0].room, '309');
   });
 });
 

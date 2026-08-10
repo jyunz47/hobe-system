@@ -82,6 +82,10 @@ var CF_SUBJECTS=['數學','理化','物理','化學','生物','英文','國文',
 // ── 新增課程表單狀態 ──
 var cfState=null;
 
+// 空白時段：日期預設今天（2026-08-06 老闆要求）。「指定日期」多半是排今天或這幾天的單場加課，
+// 空欄位每次都要點日曆挑；每週重複用不到 date 欄，帶著也不影響（存檔時只取該 mode 需要的欄位）。
+function cfBlankSlot(){return{weekday:1,start:'',end:'',date:toDateStr(new Date())};}
+
 function cfBlank(){
   return{
     target:'modal',         // 'page'＝新增頁（送出後清空連續輸入）；'modal'＝課程總覽的編輯視窗
@@ -99,7 +103,7 @@ function cfBlank(){
     teacherInput:'',        // 老師輸入框當前文字
     teacherRate:'',
     mode:'weekly',
-    slots:[{weekday:1,start:'',end:'',date:''}], // 兩種 mode 共用欄位，存檔時只取需要的
+    slots:[cfBlankSlot()],  // 兩種 mode 共用欄位，存檔時只取需要的
     phases:[],              // 換時段段落（每週重複才有）：[{from:'YYYY-MM-DD', slots:[{weekday,start,end}]}]，依日期自動切換上課時間
     room:'',
     defaultPrice:'',
@@ -125,7 +129,7 @@ function openCourseForm(courseId){
       room:co.room||'',defaultPrice:co.defaultPrice??'',
       needsGrade:!!co.needsGrade,needsGradeTouched:true,
       sourceChannel:co.sourceChannel||''};
-    if(!cfState.slots.length)cfState.slots=[{weekday:1,start:'',end:'',date:''}];
+    if(!cfState.slots.length)cfState.slots=[cfBlankSlot()];
   }else cfState=cfBlank();
   renderCourseForm();
   document.getElementById('cf-modal-wrap').classList.add('open');
@@ -320,9 +324,15 @@ function cfTeacherInput(v){cfState.teacherInput=v;}
 function cfAddTeacher(){const n=(cfState.teacherInput||'').trim();if(!n)return;if(!cfState.teachers.includes(n))cfState.teachers.push(n);cfState.teacherInput='';renderCourseForm();}
 function cfDelTeacher(i){cfState.teachers.splice(i,1);renderCourseForm();}
 function cfRateInput(v){cfState.teacherRate=v;}
-function cfSetMode(m){if(cfState.mode!==m){cfState.mode=m;cfAfterTypeAffecting();}}
+function cfSetMode(m){
+  if(cfState.mode===m)return;
+  cfState.mode=m;
+  // 切到「指定日期」時，還沒填日期的那幾列補上今天（跟新開表單同一個預設）
+  if(m==='dates')cfState.slots.forEach(sl=>{if(!sl.date)sl.date=toDateStr(new Date());});
+  cfAfterTypeAffecting();
+}
 function cfSlotSet(i,f,v){cfState.slots[i][f]=v;if(f==='weekday')cfSyncAutoName();}
-function cfAddSlot(){cfState.slots.push({weekday:1,start:'',end:'',date:''});renderCourseForm();}
+function cfAddSlot(){cfState.slots.push(cfBlankSlot());renderCourseForm();}
 // 換時段段落（多段上課時間）：同一門課、不同期別時間不同，依 from 日期自動切換
 var CF_TERM_STARTS=[['上學期',8,1],['寒假',1,1],['下學期',2,1],['暑假',6,1]]; // [標籤, 月(0起), 日]
 function cfNextTermDate(mo,dd){const now=new Date();now.setHours(0,0,0,0);let d=new Date(now.getFullYear(),mo,dd);if(d<now)d=new Date(now.getFullYear()+1,mo,dd);return`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;}
@@ -355,7 +365,7 @@ function cfPhaseAddSlot(pi){cfState.phases[pi].slots.push({weekday:1,start:'',en
 function cfPhaseDelSlot(pi,si){const s=cfState.phases[pi].slots;s.splice(si,1);if(!s.length)s.push({weekday:1,start:'',end:''});renderCourseForm();}
 function cfDelSlot(i){
   cfState.slots.splice(i,1);
-  if(!cfState.slots.length)cfState.slots.push({weekday:1,start:'',end:'',date:''});
+  if(!cfState.slots.length)cfState.slots.push(cfBlankSlot());
   renderCourseForm();
 }
 function cfRoomChange(v){cfState.room=v;}
@@ -757,7 +767,7 @@ function renderTeacherAdmin(){
     const used=getCourses().filter(c=>courseTeacherIds(c).includes(t.id));
     const retired=(t.status||'在職')==='離職';
     const courseList=used.length?used.map(c=>c.name).join('、'):'（尚未指派課程）';
-    return`<div class="ta-row${retired?' ta-retired':''}">
+    return`<div class="ta-row${retired?' ta-retired':''}" data-tid="${t.id}">
       <div class="ta-main">
         <div class="ta-line1">
           <input class="ta-name" value="${esc(t.name)}" maxlength="10" onchange="taRename(${t.id},this.value)" title="點擊直接改名">

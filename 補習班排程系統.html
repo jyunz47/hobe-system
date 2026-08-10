@@ -23,7 +23,7 @@ if(new URLSearchParams(location.search).get('app')==='dayview'){
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HOBE">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=52">
+<link rel="stylesheet" href="style.css?v=60">
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -81,6 +81,14 @@ if ('serviceWorker' in navigator) {
 <div class="main">
   <div class="topbar">
     <div><div class="tbt" id="tbt">課程</div><div class="tbs" id="tbs">今日與本週課程</div></div>
+    <!-- 全站搜尋：課程 / 老師 / 學生（js/search.js）。登入頁整條頂欄會被藏起來，不用另外切顯示 -->
+    <div class="gs-box" id="gs-box">
+      <svg class="gs-mag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input class="gs-inp" id="gs-inp" type="text" autocomplete="off" spellcheck="false" placeholder="搜尋課程 / 老師 / 學生…"
+             oninput="gsInput(this.value)" onfocus="gsFocus()" onkeydown="gsKey(event)">
+      <span class="gs-kbd">⌘K</span>
+      <div class="gs-drop" id="gs-drop"></div>
+    </div>
     <div class="tba">
       <button class="btn btns" id="btn-refresh" style="display:none" onclick="refreshCurrent()">↻ 更新</button>
       <button class="btn btns" id="btn-signout" style="display:none" onclick="signOut()">登出</button>
@@ -304,6 +312,27 @@ if ('serviceWorker' in navigator) {
       .dv-cf-warn{display:block;margin-top:7px;color:#e0805d}
       .dv-wrap.dv-light .dv-cf-warn{color:#B4562C}
       .dv-cf-foot{display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap;padding:14px 18px 16px}
+      /* ── 課堂搜尋面板（🔍／⌘K）：吃 .dv-wrap 的亮／深色變數，兩種主題都對 ── */
+      .dv-gs-wrap{position:fixed;inset:0;z-index:1200;background:rgba(0,0,0,.45);display:none;align-items:flex-start;justify-content:center;padding:56px 20px 20px}
+      .dv-gs-wrap.open{display:flex}
+      .dv-gs{background:var(--dvbg);color:var(--dvfg);border:1px solid var(--dvline);border-radius:14px;width:min(470px,100%);
+        max-height:100%;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 18px 50px rgba(0,0,0,.45)}
+      .dv-gs-top{display:flex;align-items:center;gap:9px;padding:11px 13px;border-bottom:1px solid var(--dvline);flex-shrink:0}
+      .dv-gs-mag{width:15px;height:15px;color:var(--dvfg3);flex-shrink:0}
+      .dv-gs-inp{flex:1;min-width:0;border:none;background:transparent;color:var(--dvfg);font:inherit;font-size:15px;outline:none}
+      .dv-gs-inp::placeholder{color:var(--dvfg3)}
+      .dv-gs-x{border:1px solid var(--dvline);background:var(--dvbg2);color:var(--dvfg2);border-radius:6px;padding:2px 7px;font-size:11px;font-family:inherit;cursor:pointer;flex-shrink:0}
+      .dv-gs-x:hover{background:var(--dvbg3)}
+      .dv-gs-list{overflow-y:auto;padding:6px}
+      .dv-gs-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:9px;cursor:pointer}
+      .dv-gs-row.sel{background:var(--dvbg2)}
+      .dv-gs-txt{flex:1;min-width:0}
+      .dv-gs-nm{display:block;font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+      .dv-gs-nm mark{background:rgba(232,184,75,.28);color:inherit;border-radius:2px;padding:0 1px}
+      .dv-gs-meta{display:block;font-size:11.5px;color:var(--dvfg2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+      .dv-gs-empty{padding:24px 14px;text-align:center;font-size:13px;color:var(--dvfg2);line-height:1.6}
+      .dv-gs-empty span{display:block;margin-top:4px;font-size:11.5px;color:var(--dvfg3)}
+      .dv-gs-hint{display:flex;gap:12px;flex-wrap:wrap;padding:8px 13px;border-top:1px solid var(--dvline);font-size:10.5px;color:var(--dvfg3);flex-shrink:0}
       /* ⚠️ 修飾 class 一律用「元件名 + 修飾」的完整名字（dv-cf-pri / dv-cf-cancel），不要用短名。
          這裡踩過兩次雷（2026-07-31 兩修）：
            1. 主要鈕叫 .main → 撞 style.css 的版面主欄 .main（min-height:100vh），按鈕被撐成整頁高
@@ -429,6 +458,7 @@ if ('serviceWorker' in navigator) {
                   <button class="dv-seg-b" data-v="week" onclick="dvSetView('week')">Week</button>
                   <button class="dv-seg-b" data-v="month" onclick="dvSetView('month')">Month</button>
                 </div>
+                <button class="dv-actbtn" id="dv-searchbtn" onclick="gsDvOpen()" title="搜尋課堂：課名／老師／學生／教室（⌘K）">🔍 搜尋</button>
                 <button class="dv-actbtn" id="dv-roombtn" onclick="dvToggleRooms()" title="日檢視：一間教室一欄">🏫 依教室</button>
                 <button class="dv-actbtn" id="dv-themebtn" onclick="dvToggleTheme()" title="亮色／深色">🌙</button>
               </div>
@@ -455,6 +485,21 @@ if ('serviceWorker' in navigator) {
             <div class="dv-cf-title" id="dv-cf-title"></div>
             <div class="dv-cf-body" id="dv-cf-body"></div>
             <div class="dv-cf-foot" id="dv-cf-foot"></div>
+          </div>
+        </div>
+        <!-- 課堂搜尋（🔍 鈕／⌘K）：這個視窗沒有側欄，切分頁就回不來，所以只找課堂、找到就翻過去。
+             放在 .dv-wrap 裡面才吃得到亮／深色那組 CSS 變數。 -->
+        <div class="dv-gs-wrap" id="dv-gs" onclick="if(event.target===this)gsDvClose()">
+          <div class="dv-gs">
+            <div class="dv-gs-top">
+              <svg class="dv-gs-mag" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+              <input class="dv-gs-inp" id="dv-gs-inp" type="text" autocomplete="off" spellcheck="false"
+                     placeholder="搜尋課堂：課名 / 老師 / 學生 / 教室…"
+                     oninput="gsDvInput(this.value)" onkeydown="gsDvKey(event)">
+              <button class="dv-gs-x" onclick="gsDvClose()">esc</button>
+            </div>
+            <div class="dv-gs-list" id="dv-gs-list"></div>
+            <div class="dv-gs-hint"><span>↑↓ 選擇</span><span>Enter 翻過去</span><span>只找課堂，改設定回主系統視窗</span></div>
           </div>
         </div>
       </div>
@@ -581,9 +626,10 @@ if ('serviceWorker' in navigator) {
 <script src="js/students.js?v=23"></script>
 <script src="js/attendance.js?v=2"></script>
 <script src="js/grades.js?v=3"></script>
-<script src="js/settings.js?v=24"></script>
-<script src="js/courses.js?v=23"></script>
+<script src="js/settings.js?v=25"></script>
+<script src="js/courses.js?v=24"></script>
 <script src="js/activity.js?v=4"></script>
+<script src="js/search.js?v=5"></script>
 <script src="js/init.js?v=27"></script>
 
 <div class="stu-modal-wrap" id="stu-modal-wrap">

@@ -18,7 +18,10 @@ var makeupList=[];
 var driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[],courses:[],teachers:[],absences:[]};
 var driveSaveTimer=null;
 var drivePendingSave=false; // 本機是否有尚未寫入 Firestore 的改動（refreshCurrent 重讀前用來決定要不要先 flush）
-var makeupMatchMap=new Map(); // absenceEventId → {calEventId,scheduledDate,scheduledEnd,room,origTitle,absentStudents}
+// 請假課堂 occId → 這堂的補課場次**陣列**（2026-08-05 從單筆改多筆：
+// 三人同一堂請假可以各排各的時段，每場自己一筆、自己一份名單）。
+// 每筆 {id,originalId,scheduledDate,scheduledEnd,room,origTitle,absentStudents,calName,calEventId}
+var makeupMatchMap=new Map();
 var selectedWeekEvent=null;
 var weekOffset=0; // 0=this week, -1=last week, +1=next week
 var selectedWeekDayIdx=null; // 0=Mon..6=Sun, null = default to today
@@ -52,11 +55,19 @@ function findEventById(id){
   return dayEvents.find(e=>e.id===id)||weekEvents.find(e=>e.id===id)
     ||dvEvents.find(e=>e.id===id)||makeupList.find(e=>e.id===id);
 }
-// 過去散在 3 處：new Map(getMakeupScheduled().map(s=>[s.originalId,s])).get(id)
-// 直接從 makeupMatchMap 取（O(1)），不用每次建臨時 Map
-function findMakeupScheduledById(originalId){
-  const v=makeupMatchMap.get(originalId);
-  return v?{originalId,...v}:undefined;
+// 這堂請假排了哪幾場補課（依上課時間排序）。一堂可以有多場（每場補不同的人）。
+// ⚠ 舊版的 findMakeupScheduledById 回傳單筆，已刪除——留著會讓呼叫端安靜地只看到第一場。
+function getMakeupsFor(occId){
+  const list=makeupMatchMap.get(occId);
+  return list?list.slice().sort((a,b)=>new Date(a.scheduledDate)-new Date(b.scheduledDate)):[];
+}
+// 依補課場次自己的 id 找那一筆（拖曳改時段、取消單場用）
+function findMakeupRec(recId){
+  for(const list of makeupMatchMap.values()){
+    const hit=list.find(r=>r.id===recId);
+    if(hit)return hit;
+  }
+  return undefined;
 }
 
 // ── 顏色與教室常數 ──
@@ -96,6 +107,9 @@ function bizHoursOn(date){
 }
 
 // slot picker 與 timeline 狀態
-var slotPicker={ev:null,mode:null,date:null,time:null,room:null,avail:null};
+// students＝這次要幫誰排（請假名單的子集，2026-08-05 起可只排一部分人）；
+// recId＝改期時沿用的那筆補課 id，null＝新排一場；
+// join＝併班補課選中的主課 occId（2026-08-06 第 2 刀），有值時時段/教室都跟著那堂走、不用再選
+var slotPicker={ev:null,mode:null,date:null,time:null,room:null,avail:null,students:null,recId:null,join:null};
 var heroProgressTimer=null;
 var tlAxisStart=0,tlTotalMins=0,tlNowTimer=null;

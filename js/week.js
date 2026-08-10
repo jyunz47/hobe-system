@@ -151,7 +151,10 @@ function wcardHtml(e){
     `${e.isAbsent?`<div class="tcard-abs"><span class="l">請假</span>${e.absType==='老師請假'?'老師請假':esc(e.absentStudents.join('、'))+'請假'}</div>`:''}${e.isNoShow?`<div class="tcard-abs"><span class="l">曠課</span>${esc(e.noShowStudents.join('、'))}</div>`:''}`;
   const noteInline=e.notes?`<div class="tcard-note"><span class="l">備註</span>${esc(e.notes)}</div>`:'';
   const mkSt=getMkSt(e);
-  const extras=(absInline||noteInline||mkSt)?`<div class="tcard-extras">${noteInline}${absInline}${mkSt}</div>`:'';
+  // 別班請假的學生今天併進這堂一起上（第 2 刀）→ 卡上講一行，名冊多的人才有來由
+  const joinRows=joinRosterOn(e.id);
+  const joinInline=joinRows.length?`<div class="tcard-abs"><span class="l">補課生</span>${esc(joinRows.map(r=>r.name).join('、'))}（${esc(joinRows[0].fromTitle||'')}）</div>`:'';
+  const extras=(absInline||noteInline||mkSt||joinInline)?`<div class="tcard-extras">${noteInline}${absInline}${joinInline}${mkSt}</div>`:'';
   return `<div class="${cls}" id="wc-${id}" style="border-left-color:${tcv}" onclick="selectWeekEvent('${id}')">
     <div class="tcard-row">
       <div class="tcard-time">${fmtT(e.startDt)}<span class="dash">—</span>${fmtT(e.endDt)}</div>
@@ -232,7 +235,7 @@ function selectWeekEvent(id){
           ${ev.teacher?`<span>👤 ${esc(ev.teacher)}</span>`:''}
           <span style="color:${COLORS[ev.type]};font-weight:500">${typeLbl(ev.type)}${ev.classroom?`・${esc(ev.classroom)}`:''}</span>
           ${ev.isFullAbsent?`<span style="color:var(--dg);font-weight:500">${ev.isRescheduled?('調課'+(ev.rescheduleReason?'：'+esc(ev.rescheduleReason):'')): ev.absType==='老師請假'?'老師請假':esc(ev.absentStudents.join('、'))+'請假'}</span>`:''}
-          ${(()=>{if(!ev.isFullAbsent&&!ev.isRescheduled)return'';const rec=findMakeupScheduledById(ev.id);if(rec){const sd=new Date(rec.scheduledDate);return`<span style="color:#5C7E6A;font-weight:500;background:#EDF0EA;border:1px solid #CFE0D5;padding:2px 8px;border-radius:6px;font-size:12px">${ev.isRescheduled?'調課':'補課'}：${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${fmtT(sd)}${rec.room?' '+esc(rec.room):''}</span>`;}return`<span style="color:#C0504A;font-weight:500;background:#F8EDEA;border:1px solid #E8C5BF;padding:2px 8px;border-radius:6px;font-size:12px">未安排${ev.isRescheduled?'調課':'補課'}</span>`;})()}
+          ${mkChipsHtml(ev)}
         </div>
       </div>
       <div class="cc-actions">
@@ -308,7 +311,7 @@ async function cancelReschedule(id){
     if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length)list=list.filter(a=>a!==rec);
     saveAbsences(list);
   }
-  if(makeupMatchMap.has(id))await deleteMakeupScheduled(id);
+  await deleteMakeupsForOcc(id);   // 調課排出去的時段一併撤（一堂可能不只一場）
   toast('已取消調課','ok');
   closeWeekModal();
   await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);

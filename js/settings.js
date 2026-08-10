@@ -113,7 +113,7 @@ function renderCoCard(c,daySess,wd,teacher){
   const times=[...new Set((daySess||[]).map(s=>hhmm(s.date)))];
   // 系統課的開關存課程本體（courses.needsGrade），行事曆課存 courseSettings
   const gradeToggle=c.sys?`toggleSysNeedsGrade(${c.sys.id},this.checked)`:`toggleNeedsGrade(${tEsc},this.checked)`;
-  return `<div class="co-card">
+  return `<div class="co-card" data-cokey="${esc(key)}">
     <div class="co-card-hd" onclick="openCourseModal(${kEsc})">
       <span class="co-card-title">${esc(c.title)}</span>
       ${teacherLabel?`<span class="co-card-teacher">👤 ${esc(teacherLabel)}</span>`:''}

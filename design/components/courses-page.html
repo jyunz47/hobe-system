@@ -9,16 +9,22 @@
 <link rel="stylesheet" href="../../tokens.css">
 <link rel="stylesheet" href="../../style.css">
 <style>
-  /* 來源：補習班排程系統.html #panel-courses + js/today.js（課卡／點名面板）
-     + js/week.js selectWeekEvent（課程詳情 modal）。
+  /* 來源：補習班排程系統.html #panel-courses + js/today.js（tcardHtml／buildAttPanel）
+     + js/week.js selectWeekEvent（課程詳情 modal）+ js/absence.js buildAbsPanel／confirmAbs
+     + js/utils.js uiConfirm（#ask-modal-wrap）。
      靜態快照、假資料、已移除 onclick。設定情境＝週五 17:20，焦點課＝國二數學班。
 
-     ── 這張卡是「一頁多態」：五個 screen 各是一次完整的課程分頁 ──
+     ⚠️ 2026-07-31 起「課卡的動作一律跳置中視窗」：課卡展開後只剩一列按鈕，
+     點名／成績／請假／調課四塊面板全部住在同一扇課程詳情 modal 裡（一次只開一塊）。
+     卡片內不再有任何展開面板——D 態就是這條規則的樣子。
+
+     ── 這張卡是「一頁多態」：六個 screen 各是一次完整的課程分頁 ──
      互動態（你點了什麼）：
        A 預設　　　　 沒點任何東西，頁面的靜止樣子
        B 課卡展開　　 點「國二數學班」的卡 → 動作列長出來，把下面的卡往下擠
-       C 詳情 modal　 點「↔ 請假/調課」→ 遮罩蓋住整頁、modal 浮在中間
-       D 點名面板　　 點「✓ 點名」→ 名冊在卡片內展開
+       C 詳情 modal　 點「↔ 請假/調課」→ 遮罩蓋住整頁、modal 浮在中間、請假面板展開
+       D 點名面板　　 點「✓ 點名」→ 同一扇 modal，改成點名面板展開（卡片本身沒變高）
+       F 次數提醒　　 請假面板按「確認標記」→ ask-modal 疊在詳情 modal 之上先攔一下
      資料態（資料長什麼樣）：
        E 多堂同時進行 時鐘 19:10、四堂並行 → 右欄 hero 疊成一座塔
 
@@ -54,8 +60,11 @@
      真實 app 的 .week-modal 是 position:fixed —— 蓋滿整個瀏覽器視窗。
      這裡降成 absolute，遮罩就只蓋住它所屬的那一個 screen，
      四個整頁狀態才能疊在同一張卡裡並排比較（否則 modal 會蓋掉全部四頁）。
-     除此之外遮罩透明度、模糊、置中、box 尺寸陰影全部照吃 style.css，零漂移。 */
-  .screen .week-modal{position:absolute}
+     除此之外遮罩透明度、模糊、置中、box 尺寸陰影全部照吃 style.css，零漂移。
+     ask-modal（uiConfirm 的確認視窗，.stu-modal-wrap）同理——它的 z-index:80
+     本來就疊在 week-modal 的 50 之上，降成 absolute 後這個上下關係照樣成立。 */
+  .screen .week-modal,
+  .screen .stu-modal-wrap{position:absolute}
 </style>
 </head>
 <body>
@@ -725,7 +734,7 @@
        C · 課程詳情 modal 蓋在整頁上
        ═══════════════════════════════════════════════════════════ -->
   <div>
-    <div class="screen-lbl"><span class="n">C</span>課程詳情 modal<span class="note">按課卡的「↔ 請假/調課」→ 遮罩壓暗整頁、modal 浮在中間（這一態是重新設計的重點）</span></div>
+    <div class="screen-lbl"><span class="n">C</span>課程詳情 modal<span class="note">按課卡的「↔ 請假/調課」→ 遮罩壓暗整頁、modal 浮在中間；四個動作都在這一列（這一態是重新設計的重點）</span></div>
     <div class="screen">
       <div class="page">
         <div class="wrap">
@@ -1073,9 +1082,13 @@
                     <span style="color:var(--cal-general);font-weight:500">一般課程・大教室</span>
                   </div>
                 </div>
+                <!-- 四個動作同一列（2026-07-31 起卡上的動作全部轉到這裡）；
+                     點名／成績只在「這堂真的有上」時才出現，成績再多一個「需登記成績」條件 -->
                 <div class="cc-actions">
                   <button class="btn btns">🗓 請假</button>
                   <button class="btn btns">↔ 調課</button>
+                  <button class="btn btns">✓ 點名</button>
+                  <button class="btn btns">✎ 成績</button>
                 </div>
               </div>
               <div class="abs-panel open">
@@ -1122,7 +1135,7 @@
        D · 點名面板在卡片內展開
        ═══════════════════════════════════════════════════════════ -->
   <div>
-    <div class="screen-lbl"><span class="n">D</span>點名面板<span class="note">按課卡的「✓ 點名」→ 名冊在卡片內攤開，整張卡把右欄推得很長</span></div>
+    <div class="screen-lbl"><span class="n">D</span>點名面板<span class="note">按課卡的「✓ 點名」→ 一樣跳這扇 modal，只是展開的那塊換成點名名冊（卡片本身不變高）</span></div>
     <div class="screen">
       <div class="page">
         <div class="wrap">
@@ -1268,7 +1281,8 @@
                     </div>
                   </div>
 
-                  <!-- ▼ 點名面板展開的那張卡 -->
+                  <!-- ▼ 被點開的那張卡：只長出動作列，點名名冊在下面那扇 modal 裡
+                       （2026-07-31 起卡片內不再展開任何面板，所以這張卡的高度跟 B 態一模一樣） -->
                   <div class="tcard2 t-regular t-now tc-open" style="--tcv:var(--cal-general)">
                     <div class="tcard2-head">
                       <div class="tcard2-av">數</div>
@@ -1283,73 +1297,6 @@
                       <button class="tc-act">↔ 請假/調課</button>
                       <button class="tc-act">✓ 點名</button>
                       <button class="tc-act">✎ 成績</button>
-                    </div>
-                    <div class="att-panel" style="display:block">
-                      <div class="att-hd">
-                        <button class="att-allbtn">全部到</button>
-                        <span class="att-hd-prog">6/8 到</span>
-                      </div>
-                      <div class="att-list">
-                        <div class="att-row">
-                          <span class="att-nm">王小明</span>
-                          <span class="att-seg">
-                            <button class="att-here on">✓ 到</button>
-                            <button class="att-late">遲到</button>
-                            <button class="att-skip" title="沒來 → 標曠課">曠</button>
-                          </span>
-                        </div>
-                        <div class="att-row">
-                          <span class="att-nm">陳大華</span>
-                          <span class="att-seg">
-                            <button class="att-here on">✓ 到</button>
-                            <button class="att-late">遲到</button>
-                            <button class="att-skip" title="沒來 → 標曠課">曠</button>
-                          </span>
-                        </div>
-                        <div class="att-row">
-                          <span class="att-nm">李小美</span>
-                          <span class="att-seg">
-                            <button class="att-here on">✓ 到</button>
-                            <button class="att-late">遲到</button>
-                            <button class="att-skip" title="沒來 → 標曠課">曠</button>
-                          </span>
-                        </div>
-                        <div class="att-row">
-                          <span class="att-nm">張志強</span>
-                          <span class="att-seg">
-                            <button class="att-here on">✓ 到</button>
-                            <button class="att-late">遲到</button>
-                            <button class="att-skip" title="沒來 → 標曠課">曠</button>
-                          </span>
-                        </div>
-                        <div class="att-row">
-                          <span class="att-nm">黃淑芬</span>
-                          <span class="att-seg">
-                            <button class="att-here">到</button>
-                            <button class="att-late on">遲 15 分</button>
-                            <button class="att-skip" title="沒來 → 標曠課">曠</button>
-                          </span>
-                        </div>
-                        <div class="att-row">
-                          <span class="att-nm">吳建宏</span>
-                          <span class="att-seg">
-                            <button class="att-here on">✓ 到</button>
-                            <button class="att-late">遲到</button>
-                            <button class="att-skip" title="沒來 → 標曠課">曠</button>
-                          </span>
-                        </div>
-                        <!-- 遲到分鐘行內輸入態 -->
-                        <div class="att-row att-picking">
-                          <span class="att-nm">林佩青</span>
-                          <span class="att-lateedit">遲到 <input type="number" class="att-mininput" value="10"> 分
-                            <button class="att-min ok">✓</button>
-                            <button class="att-min cancel">✕</button></span>
-                        </div>
-                        <div class="att-row att-noid">
-                          <span class="att-nm">怡君</span>
-                          <span class="att-hint">需對帳</span>
-                        </div>
-                      </div>
                     </div>
                   </div>
 
@@ -1515,6 +1462,107 @@
 
         </div>
       </div>
+
+      <!-- 同一扇課程詳情 modal，這次展開的是點名面板（att-panel）。
+           一次只開一塊：展開點名會把請假／成績／調課面板收起來（closeEventPanels）。 -->
+      <div class="week-modal open">
+        <div class="week-modal-overlay"></div>
+        <div class="week-modal-box">
+          <div class="week-modal-hd">
+            <span>7/4（五）17:00–19:00</span>
+            <button class="btn btns" style="padding:3px 9px">✕</button>
+          </div>
+          <div>
+            <div class="cc" style="border:none;border-radius:0">
+              <div class="cc-main">
+                <div class="cc-bar" style="background:var(--cal-general)"></div>
+                <div class="cc-body">
+                  <div class="cc-name"><span>國二數學班</span></div>
+                  <div class="cc-meta">
+                    <span>🕐 17:00–19:00</span>
+                    <span>⏱ 2小時</span>
+                    <span>👤 王老師</span>
+                    <span style="color:var(--cal-general);font-weight:500">一般課程・大教室</span>
+                  </div>
+                </div>
+                <div class="cc-actions">
+                  <button class="btn btns">🗓 請假</button>
+                  <button class="btn btns">↔ 調課</button>
+                  <button class="btn btns">✓ 點名</button>
+                  <button class="btn btns">✎ 成績</button>
+                </div>
+              </div>
+
+              <div class="att-panel" style="display:block">
+                <div class="att-hd">
+                  <button class="att-allbtn">全部到</button>
+                  <span class="att-hd-prog">6/8 到</span>
+                </div>
+                <div class="att-list">
+                  <div class="att-row">
+                    <span class="att-nm">王小明</span>
+                    <span class="att-seg">
+                      <button class="att-here on">✓ 到</button>
+                      <button class="att-late">遲到</button>
+                      <button class="att-skip" title="沒來 → 標曠課">曠</button>
+                    </span>
+                  </div>
+                  <div class="att-row">
+                    <span class="att-nm">陳大華</span>
+                    <span class="att-seg">
+                      <button class="att-here on">✓ 到</button>
+                      <button class="att-late">遲到</button>
+                      <button class="att-skip" title="沒來 → 標曠課">曠</button>
+                    </span>
+                  </div>
+                  <div class="att-row">
+                    <span class="att-nm">李小美</span>
+                    <span class="att-seg">
+                      <button class="att-here on">✓ 到</button>
+                      <button class="att-late">遲到</button>
+                      <button class="att-skip" title="沒來 → 標曠課">曠</button>
+                    </span>
+                  </div>
+                  <div class="att-row">
+                    <span class="att-nm">黃淑芬</span>
+                    <span class="att-seg">
+                      <button class="att-here">到</button>
+                      <button class="att-late on">遲 15 分</button>
+                      <button class="att-skip" title="沒來 → 標曠課">曠</button>
+                    </span>
+                  </div>
+                  <div class="att-row">
+                    <span class="att-nm">吳建宏</span>
+                    <span class="att-seg">
+                      <button class="att-here on">✓ 到</button>
+                      <button class="att-late">遲到</button>
+                      <button class="att-skip" title="沒來 → 標曠課">曠</button>
+                    </span>
+                  </div>
+                  <!-- 遲到分鐘行內輸入態（attLatePick 指向這一列） -->
+                  <div class="att-row att-picking">
+                    <span class="att-nm">林佩青</span>
+                    <span class="att-lateedit">遲到 <input type="number" class="att-mininput" value="10"> 分
+                      <button class="att-min ok">✓</button>
+                      <button class="att-min cancel">✕</button></span>
+                  </div>
+                  <!-- 已請假／已曠課的人鎖住不給點（att-locked），名字畫刪除線 -->
+                  <div class="att-row att-locked">
+                    <span class="att-nm struck">張志強</span>
+                    <span class="att-lock">請假</span>
+                  </div>
+                  <!-- 對不到 studentId 的舊名字：不能記出席 -->
+                  <div class="att-row att-noid">
+                    <span class="att-nm">怡君</span>
+                    <span class="att-hint">需對帳</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -1897,6 +1945,435 @@
 
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════════════
+       F · 請假次數提醒（ask-modal 疊在課程詳情 modal 之上）
+       版面與 C 相同，差在請假面板選的是「課前 1hr 以上」＋兩位學生，按下「確認標記」之後
+       ═══════════════════════════════════════════════════════════ -->
+  <div>
+    <div class="screen-lbl"><span class="n">F</span>請假次數提醒<span class="note">請假面板按「確認標記」→ 這次標記會讓誰達到多收費門檻，先跳這扇視窗攔一下；按「仍要標記」才寫入</span></div>
+    <div class="screen">
+      <div class="page">
+        <div class="wrap">
+
+          <!-- ① 教室時段 + 進行中 hero -->
+          <div class="tl-ab-box">
+            <div class="tl-a">
+              <div class="tl-a-hd">教室時段</div>
+              <div class="tl-a-body">
+                <div class="tl-wrap">
+                  <div class="tl-corner"></div>
+                  <div class="tl-hdr">
+                    <span class="tl-tick" style="left:0%">13:00</span>
+                    <span class="tl-tick" style="left:12.5%">14:00</span>
+                    <span class="tl-tick" style="left:25%">15:00</span>
+                    <span class="tl-tick" style="left:37.5%">16:00</span>
+                    <span class="tl-tick" style="left:50%">17:00</span>
+                    <span class="tl-tick" style="left:62.5%">18:00</span>
+                    <span class="tl-tick" style="left:75%">19:00</span>
+                    <span class="tl-tick" style="left:87.5%">20:00</span>
+                    <span class="tl-tick" style="left:100%">21:00</span>
+                    <span class="tl-now-hdr-lbl" style="left:54.2%">▾</span>
+                  </div>
+                  <div class="tl-room-lbl">大教室</div>
+                  <div class="tl-track">
+                    <div class="tl-now-line" style="left:54.2%"></div>
+                    <div class="tl-block" style="left:12.5%;width:25%;background:var(--cal-general)">
+                      <div class="tl-block-nm">高一數學班</div>
+                      <div class="tl-block-t">14:00</div>
+                    </div>
+                    <div class="tl-block" style="left:50%;width:25%;background:var(--cal-general)">
+                      <div class="tl-block-nm">國二數學班</div>
+                      <div class="tl-block-t">17:00</div>
+                    </div>
+                  </div>
+                  <div class="tl-room-lbl">小教室</div>
+                  <div class="tl-track">
+                    <div class="tl-now-line" style="left:54.2%"></div>
+                    <div class="tl-block" style="left:56.25%;width:25%;background:var(--cal-general)">
+                      <div class="tl-block-nm">新力、晨宇理化</div>
+                      <div class="tl-block-t">17:30</div>
+                    </div>
+                  </div>
+                  <div class="tl-room-lbl">208</div>
+                  <div class="tl-track">
+                    <div class="tl-now-line" style="left:54.2%"></div>
+                    <div class="tl-block" style="left:62.5%;width:18.75%;background:var(--cal-general)">
+                      <div class="tl-block-nm">高三物理</div>
+                      <div class="tl-block-t">18:00</div>
+                    </div>
+                  </div>
+                  <div class="tl-room-lbl">301教室</div>
+                  <div class="tl-track">
+                    <div class="tl-now-line" style="left:54.2%"></div>
+                    <div class="tl-block" style="left:25%;width:25%;background:var(--cal-practice)">
+                      <div class="tl-block-nm">國三理化練習</div>
+                      <div class="tl-block-t">15:00</div>
+                    </div>
+                    <div class="tl-block" style="left:75%;width:25%;background:var(--cal-general)">
+                      <div class="tl-block-nm">國一英文班</div>
+                      <div class="tl-block-t">19:00</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="tl-b">
+              <div id="today-hero">
+                <div class="thero">
+                  <div class="thero-bar" style="background:var(--cal-general)"></div>
+                  <div class="thero-hd">
+                    <span class="thero-tag"><span class="ndot"></span>進行中</span>
+                    <span class="tpill t-regular"><span class="pdot"></span>一般課程</span>
+                    <div class="thero-time">17:00 – 19:00<span class="sub">2 小時</span></div>
+                  </div>
+                  <div class="thero-title">國二數學班</div>
+                  <div class="thero-meta">
+                    <span><span class="lbl">授課</span><b>王老師</b></span>
+                    <span><span class="lbl">教室</span><b>大教室</b></span>
+                    <span><span class="lbl">學生</span><b>8 人</b> <span class="stu-rest">王小明、陳大華、李小美…</span></span>
+                  </div>
+                  <div class="thero-prog">
+                    <div class="thero-prog-bar"><div class="thero-prog-fill" style="width:17%"></div></div>
+                    <div class="thero-prog-txt"><span class="prog-elap">已進行 20 分</span><span class="prog-remain">剩 100 分</span></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ② 今日課程 -->
+          <div class="courses-layout" style="grid-template-columns:1fr">
+            <div class="today-panel">
+              <div class="today-panel-hd">
+                <span class="today-panel-title">今日課程</span>
+                <div class="date-nav">
+                  <div class="date-title">7/4（週五）</div>
+                  <button class="dbtn">‹ 前一天</button>
+                  <button class="dbtn">今天</button>
+                  <button class="dbtn">後一天 ›</button>
+                  <input type="date" value="2026-07-04">
+                </div>
+              </div>
+              <div class="today-panel-body">
+                <div class="legend">
+                  <div class="lgi"><div class="lgd" style="background:var(--cal-general)"></div>一般課程</div>
+                  <div class="lgi"><div class="lgd" style="background:var(--cal-resched)"></div>調課</div>
+                  <div class="lgi"><div class="lgd" style="background:var(--cal-makeup)"></div>補課</div>
+                  <div class="lgi"><div class="lgd" style="background:var(--cal-extra)"></div>加課</div>
+                  <div class="lgi"><div class="lgd" style="background:var(--cal-trial)"></div>試聽</div>
+                  <div class="lgi"><div class="lgd" style="background:var(--cal-practice)"></div>練習課</div>
+                </div>
+                <div class="tsum">
+                  <span>共 <b>6</b> 堂</span>
+                  <span>已完成 <b>2</b></span>
+                  <span>進行中 <b style="color:var(--ac)">1</b></span>
+                  <span>待上 <b style="color:var(--ac)">2</b></span>
+                  <span class="tsum-abs">1 請假</span>
+                </div>
+                <div class="tgrid">
+
+                  <div class="tcard2 t-regular t-past" style="--tcv:var(--cal-general)">
+                    <div class="tcard2-head">
+                      <div class="tcard2-av">數</div>
+                      <div class="tcard2-info">
+                        <div class="tcard2-name"><span class="tcard2-title">高一數學班</span><span class="tc-badge tc-badge-past">已結束</span><span class="tc-badge att-badge att-done">✓ 點名完成</span></div>
+                        <div class="tcard2-sub">大教室 · 林老師 · 5 人</div>
+                      </div>
+                      <div class="tcard2-time"><b>14:00</b><span>16:00</span></div>
+                      <span class="tcard2-chev">▾</span>
+                    </div>
+                  </div>
+
+                  <div class="tcard2 t-practice t-past" style="--tcv:var(--cal-practice)">
+                    <div class="tcard2-head">
+                      <div class="tcard2-av av-practice">練</div>
+                      <div class="tcard2-info">
+                        <div class="tcard2-name"><span class="tcard2-title">國三理化練習</span><span class="tc-badge tc-badge-past">已結束</span></div>
+                        <div class="tcard2-sub">301教室 · 4 人 · 自習</div>
+                      </div>
+                      <div class="tcard2-time"><b>15:00</b><span>17:00</span></div>
+                      <span class="tcard2-chev">▾</span>
+                    </div>
+                  </div>
+
+                  <div class="tcard2 t-regular t-now tc-open" style="--tcv:var(--cal-general)">
+                    <div class="tcard2-head">
+                      <div class="tcard2-av">數</div>
+                      <div class="tcard2-info">
+                        <div class="tcard2-name"><span class="tcard2-title">國二數學班</span><span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span><span class="tc-badge att-badge">點名 6/8</span></div>
+                        <div class="tcard2-sub">大教室 · 王老師 · 8 人</div>
+                      </div>
+                      <div class="tcard2-time"><b>17:00</b><span>19:00</span></div>
+                      <span class="tcard2-chev">▾</span>
+                    </div>
+                    <div class="tcard2-actions">
+                      <button class="tc-act">↔ 請假/調課</button>
+                      <button class="tc-act">✓ 點名</button>
+                      <button class="tc-act">✎ 成績</button>
+                    </div>
+                  </div>
+
+                  <div class="tcard2 t-regular" style="--tcv:var(--cal-general)">
+                    <div class="tcard2-head">
+                      <div class="tcard2-av">理</div>
+                      <div class="tcard2-info">
+                        <div class="tcard2-name"><span class="tcard2-title">新力、晨宇理化</span></div>
+                        <div class="tcard2-sub">小教室 · 陳老師 · 2 人</div>
+                      </div>
+                      <div class="tcard2-time"><b>17:30</b><span>19:30</span></div>
+                      <span class="tcard2-chev">▾</span>
+                    </div>
+                  </div>
+
+                  <div class="tcard2 t-one t-absent" style="--tcv:var(--cal-general)">
+                    <div class="tcard2-head">
+                      <div class="tcard2-av">物</div>
+                      <div class="tcard2-info">
+                        <div class="tcard2-name"><span class="tcard2-title struck">高三物理</span><span class="tc-badge tc-badge-abs">請假</span><span class="tc-badge tc-badge-un">未安排</span></div>
+                        <div class="tcard2-sub">208 · 郭老師 · 1 人</div>
+                      </div>
+                      <div class="tcard2-time"><b>18:00</b><span>19:30</span></div>
+                      <span class="tcard2-chev">▾</span>
+                    </div>
+                  </div>
+
+                  <div class="tcard2 t-regular" style="--tcv:var(--cal-general)">
+                    <div class="tcard2-head">
+                      <div class="tcard2-av">英</div>
+                      <div class="tcard2-info">
+                        <div class="tcard2-name"><span class="tcard2-title">國一英文班</span></div>
+                        <div class="tcard2-sub">301教室 · 黃老師 · 6 人</div>
+                      </div>
+                      <div class="tcard2-time"><b>19:00</b><span>21:00</span></div>
+                      <span class="tcard2-chev">▾</span>
+                    </div>
+                  </div>
+
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- ③ 本週課程標題列 -->
+          <div class="sec-hd">
+            <span>本週課程</span>
+            <div class="sec-hd-line"></div>
+            <button class="dbtn" style="font-size:12px;padding:4px 9px;flex-shrink:0">‹ 上一週</button>
+            <button class="dbtn" style="font-size:12px;padding:4px 9px;flex-shrink:0">本週</button>
+            <button class="dbtn" style="font-size:12px;padding:4px 9px;flex-shrink:0">下一週 ›</button>
+          </div>
+
+          <!-- ④ 七日摘要 + 焦點日 -->
+          <div class="wsum-grid">
+            <button class="wcell">
+              <div class="wcell-hd"><span class="wcell-wd">一</span><span class="wcell-dd">30</span></div>
+              <div class="wcell-body">
+                <div class="wcell-it"><span class="wcell-dot" style="background:var(--cal-general)"></span><span class="wcell-nm">國一數學A</span></div>
+                <div class="wcell-it"><span class="wcell-dot" style="background:var(--cal-general)"></span><span class="wcell-nm">國二英文B</span></div>
+              </div>
+            </button>
+            <button class="wcell">
+              <div class="wcell-hd"><span class="wcell-wd">二</span><span class="wcell-dd">1</span></div>
+              <div class="wcell-body">
+                <div class="wcell-it"><span class="wcell-dot" style="background:var(--cal-general)"></span><span class="wcell-nm">高一數學</span></div>
+                <div class="wcell-it"><span class="wcell-dot" style="background:var(--cal-makeup)"></span><span class="wcell-nm">補課·小明</span></div>
+              </div>
+            </button>
+            <button class="wcell">
+              <div class="wcell-hd"><span class="wcell-wd">三</span><span class="wcell-dd">2</span></div>
+              <div class="wcell-body">
+                <div class="wcell-it"><span class="wcell-dot" style="background:var(--cal-general)"></span><span class="wcell-nm">國三理化</span></div>
+              </div>
+            </button>
+            <button class="wcell">
+              <div class="wcell-hd"><span class="wcell-wd">四</span><span class="wcell-dd">3</span></div>
+              <div class="wcell-body">
+                <div class="wcell-it"><span class="wcell-dot" style="background:var(--cal-general)"></span><span class="wcell-nm">國二英文B</span></div>
+                <div class="wcell-it"><span class="wcell-dot" style="background:var(--cal-trial)"></span><span class="wcell-nm">試聽·可茵</span></div>
+              </div>
+            </button>
+            <button class="wcell w-sel w-today">
+              <div class="wcell-hd"><span class="wcell-wd">五</span><span class="wcell-dd">4</span><span class="wcell-today">今</span></div>
+              <div class="wcell-body">
+                <div class="wcell-it"><span class="wcell-dot" style="background:var(--cal-general)"></span><span class="wcell-nm">高一數學班</span></div>
+                <div class="wcell-it"><span class="wcell-dot" style="background:var(--cal-general)"></span><span class="wcell-nm">國二數學班</span></div>
+                <div class="wcell-it"><span class="wcell-dot" style="background:var(--cal-general)"></span><span class="wcell-nm">高三物理·假</span></div>
+                <div class="wcell-more">+3</div>
+              </div>
+            </button>
+            <button class="wcell">
+              <div class="wcell-hd"><span class="wcell-wd">六</span><span class="wcell-dd">5</span></div>
+              <div class="wcell-body">
+                <div class="wcell-it"><span class="wcell-dot" style="background:var(--cal-practice)"></span><span class="wcell-nm">週末練習課</span></div>
+              </div>
+            </button>
+            <button class="wcell">
+              <div class="wcell-hd"><span class="wcell-wd">日</span><span class="wcell-dd">6</span></div>
+              <div class="wcell-body"><div class="wcell-empty">—</div></div>
+            </button>
+          </div>
+          <div class="wfocus">
+            <div class="wfocus-hd">
+              <div class="wfocus-hd-row">
+                <div class="wfocus-date">7/4 週五</div>
+                <span class="wfocus-tag">TODAY</span>
+              </div>
+              <div class="wfocus-meta"><span>5 堂</span><span class="tsum-abs">1 請假</span></div>
+            </div>
+            <div class="wfocus-list">
+              <div class="tcard t-regular t-now" style="border-left-color:var(--cal-general)">
+                <div class="tcard-row">
+                  <div class="tcard-time">17:00<span class="dash">—</span>19:00</div>
+                  <div class="tcard-dur">2 小時</div>
+                  <div class="tcard-tags">
+                    <span class="tpill t-regular"><span class="pdot"></span>一般課程</span>
+                    <span class="tstat tstat-now"><span class="ndot"></span>進行中</span>
+                  </div>
+                </div>
+                <div class="tcard-title">國二數學班</div>
+                <div class="tcard-meta">
+                  <span><span class="lbl">授課</span><b>王老師</b></span>
+                  <span><span class="lbl">教室</span><b>大教室</b></span>
+                  <span><span class="lbl">學生</span><b>8 人</b></span>
+                </div>
+              </div>
+              <div class="tcard t-one t-absent" style="border-left-color:var(--cal-general)">
+                <div class="tcard-row">
+                  <div class="tcard-time">18:00<span class="dash">—</span>19:30</div>
+                  <div class="tcard-dur">1.5 小時</div>
+                  <div class="tcard-tags">
+                    <span class="tpill t-one"><span class="pdot"></span>一對一</span>
+                  </div>
+                </div>
+                <div class="tcard-title struck">高三物理</div>
+                <div class="tcard-meta">
+                  <span><span class="lbl">授課</span><b>郭老師</b></span>
+                  <span><span class="lbl">教室</span><b>208</b></span>
+                  <span><span class="lbl">學生</span><b>張志強</b></span>
+                </div>
+                <div class="tcard-extras">
+                  <div class="tcard-abs"><span class="l">請假</span>張志強請假</div>
+                </div>
+              </div>
+              <div class="tcard t-regular" style="border-left-color:var(--cal-general)">
+                <div class="tcard-row">
+                  <div class="tcard-time">19:00<span class="dash">—</span>21:00</div>
+                  <div class="tcard-dur">2 小時</div>
+                  <div class="tcard-tags">
+                    <span class="tpill t-regular"><span class="pdot"></span>一般課程</span>
+                  </div>
+                </div>
+                <div class="tcard-title">國一英文班</div>
+                <div class="tcard-meta">
+                  <span><span class="lbl">授課</span><b>黃老師</b></span>
+                  <span><span class="lbl">教室</span><b>301教室</b></span>
+                  <span><span class="lbl">學生</span><b>6 人</b></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- modal：真實 DOM 就長這樣（補習班排程系統.html #week-modal），
+           .open 讓 .week-modal 從 display:none 變 flex → 遮罩 + 置中 box。 -->
+      <div class="week-modal open">
+        <div class="week-modal-overlay"></div>
+        <div class="week-modal-box">
+          <div class="week-modal-hd">
+            <span>7/4（五）17:00–19:00</span>
+            <button class="btn btns" style="padding:3px 9px">✕</button>
+          </div>
+          <div>
+            <div class="cc" style="border:none;border-radius:0">
+              <div class="cc-main">
+                <div class="cc-bar" style="background:var(--cal-general)"></div>
+                <div class="cc-body">
+                  <div class="cc-name"><span>國二數學班</span></div>
+                  <div class="cc-meta">
+                    <span>🕐 17:00–19:00</span>
+                    <span>⏱ 2小時</span>
+                    <span>👤 王老師</span>
+                    <span style="color:var(--cal-general);font-weight:500">一般課程・大教室</span>
+                  </div>
+                </div>
+                <!-- 四個動作同一列（2026-07-31 起卡上的動作全部轉到這裡）；
+                     點名／成績只在「這堂真的有上」時才出現，成績再多一個「需登記成績」條件 -->
+                <div class="cc-actions">
+                  <button class="btn btns">🗓 請假</button>
+                  <button class="btn btns">↔ 調課</button>
+                  <button class="btn btns">✓ 點名</button>
+                  <button class="btn btns">✎ 成績</button>
+                </div>
+              </div>
+              <div class="abs-panel open">
+                <div class="abs-opts" style="margin-bottom:12px">
+                  <div class="abs-opt">👨‍🏫 老師請假</div>
+                  <div class="abs-opt ss">🧑‍🎓 學生請假</div>
+                </div>
+                <div class="stu-wrap" style="display:block">
+                  <div class="stu-label">選擇請假學生（可多選）</div>
+                  <div class="stu-chips">
+                    <div class="stu-chip checked">王小明</div>
+                    <div class="stu-chip">陳大華</div>
+                    <div class="stu-chip checked">李小美</div>
+                    <div class="stu-chip">張志強</div>
+                    <div class="stu-chip">黃淑芬</div>
+                    <div class="stu-chip">吳建宏</div>
+                    <div class="stu-chip">林佩青</div>
+                    <div class="stu-chip">怡君</div>
+                  </div>
+                </div>
+                <div class="stu-wrap" style="display:block">
+                  <div class="stu-label">請假時機（系統已預選，可改）</div>
+                  <div class="abs-opts" style="margin-bottom:0">
+                    <div class="abs-opt ss">課前 1hr 以上</div>
+                    <div class="abs-opt">課前 1hr 內</div>
+                    <div class="abs-opt">已開始·曠課</div>
+                  </div>
+                </div>
+                <div class="abs-confirm">
+                  <div class="abs-preview" style="flex:1;font-size:12px;color:var(--tx2)">王小明、李小美 課前 1hr 以上請假 → 需補課</div>
+                  <button class="btn btns">取消</button>
+                  <button class="btn btns btnp">確認標記</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+
+      <!-- uiConfirm 的確認視窗（#ask-modal-wrap）。z-index:80 疊在 week-modal 的 50 之上，
+           所以會看到兩層遮罩。Enter＝仍要標記、Esc＝取消。純提醒，不擋、不改任何收費計算。 -->
+      <div class="stu-modal-wrap open">
+        <div class="stu-modal-overlay"></div>
+        <div class="stu-modal" style="max-width:420px">
+          <div class="stu-modal-hd">
+            <div class="stu-modal-title"><span style="font-size:16px;font-weight:700">⚠ 請假次數提醒</span></div>
+            <button class="stu-modal-close">✕</button>
+          </div>
+          <div class="stu-modal-body">
+            <div class="ask-body">
+              <div style="font-size:13.5px;line-height:1.7">
+                <div style="margin-bottom:8px">以下學生標記後會達到 <b>暑假</b> 的多收費門檻（2 次）：</div>
+                <div style="margin:4px 0">・<b>王小明</b>　國二數學班　第 <b>2</b> 次請假</div>
+                <div style="margin:4px 0">・<b>李小美</b>　國二數學班　第 <b>3</b> 次請假</div>
+                <div style="margin-top:10px;color:var(--tx2);font-size:12.5px">記得跟家長確認收費。仍要標記請按下面的按鈕。</div>
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:16px">
+              <button class="btn btns">取消</button>
+              <button class="btn btns btnp">仍要標記</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 

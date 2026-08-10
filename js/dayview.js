@@ -298,6 +298,9 @@ function _dvEvHtml(it,axisStart,isToday,now){
     (e.isMakeupOcc&&e.calName==='補課')?'<span class="dv-ev-badge">補課</span>':
     e.isAbsent?'<span class="dv-ev-badge">請假</span>':
     e.isNoShow?'<span class="dv-ev-badge">曠課</span>':'';
+  // 別班的人今天併進這堂補課（第 2 刀）→ 課塊上標「+N 補」，不然只有點開側欄才看得到
+  const joinN=typeof joinCountOn==='function'?joinCountOn(e.id):0;
+  const joinBadge=joinN?`<span class="dv-ev-badge">+${joinN} 補</span>`:'';
   const movable=!_dvDragWhyNot(e);
   const cls='dv-ev'+(faded?' dv-faded':'')+(stat==='now'?' dv-now':'')+(stat==='past'?' dv-past':'')+(hgt<40?' dv-short':'')+(movable?' dv-movable':'')+(e.id===dvSelId?' dv-sel':'')+(rowMode?' dv-row':'')+(it.badged?' dv-badged':'');
   const sub=[];
@@ -309,7 +312,7 @@ function _dvEvHtml(it,axisStart,isToday,now){
   const tm=rowMode?`<span class="dv-ev-time">${_dvAP(e.startDt)}</span>`:'';
   return`<div class="${cls}" data-id="${esc(e.id)}" style="top:${top}px;height:${hgt-2}px;left:calc(${left.toFixed(2)}% + 2px);width:calc(${width.toFixed(2)}% - 4px);z-index:${rowMode?25:2+(it.lv||0)};border-left-color:${bar};background:${bg};color:${txt}" onpointerdown="dvDragStart(event,'${esc(e.id)}')" onclick="dvEvClick(event,'${esc(e.id)}')" ondblclick="dvEvDbl(event,'${esc(e.id)}')" title="${esc(e.origTitle)}${movable?'（可拖曳改時間）':''}">`
     +`${isRepeat&&!rowMode?`<span class="dv-ev-rep" style="color:${bar}">↻</span>`:''}`
-    +`<div class="dv-ev-title${faded?' struck':''}">${tm}${esc(e.origTitle)}${badge}</div>${meta}</div>`;
+    +`<div class="dv-ev-title${faded?' struck':''}">${tm}${esc(e.origTitle)}${badge}${joinBadge}</div>${meta}</div>`;
 }
 
 // ── 分欄時間軸（day 與 week 共用）──
@@ -555,10 +558,17 @@ function renderDvInspector(){
   // 整堂沒上（請假／調課）就一定有補課或調課要排——排了沒排一眼看到
   if(faded){
     const lbl=ev.isRescheduled?'調課':'補課';
-    const rec=findMakeupScheduledById(ev.id);
-    if(rec){const sd=new Date(rec.scheduledDate);
-      rows.push(row(lbl,`${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${_dvHM(sd)}${rec.room?'・'+esc(rec.room):''}`));}
-    else rows.push(row(lbl,`<span style="color:${_dvTone('#C0504A')};font-weight:600">未安排</span>`));
+    const recs=getMakeupsFor(ev.id);   // 一堂可以排好幾場（不同人各排各的）
+    recs.forEach(rec=>{
+      const sd=new Date(rec.scheduledDate);
+      const who=(rec.absentStudents||[]).join('、');
+      const where=isJoinRec(rec)?`・👥 併入 ${esc(rec.hostTitle||'另一堂課')}`:(rec.room?'・'+esc(rec.room):'');
+      rows.push(row(recs.length>1&&who?`${lbl}・${esc(who)}`:lbl,
+        `${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${_dvHM(sd)}${where}`));
+    });
+    const left=mkPendingNames(ev);
+    if(!recs.length)rows.push(row(lbl,`<span style="color:${_dvTone('#C0504A')};font-weight:600">未安排</span>`));
+    else if(left.length)rows.push(row(lbl,`<span style="color:${_dvTone('#C0504A')};font-weight:600">${esc(left.join('、'))} 未安排</span>`));
   }
 
   // ── 名冊（附每人的請假／曠課／點名狀態）──
@@ -572,7 +582,7 @@ function renderDvInspector(){
       :`<span class="r">點名 ${s.here}/${s.total}</span>`;
   }
   const stuHtml=roster.length
-    ?roster.map(r=>`<div class="dv-stu"><span class="dv-stu-nm">${esc(r.name)}</span>${subjOf.has(r.name)?`<span class="dv-stu-sub">${esc(subjOf.get(r.name))}</span>`:''}${_dvStuTag(ev,r)}</div>`).join('')
+    ?roster.map(r=>`<div class="dv-stu"><span class="dv-stu-nm">${esc(r.name)}</span>${subjOf.has(r.name)?`<span class="dv-stu-sub">${esc(subjOf.get(r.name))}</span>`:''}${r.join?_dvTag('補・'+(r.fromTitle||''),'#C16B36'):''}${_dvStuTag(ev,r)}</div>`).join('')
     :'<div class="dv-insp-row"><span class="v dim">這堂還沒有人登記</span></div>';
 
   // ── 動作：一律轉開既有的置中詳情視窗 ──
@@ -933,16 +943,16 @@ function _dvMoveDates(p){
 
 // ④ 補課／調課場次：改 makeupScheduled 那筆的時段
 function _dvMoveMakeup(p){
-  const oid=p.ev.makeupOriginalId;
-  const list=getMakeupScheduledLS().slice();
-  const rec=list.find(x=>x.originalId===oid);
+  // 認那一場自己的 id（一堂請假可能排了好幾場，用來源 occId 會抓錯場）
+  const rid=p.ev.makeupRecId;
+  const list=getMakeupScheduledLS().map(normalizeMakeupRec);
+  const rec=list.find(x=>x.id===rid);
   if(!rec)throw new Error('找不到這筆補課安排');
   const wasS=new Date(rec.scheduledDate),wasRoom=rec.room||'';
   rec.scheduledDate=p.s.toISOString();rec.scheduledEnd=p.en.toISOString();rec.room=p.room;
   driveData.makeupScheduled=list;
+  rebuildMakeupMatchMap();
   scheduleDriveSave();
-  const mm=makeupMatchMap.get(oid);
-  if(mm){mm.scheduledDate=rec.scheduledDate;mm.scheduledEnd=rec.scheduledEnd;mm.room=p.room;}
   logAct('makeup',`改了${(rec.absentStudents||[]).length?` ${rec.absentStudents.join('、')} 的`:''}${rec.calName||'補課'}時段`,
     `${fmtD(p.s)} ${_dvHM(p.s)}–${_dvHM(p.en)} ${p.room||''} ${rec.origTitle||''}`.trim(),
     `原本排在 ${fmtD(wasS)} ${fmtT(wasS)} ${wasRoom}`.trim());

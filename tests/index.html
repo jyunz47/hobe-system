@@ -60,14 +60,6 @@ var _actCalls = [];
 function logAct(kind, text, target, detail) { _actCalls.push({ kind, text, target, detail }); }
 function actEvLabel(ev) { return ev && ev.origTitle || ''; }
 function getMakeupScheduledLS() { return driveData.makeupScheduled || []; }
-function saveMakeupScheduled(ev, sS, sE, room, calEventId, calName) {
-  _mkCalls.push({ id: ev.id, students: ev.absentStudents, start: sS, end: sE, room, calName });
-  const list = getMakeupScheduledLS().filter(x => x.originalId !== ev.id);
-  list.push({ originalId: ev.id, origTitle: ev.origTitle, originalDate: ev.startDt.toISOString(),
-    scheduledDate: sS.toISOString(), scheduledEnd: sE.toISOString(), room, calName });
-  driveData.makeupScheduled = list;
-  makeupMatchMap.set(ev.id, { scheduledDate: sS.toISOString(), scheduledEnd: sE.toISOString(), room, calName });
-}
 </script>
 
 <!-- 1. 被測程式（utils.js 提供 toDateStr/fmtT，dayview.js 的拖曳寫入需要）-->
@@ -79,18 +71,24 @@ function saveMakeupScheduled(ev, sS, sE, room, calEventId, calName) {
 <script src="../js/absence.js"></script>
 <script src="../js/makeup.js"></script>
 <script src="../js/students.js"></script>
+<script src="../js/search.js"></script>
 
-<!-- 1b. 測試用覆寫：makeup.js 帶著真身的 saveMakeupScheduled 進來，會蓋掉上面那顆記錄呼叫的
-     spy（dayview-move 的斷言靠 _mkCalls）。它載入之後再裝回去。 -->
+<!-- 1b. 測試用包裝：saveMakeupScheduled 走 makeup.js 的真身（要驗真的寫進 makeupScheduled
+     的形狀），外面再包一層記錄呼叫的 spy（dayview-move 的斷言靠 _mkCalls）。
+     真身必須先被抓進另一個 <script>——同一塊裡 function 宣告會被提升，會抓到自己變成無限遞迴。 -->
+<script>var _realSaveMakeup = saveMakeupScheduled;</script>
 <script>
-function saveMakeupScheduled(ev, sS, sE, room, calEventId, calName) {
-  _mkCalls.push({ id: ev.id, students: ev.absentStudents, start: sS, end: sE, room, calName });
-  const list = getMakeupScheduledLS().filter(x => x.originalId !== ev.id);
-  list.push({ originalId: ev.id, origTitle: ev.origTitle, originalDate: ev.startDt.toISOString(),
-    scheduledDate: sS.toISOString(), scheduledEnd: sE.toISOString(), room, calName });
-  driveData.makeupScheduled = list;
-  makeupMatchMap.set(ev.id, { scheduledDate: sS.toISOString(), scheduledEnd: sE.toISOString(), room, calName });
+function saveMakeupScheduled(ev, sS, sE, room, calEventId, calName, students, recId) {
+  _mkCalls.push({ id: ev.id, students: (students || ev.absentStudents || []).slice(),
+    start: sS, end: sE, room, calName });
+  return _realSaveMakeup(ev, sS, sE, room, calEventId, calName, students, recId);
 }
+// 重畫類的下游（真身要 DOM／Firebase）：測的是資料寫入，畫面收掉就好
+function renderMakeup() {}
+function updateMakeupBadge() { return 0; }
+function loadToday() { return Promise.resolve(); }
+function loadWeek() { return Promise.resolve(); }
+function toast() {}
 </script>
 
 <!-- 2. 測試框架（會註冊 DOM 載入後自動跑） -->
@@ -102,6 +100,10 @@ function saveMakeupScheduled(ev, sS, sE, room, calEventId, calName) {
 <script src="course-type.test.js"></script>
 <script src="leave-threshold.test.js"></script>
 <script src="student-stats.test.js"></script>
+<script src="makeup-split.test.js"></script>
+<script src="makeup-join.test.js"></script>
+<script src="absence-mixed.test.js"></script>
+<script src="search.test.js"></script>
 
 </body>
 </html>

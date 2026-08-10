@@ -63,8 +63,11 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// 載入完後（含所有 sibling script），跑所有 suites
-setTimeout(() => {
+// 載入完後（含所有 sibling script），跑所有 suites。
+// ⚠ 這裡要等 DOMContentLoaded，不能用 setTimeout(0)：本檔是 <script>，後面還有好幾個
+// 測試檔要下載。冷快取時瀏覽器會在等網路的空檔把 timer 跑掉 → 那時只註冊了前兩個檔，
+// 畫面顯示「26/26 全綠」，其實有一半的測試根本沒跑（安靜地少測，最危險的那種）。
+function _runAllSuites() {
   const root = document.getElementById('results');
   _suites.forEach(({ name, fn }) => {
     const section = document.createElement('section');
@@ -79,4 +82,6 @@ setTimeout(() => {
   summary.innerHTML = '<strong>' + _passed + ' / ' + total + ' 通過</strong>' +
     (_failed > 0 ? '，' + _failed + ' 失敗' : ' ✓ 全綠');
   root.prepend(summary);
-}, 0);
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', _runAllSuites);
+else setTimeout(_runAllSuites, 0);

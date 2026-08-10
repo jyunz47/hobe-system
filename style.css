@@ -110,6 +110,21 @@ input[type=date]:focus{border-color:var(--ac)}
 .stu-chips{display:flex;gap:8px;flex-wrap:wrap}
 .stu-chip{display:inline-flex;align-items:center;padding:5px 11px;border-radius:99px;border:1px solid var(--br);background:var(--sf);font-size:13px;cursor:pointer;transition:all .12s;user-select:none}
 .stu-chip:hover{border-color:var(--brs)}.stu-chip.checked{background:var(--wl);border-color:#E6C3A6;color:var(--wn)}
+/* 已經標過請假/曠課的人：chip 上掛現況小標，讓人知道「再選一次是改狀態」 */
+.stu-chip-marked{border-style:dashed}
+/* 「這次要幫誰排補課」選人視窗（2026-08-05）：預設全選，所以要一眼看得出亮的是「已選、可按掉」 */
+.mk-pick-head{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:8px;font-size:12.5px;color:var(--tx2)}
+.mk-pick-acts{display:flex;gap:6px}
+.mk-pick-acts .btn{font-size:11.5px;padding:3px 9px}
+.mk-pick-tick{display:inline-block;width:11px;margin-right:5px;font-size:11px;opacity:0}  /* 佔位不留白：勾不見時 chip 寬度不跳 */
+.stu-chip.checked .mk-pick-tick{opacity:1}
+.stu-chip-tag{margin-left:6px;padding:1px 6px;border-radius:99px;background:var(--sf2);color:var(--tx2);font-size:10.5px;line-height:1.5}
+.stu-chip.checked .stu-chip-tag{background:#F3E2D2;color:var(--wn)}
+/* 一批人各自選時機：每人一列 */
+.abs-timings{display:flex;flex-direction:column;gap:6px}
+.abs-timing-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.abs-timing-who{min-width:64px;font-size:13px;font-weight:500;color:var(--tx)}
+.abs-timing-row .abs-opt{padding:4px 10px;font-size:12px}
 .abs-confirm{display:flex;gap:8px;align-items:center;padding-top:10px;border-top:1px solid var(--br)}
 .abs-preview{font-size:12px;color:var(--tx2);flex:1}
 .abs-preview strong{color:var(--tx)}
@@ -185,6 +200,21 @@ input[type=date]:focus{border-color:var(--ac)}
 .sp-chips-wrap{display:flex;flex-direction:column;gap:10px}
 .sp-group-lbl{font-size:11px;font-weight:700;color:var(--tx2);letter-spacing:.04em}
 .sp-time-sub{font-size:10px;margin-left:5px;opacity:.75;font-family:inherit}
+/* 併班補課（第 2 刀）：選一堂當天的課讓請假的人進去一起上，選了就跳過時段/教室 */
+.sp-join-note{font-size:12px;color:var(--tx2);margin:-4px 0 10px;line-height:1.6}
+.sp-join-list{display:flex;flex-direction:column;gap:8px}
+.sp-join{border:1.5px solid var(--br);border-radius:12px;padding:10px 14px;cursor:pointer;background:var(--sf);transition:all .15s}
+.sp-join:hover{border-color:var(--ac);background:var(--al)}
+.sp-join.sp-sel{border-color:var(--ac);background:var(--al);box-shadow:inset 3px 0 0 var(--ac)}
+.sp-join-t{font-size:13.5px;font-weight:600;color:var(--tx)}
+.sp-join-m{font-size:11.5px;color:var(--tx2);margin-top:2px}
+.sp-join-m b{color:var(--ac);font-weight:600}
+.sp-join-w{color:#C16B36;font-weight:500;margin-left:8px}
+.sp-join-empty{font-size:12.5px;color:var(--tx3);padding:8px 2px}
+.sp-join-or{font-size:11.5px;font-weight:600;color:var(--tx3);letter-spacing:.04em;margin:16px 0 -4px;text-align:center}
+/* 名冊裡的補課生（點名／成績／課卡）：本班生與今天來補的人要分得出來 */
+.att-mk{font-size:10px;font-weight:600;color:#C16B36;background:#F8EDE2;border:1px solid #E6C3A6;border-radius:5px;padding:1px 5px;margin-left:6px}
+.tc-badge-join{background:#F8EDE2;color:#C16B36;border:1px solid #E6C3A6}
 .mk-sec-lbl{font-size:12px;font-weight:700;color:var(--tx2);letter-spacing:.06em;padding-bottom:8px;border-bottom:1px solid var(--br);margin-bottom:10px}
 .mk-sec-gap{margin-top:20px}
 .mk-sec-toggle{cursor:pointer;user-select:none}
@@ -251,6 +281,8 @@ input[type=date]:focus{border-color:var(--ac)}
 .mk-dot{color:var(--tx3)}
 .mk-list-actions{display:flex;flex-direction:row;align-items:center;justify-content:center;gap:6px;padding:8px 10px;flex-shrink:0;flex-wrap:wrap}
 .mk-list-undo{display:flex;justify-content:flex-end;margin-top:4px}
+/* 多人請假只排了一部分：卡片要講清楚還欠誰（2026-08-05 補課可分開排） */
+.mk-list-wait{font-size:12px;color:var(--wn);margin-top:6px}
 .mk-list-chevron{display:flex;align-items:center;padding:0 12px;color:var(--tx3);font-size:11px;flex-shrink:0}
 .mk-btn-arrange{font-size:12px;padding:5px 10px;background:var(--ac);color:#fff;border:none;border-radius:var(--rs);cursor:pointer;white-space:nowrap;font-family:'Noto Sans TC',sans-serif}
 .mk-btn-arrange:hover{background:#5C7E6A}
@@ -261,6 +293,7 @@ input[type=date]:focus{border-color:var(--ac)}
 .mk-badge-teacher{background:var(--il);color:var(--in)}
 .mk-badge-reschedule{background:var(--dl);color:var(--dg)}
 .mk-badge-un{background:var(--sf2);color:var(--tx2)}
+.mk-badge-part{background:var(--wl);color:var(--wn)}   /* 已安排 1/3：排到一半，跟「全排完」要分得出來 */
 .mk-badge-arr{background:var(--al);color:var(--ac)}
 .mk-badge-done{background:var(--sf2);color:var(--ac)}
 @media(max-width:640px){.mk-two-col{grid-template-columns:1fr}.mk-stats{flex-direction:column}}
@@ -321,7 +354,7 @@ input[type=date]:focus{border-color:var(--ac)}
 .tsum-now{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;background:var(--al);color:var(--ac);border-radius:99px;font-weight:600;font-size:11px;cursor:pointer;border:1px solid var(--ac)}
 .tsum-now .dot{width:6px;height:6px;border-radius:3px;background:var(--ac);box-shadow:0 0 0 3px rgba(45,90,61,.18);animation:pulse 1.4s infinite}
 .tsum-abs{color:var(--dg)}
-.tgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.tgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;align-items:start}
 @media (max-width:900px){.tgrid{grid-template-columns:1fr}}
 .tcard{background:var(--sf);border:1px solid var(--br);border-left:5px solid var(--brs);border-radius:var(--r);padding:13px 16px;cursor:pointer;display:flex;flex-direction:column;gap:8px;transition:border-color .12s,box-shadow .12s;scroll-margin-top:80px}
 .tcard:hover{box-shadow:0 1px 6px rgba(0,0,0,.07);border-color:var(--brs)}
@@ -844,6 +877,9 @@ body.hide-todo-chip .stu-info-chip{display:none}
 
   /* 請假面板與彈窗：按鈕加大、內距收斂 */
   .abs-opt{padding:9px 16px}
+  .abs-timing-row .abs-opt{padding:7px 12px;font-size:12.5px}
+  .abs-timing-row{gap:6px}
+  .abs-timing-who{min-width:100%}
   .abs-confirm{flex-wrap:wrap}
   .abs-confirm .btn{padding:9px 16px}
   .stu-chip{padding:8px 14px}
@@ -1237,4 +1273,51 @@ body:has(#panel-login.active) .content{padding:0}
 @media(max-width:640px){
   .act-todo-act{flex-direction:column;align-items:flex-end;gap:3px}
   .act-row-time{display:none}
+}
+
+/* ===== 全站搜尋（頂欄）：課程 / 老師 / 學生 —— js/search.js ===== */
+.gs-box{position:relative;display:flex;align-items:center;width:250px;margin-left:auto;margin-right:12px;flex-shrink:1;min-width:0}
+.gs-mag{position:absolute;left:10px;width:14px;height:14px;color:var(--tx3);pointer-events:none}
+.gs-inp{width:100%;padding:6px 40px 6px 30px;border:1px solid var(--br);border-radius:var(--rs);background:var(--sf2);color:var(--tx);font-family:'Noto Sans TC',sans-serif;font-size:13px;outline:none;transition:background .12s,border-color .12s,box-shadow .12s}
+.gs-inp::placeholder{color:var(--tx3)}
+.gs-inp:focus{background:var(--sf);border-color:var(--ac);box-shadow:0 0 0 3px var(--al)}
+.gs-kbd{position:absolute;right:9px;font-family:'DM Mono',monospace;font-size:10.5px;color:var(--tx3);pointer-events:none}
+.gs-box:focus-within .gs-kbd{display:none}
+
+.gs-drop{display:none;position:absolute;top:calc(100% + 7px);right:0;width:min(440px,88vw);max-height:min(76vh,560px);overflow-y:auto;background:var(--sf);border:1px solid var(--brd);border-radius:var(--r);box-shadow:0 14px 34px rgba(0,0,0,.14);padding:6px;z-index:40}
+.gs-drop.open{display:block}
+.gs-grp{display:flex;align-items:center;gap:6px;padding:9px 10px 4px;font-size:10.5px;font-weight:500;color:var(--tx3);letter-spacing:.07em}
+.gs-grp-n{font-family:'DM Mono',monospace;font-size:10px;background:var(--sf2);border-radius:99px;padding:0 6px}
+.gs-row{display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:var(--rs);cursor:pointer}
+.gs-row.sel{background:var(--sf2)}   /* 選取用中性底：綠底會把「課」圓標吃掉 */
+.gs-ico{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;flex-shrink:0;background:var(--sf2);color:var(--tx2)}
+.gs-ico.k-course{background:var(--al);color:var(--ac)}
+.gs-ico.k-teacher{background:var(--il);color:var(--in)}
+.gs-ico.k-student{background:var(--wl);color:var(--wn)}
+.gs-txt{flex:1;min-width:0}
+.gs-nm{display:block;font-size:13.5px;font-weight:500;color:var(--tx);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gs-nm mark{background:#F3E3B4;color:inherit;border-radius:2px;padding:0 1px}
+.gs-meta{display:block;font-size:11px;color:var(--tx3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gs-why{flex-shrink:0;max-width:38%;font-size:10.5px;color:var(--tx2);background:var(--sf2);border-radius:99px;padding:2px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gs-more{padding:3px 10px 8px;font-size:11px;color:var(--tx3)}
+.gs-empty{padding:20px 12px;text-align:center;font-size:13px;color:var(--tx2)}
+.gs-empty span{display:block;margin-top:5px;font-size:11.5px;color:var(--tx3)}
+.gs-hint{display:flex;gap:12px;margin-top:5px;padding:7px 10px 3px;border-top:1px solid var(--br);font-size:10.5px;color:var(--tx3)}
+
+/* 從搜尋跳過去的那一筆閃一下：課程管理的課卡（可能同時好幾張）、老師管理的那一列。
+   只動 box-shadow，不碰背景——課卡與列的底色不同，動背景收尾會閃一下錯的顏色 */
+.gs-flash{animation:gsFlash 1.7s ease-out;position:relative;z-index:2}
+@keyframes gsFlash{
+  0%,60%{box-shadow:0 0 0 2px var(--ac),0 0 0 8px rgba(107,143,122,.26)}
+  100%{box-shadow:0 0 0 2px rgba(107,143,122,0),0 0 0 8px rgba(107,143,122,0)}
+}
+
+@media(max-width:768px){
+  /* 手機：搜尋框自己一排（頂欄擠不下三欄），下拉滿寬 */
+  .topbar{flex-wrap:wrap;row-gap:8px}
+  .gs-box{order:3;width:100%;margin:0}
+  .gs-drop{left:0;right:0;width:auto;max-height:60vh}
+  .gs-kbd{display:none}
+  .gs-inp{padding-right:12px}
+  .gs-why{display:none}
 }

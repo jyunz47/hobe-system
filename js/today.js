@@ -187,6 +187,11 @@ function renderToday(){
 
 // ── 成績登記 ──
 // 這堂要不要登記成績：系統課看課程本體開關、行事曆課看 courseSettings
+// 併班補課的人疊在主課名冊裡（enrollment.js eventRosterWithId），名字旁掛個「補」
+// 才分得出誰是本班的、誰是今天來補的（點名／成績／日曆側欄共用這一顆）
+function mkJoinTag(r){
+  return r&&r.join?`<span class="att-mk" title="${esc(r.fromTitle||'')} 的補課生">補</span>`:'';
+}
 function evNeedsGrade(e){
   return e.courseId!=null?!!(findCourseById(e.courseId)?.needsGrade):courseNeedsGrade(e.origTitle);
 }
@@ -218,11 +223,11 @@ function buildGradePanel(e){
   const subjTag=nm=>subjOf.has(nm)?`<span class="att-subj">${esc(subjOf.get(nm))}</span>`:'';
   const eid=esc(e.id);
   const rows=roster.map(r=>{
-    if(r.studentId==null)return`<div class="gr-row"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}</span><span class="att-hint">需對帳</span></div>`;
+    if(r.studentId==null)return`<div class="gr-row"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}${mkJoinTag(r)}</span><span class="att-hint">需對帳</span></div>`;
     const sid=r.studentId;
     const chips=getGrades(e.id,sid).map(g=>
       `<span class="gr-chip">${esc(g.label||'成績')}${g.score!=null?` <b>${g.score}</b>`:''}<button class="gr-x" title="刪除這筆" onclick="event.stopPropagation();grRemove('${eid}',${g.id})">✕</button></span>`).join('');
-    return`<div class="gr-row"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}</span>
+    return`<div class="gr-row"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}${mkJoinTag(r)}</span>
       ${chips}
       <span class="gr-add">
         <input class="gr-lab" id="gr-lab-${eid}-${sid}" placeholder="標籤，如：課前考" maxlength="12" autocomplete="off" name="search-gradelabel" onclick="event.stopPropagation()" onkeydown="if(enterSubmit(event)){grAdd('${eid}',${sid})}">
@@ -281,11 +286,21 @@ function heroHtml(e,isNow){
   </div>`;
 }
 
+// 整堂沒上的課要講「補課排哪天」。一堂可以排好幾場（不同人各排各的）→ 每場一行
 function getMkSt(e){
   if(!e.isFullAbsent&&!e.isRescheduled)return'';
-  const rec=findMakeupScheduledById(e.id);
-  if(rec){const sd=new Date(rec.scheduledDate);return`<div class="tcard-mk mk-arr"><span class="l">${e.isRescheduled?'調課':'補課'}</span>${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${fmtT(sd)}</div>`;}
-  return`<div class="tcard-mk mk-un">未安排${e.isRescheduled?'調課':'補課'}</div>`;
+  const recs=getMakeupsFor(e.id);
+  const lbl=e.isRescheduled?'調課':'補課';
+  if(!recs.length)return`<div class="tcard-mk mk-un">未安排${lbl}</div>`;
+  const rows=recs.map(rec=>{
+    const sd=new Date(rec.scheduledDate);
+    const who=(rec.absentStudents||[]).join('、');
+    const join=isJoinRec(rec)?`　👥 併入 ${esc(rec.hostTitle||'另一堂課')}`:'';
+    return`<div class="tcard-mk mk-arr"><span class="l">${isJoinRec(rec)?'併班'+lbl:lbl}</span>${recs.length>1&&who?esc(who)+'　':''}${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${fmtT(sd)}${join}</div>`;
+  }).join('');
+  // 多人請假只排了一部分 → 剩下的人也要看得到還欠著
+  const left=mkPendingNames(e);
+  return rows+(left.length?`<div class="tcard-mk mk-un">${esc(left.join('、'))} 尚未安排${lbl}</div>`:'');
 }
 
 // 科目字母（方向C 卡片左側方塊）
@@ -343,13 +358,13 @@ function buildAttPanel(e){
   const rows=roster.map(r=>{
     const lock=absSet.has(r.name)?'請假':noShowSet.has(r.name)?'曠課':null;
     if(lock)return`<div class="att-row att-locked"><span class="att-nm struck">${esc(r.name)}${subjTag(r.name)}</span><span class="att-lock">${lock}</span></div>`;
-    if(r.studentId==null)return`<div class="att-row att-noid"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}</span><span class="att-hint">需對帳</span></div>`;
+    if(r.studentId==null)return`<div class="att-row att-noid"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}${mkJoinTag(r)}</span><span class="att-hint">需對帳</span></div>`;
     const eid=esc(e.id),sid=r.studentId;
     // 正在輸入遲到分鐘 → 該列換成行內數字輸入
     if(attLatePick&&attLatePick.eid===e.id&&attLatePick.sid===sid){
       const cur=getAtt(e.id,sid)?.lateMin||'';
       return`<div class="att-row att-picking">
-        <span class="att-nm">${esc(r.name)}${subjTag(r.name)}</span>
+        <span class="att-nm">${esc(r.name)}${subjTag(r.name)}${mkJoinTag(r)}</span>
         <span class="att-lateedit">遲到 <input type="number" min="1" inputmode="numeric" class="att-mininput" id="lateinp-${eid}-${sid}" value="${cur}" onclick="event.stopPropagation()" onkeydown="if(enterSubmit(event))saveLate('${eid}',${sid});if(event.key==='Escape')cancelLate('${eid}')"> 分
         <button class="att-min ok" onclick="event.stopPropagation();saveLate('${eid}',${sid})">✓</button>
         <button class="att-min cancel" onclick="event.stopPropagation();cancelLate('${eid}')">✕</button></span>
@@ -359,11 +374,13 @@ function buildAttPanel(e){
     const lateMin=rec&&rec.status==='到'?(rec.lateMin||0):0;
     const onTime=rec&&rec.status==='到'&&!lateMin;
     // 到 = 主要 toggle（高頻）；遲到 = 直接輸入分鐘（次高頻）；曠 = 沒來，跳既有曠課流程（罕見）
-    return`<div class="att-row"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}</span>
+    // 併班補課的人沒有「曠」：他在這堂不是在籍生，標下去會變成主課的請假紀錄、長出一筆
+    // 不存在的欠課。補課沒來就去待補課清單取消那場安排，人自動回到待安排。
+    return`<div class="att-row"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}${mkJoinTag(r)}</span>
       <span class="att-seg">
         <button class="att-here${onTime?' on':''}" onclick="event.stopPropagation();onHere('${eid}',${sid})">${onTime?'✓ 到':'到'}</button>
         <button class="att-late${lateMin?' on':''}" onclick="event.stopPropagation();onLate('${eid}',${sid})">${lateMin?'遲 '+lateMin+' 分':'遲到'}</button>
-        <button class="att-skip" title="沒來 → 標曠課" onclick="event.stopPropagation();onSkip('${eid}',${sid})">曠</button>
+        ${r.join?'':`<button class="att-skip" title="沒來 → 標曠課" onclick="event.stopPropagation();onSkip('${eid}',${sid})">曠</button>`}
       </span></div>`;
   }).join('');
   return`${head}<div class="att-list">${rows}</div>`;
@@ -495,15 +512,28 @@ function tcardHtml(e){
     const ns=e.noShowStudents||[];
     badge=`<span class="tc-badge tc-badge-abs">${e.type==='one'||!ns.length?'曠課':esc(ns.join('、'))+' 曠課'}</span>`;
   }
-  const mkBadge=(()=>{if(!e.isFullAbsent&&!e.isRescheduled)return'';const rec=findMakeupScheduledById(e.id);return rec?`<span class="tc-badge tc-badge-arr">✓ 已安排</span>`:`<span class="tc-badge tc-badge-un">未安排</span>`;})();
+  // 排到一半（三人請假只排了一人）要看得出來，不然跟全排完長一樣
+  const mkBadge=(()=>{
+    if(!e.isFullAbsent&&!e.isRescheduled)return'';
+    if(!getMakeupsFor(e.id).length)return`<span class="tc-badge tc-badge-un">未安排</span>`;
+    const left=mkPendingCount(e);   // 「還差幾人」的唯一算法（老師請假沒有個別名單也算得對）
+    return left?`<span class="tc-badge tc-badge-un">還有 ${left} 人未安排</span>`:`<span class="tc-badge tc-badge-arr">✓ 已安排</span>`;
+  })();
+  // 今天有別班的人來併班補課 → 卡上先講，不然名冊突然多兩個人會不知道是誰（2026-08-06 第 2 刀）
+  const joinN=joinCountOn(e.id);
+  const joinBadge=joinN?`<span class="tc-badge tc-badge-join" title="另一堂請假的學生併進這堂一起上">+${joinN} 補課生</span>`:'';
   // 動作列：每個動作都跳課程詳情 modal（點名/成績/請假/調課統一置中視窗，2026-07-31 老闆要求）
   let acts='';
   if(e.isMakeupOcc)acts='';// 補課/調課場次：改期走待補課清單「取消安排」重排，卡上不出請假/調課鈕
   else if(e.isRescheduled)acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEvent('${id}')">看調課安排</button><button class="tc-act danger" onclick="event.stopPropagation();cancelReschedule('${id}')">取消調課</button>`;
-  else if(e.isAbsent)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelAbs('${id}')">取消請假</button>`;
-  else if(e.isNoShow)acts=`<button class="tc-act danger" onclick="event.stopPropagation();cancelNoShow('${id}')">取消曠課</button>`;
-  // 請假與調課併成一顆：開課程詳情視窗，視窗裡再選「請假」或「調課」（2026-07-31 老闆要求）
-  else acts=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEvent('${id}')">↔ 請假/調課</button>`;
+  else{
+    // 已經有人請假／曠課時，「請假」鈕照樣留著（2026-08-06 老闆要求）：
+    // 同一堂可以再標第二個人、或把某人的狀態改掉，不用先整堂取消請假重來
+    if(e.isAbsent)acts+=`<button class="tc-act danger" onclick="event.stopPropagation();cancelAbs('${id}')">取消請假</button>`;
+    if(e.isNoShow)acts+=`<button class="tc-act danger" onclick="event.stopPropagation();cancelNoShow('${id}')">取消曠課</button>`;
+    // 請假與調課併成一顆：開課程詳情視窗，視窗裡再選「請假」或「調課」（2026-07-31 老闆要求）
+    acts+=`<button class="tc-act" onclick="event.stopPropagation();selectWeekEvent('${id}')">↔ 請假/調課</button>`;
+  }
   // 能點名的課：點名面板已列出名冊，不再放「名單」鈕（避免重複）；
   // 不能點名的課（試聽/整堂請假/調課原課）沒有點名面板 → 保留「名單」鈕當唯一名冊入口
   const attBtn=canAttend(e)?`<button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndAtt('${id}')">✓ 點名</button>`:'';
@@ -514,7 +544,7 @@ function tcardHtml(e){
     <div class="tcard2-head" onclick="toggleTcard('${id}')">
       <div class="tcard2-av${avCls}">${esc(letter)}</div>
       <div class="tcard2-info">
-        <div class="tcard2-name"><span class="tcard2-title${e.isFullAbsent?' struck':''}">${esc(e.origTitle)}</span>${badge}${mkBadge}${stat}${canAttend(e)?attBadgeHtml(e):''}${typeMismatchChip(e)}</div>
+        <div class="tcard2-name"><span class="tcard2-title${e.isFullAbsent?' struck':''}">${esc(e.origTitle)}</span>${badge}${mkBadge}${joinBadge}${stat}${canAttend(e)?attBadgeHtml(e):''}${typeMismatchChip(e)}</div>
         <div class="tcard2-sub">${e.classroom?esc(e.classroom)+' · ':''}${e.teacher?esc(e.teacher)+' · ':''}${roster.length} 人</div>
       </div>
       <div class="tcard2-time"><b>${fmtT(e.startDt)}</b><span>${fmtT(e.endDt)}</span></div>

@@ -163,8 +163,6 @@ function getStudentStats(studentId,periodId){
   const name=stu.name;
   const pid=periodId||currentPeriodId;
   const period=getPeriods().find(p=>p.id===pid)||getPeriods()[0];
-  const scheduled=getMakeupScheduled();
-  const scheduledMap=new Map(scheduled.map(s=>[s.originalId,s]));
   const absences=makeupList.filter(e=>{
     if(!e.startDt||e.startDt<period.start||e.startDt>period.end)return false;
     if(e.absType==='學生請假'||e.absType==='調課')return e.absentStudents?.includes(name);
@@ -172,7 +170,9 @@ function getStudentStats(studentId,periodId){
     return false;
   });
   const now=new Date();
-  const pairs=absences.map(e=>({absence:e,makeup:scheduledMap.get(e.id)||null}));
+  // 補課場次要認「名單含這位學生的那場」：一堂三人請假可以分三場排，
+  // 拿整堂的第一場當每個人的答案會把還沒排的人也算成已補（欠課少算）
+  const pairs=absences.map(e=>({absence:e,makeup:makeupForStudent(e,name)}));
   // 按「哪一門課」分組，不是按課名字串：舊行事曆搬來的紀錄課名停在改年級之前
   //（寫「高一數學班」但那批人現在在「高二數學班」），照字串分會把同一門課拆成兩列。
   // 有課程編號就用編號（跟請假次數提醒同一套 courseKeyOf），沒有的舊紀錄才退回用課名。

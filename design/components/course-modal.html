@@ -4,108 +4,166 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Course Modal · 課程詳情（改單價＋加退學生）</title>
+<title>Course Modal · 課程詳情（唯讀事實表）</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../../tokens.css">
 <link rel="stylesheet" href="../../style.css">
 <style>
-  /* 來源：js/settings.js openCourseModal/renderCourseModal + HTML #course-modal-wrap。
+  /* 來源：js/courses.js renderSysCourseModal + js/courses.js sysRosterHtml
+     ＋ HTML #course-modal-wrap（補習班排程系統.html:679）。
      靜態快照、假資料、已移除 onclick。
+
+     ⚠️ 2026-07-31 起這扇視窗**只給看**：一張對齊的事實表（左標籤右內容）＋名單，
+     底下兩顆鈕（✎ 編輯課程／🗑 刪除課程）。加入框、📅 設起訖、✕ 退課、改單價
+     全部搬去 ✎ 編輯課程了——同一件事只留一個入口。
+
      真實 app 是點課卡跳出的置中 modal（.stu-modal-wrap 全螢幕遮罩）；
-     gallery 把固定定位攤平、用兩個 screen 各呈現一種真實狀態：
-       狀態 A＝一般課程（可改每堂單價、加退學生）
-       狀態 B＝練習課（名單來自行事曆備註、每堂不同，唯讀）。 */
+     gallery 把固定定位攤平、用三個 screen 各呈現一種真實狀態：
+       狀態 A＝一般團班（事實表全欄位＋滾動判型註解＋修課起訖 pill）
+       狀態 B＝練習課（不收費、打卡制、多一塊「名單總覽 年級→科目」）
+       狀態 C＝家教（欄位少、未定價／未定費率的空值長相）。 */
   body{margin:0;padding:32px;background:rgba(0,0,0,.06);font-family:'Noto Sans TC',sans-serif}
   .screens{display:flex;gap:28px;flex-wrap:wrap;align-items:flex-start}
   .screen{display:flex;flex-direction:column;gap:8px}
   .screen-lbl{font-size:12px;font-weight:700;color:var(--tx2)}
-  .stu-modal{position:static;max-width:460px}
+  .stu-modal{position:static;max-width:460px;width:460px}
 </style>
 </head>
 <body>
 
 <div class="screens">
 
-  <!-- 狀態 A：一般課程（改單價 + 加退學生） -->
+  <!-- 狀態 A：一般團班 -->
   <div class="screen">
-    <div class="screen-lbl">狀態 A · 一般課程</div>
+    <div class="screen-lbl">狀態 A · 一般團班（事實表全欄位）</div>
     <div class="stu-modal">
       <div class="stu-modal-hd">
         <div class="stu-modal-title"><span style="font-size:16px;font-weight:700">國二數學班</span></div>
         <button class="stu-modal-close">✕</button>
       </div>
       <div class="stu-modal-body">
-        <div class="cm-meta">團班　·　👤 王老師　·　19:00</div>
 
-        <div class="cm-sec">
-          <div class="cm-lbl">課名</div>
-          <input class="cm-input" value="國二數學班" disabled>
-          <div class="cm-hint">改課名待「系統擁有課表」完成後開放——目前課表仍讀 Google 行事曆，系統改名會與行事曆標題對不上。</div>
+        <div class="cm-facts">
+          <div class="cm-fact"><span class="cm-fact-k">類型</span><span class="cm-fact-v"><span class="cm-tag">團班</span><span class="cm-tag">需登記成績</span></span></div>
+          <div class="cm-fact"><span class="cm-fact-k">時段</span><span class="cm-fact-v">週二 19:00–21:00、週五 19:00–21:00　→ 9/1起 週三 19:00–21:00</span></div>
+          <div class="cm-fact"><span class="cm-fact-k">老師</span><span class="cm-fact-v">王老師</span></div>
+          <div class="cm-fact"><span class="cm-fact-k">教室</span><span class="cm-fact-v">北投・大教室</span></div>
+          <div class="cm-fact"><span class="cm-fact-k">科目</span><span class="cm-fact-v">數學</span></div>
+          <div class="cm-fact"><span class="cm-fact-k">每堂收費</span><span class="cm-fact-v">450 元/堂<span class="cm-fact-sub">課程預設價，個別優惠看名單上的數字</span></span></div>
+          <div class="cm-fact"><span class="cm-fact-k">老師費率</span><span class="cm-fact-v">120 元/人</span></div>
+          <div class="cm-fact"><span class="cm-fact-k">課名變更</span><span class="cm-fact-v">9/1 起改叫「國三數學班」</span></div>
         </div>
 
         <div class="cm-sec">
-          <div class="cm-lbl">每堂單價（課程預設）</div>
-          <div class="cm-price-row">
-            <input type="number" class="cm-input cm-price" min="0" inputmode="numeric" placeholder="未定價" value="450">
-            <span class="cm-unit">元 / 堂</span>
+          <div class="cm-lbl">名單<span class="cm-count">6</span><span class="cm-lbl-sub">今天在籍 5 人</span></div>
+          <div class="co-roster co-roster-ro">
+            <span class="co-stu">王小明<span class="co-stu-price">450</span></span>
+            <span class="co-stu">陳大華<span class="co-stu-price">450</span></span>
+            <span class="co-stu">李小美<span class="co-stu-price">400</span></span>
+            <span class="co-stu">張志強<span class="co-stu-price"><span class="co-undef">未定價</span></span></span>
+            <span class="co-stu">黃淑芬<span class="co-stu-price">450</span><span class="co-stu-win">7/15 起加入</span></span>
+            <span class="co-stu co-stu-off">吳建宏<span class="co-stu-price">450</span><span class="co-stu-win">8/1 起退出</span></span>
           </div>
-          <div class="cm-hint">全班預設價。個別學生有優惠時，在該學生編輯面板覆蓋。</div>
+          <div class="cm-hint">淡色＝今天不在他的修課區間內；名單人數會依課堂日期自動變（過去的堂數不受影響）。</div>
         </div>
 
-        <div class="cm-sec">
-          <div class="cm-lbl">本期登記名單<span class="cm-count">5</span></div>
-          <div class="co-roster">
-            <span class="co-stu">王小明<span class="co-stu-price">450</span><button class="co-stu-x" title="退課">✕</button></span>
-            <span class="co-stu">陳大華<span class="co-stu-price">450</span><button class="co-stu-x" title="退課">✕</button></span>
-            <span class="co-stu">李小美<span class="co-stu-price">400</span><button class="co-stu-x" title="退課">✕</button></span>
-            <span class="co-stu">張志強<span class="co-stu-price"><span class="co-undef">未定價</span></span><button class="co-stu-x" title="退課">✕</button></span>
-            <span class="co-stu">黃淑芬<span class="co-stu-price">450</span><button class="co-stu-x" title="退課">✕</button></span>
-          </div>
-          <div class="co-add">
-            <select class="co-add-sel">
-              <option value="1">吳建宏（國二）</option>
-              <option value="2">林佳蓉（國二）</option>
-              <option value="3">鄭凱文（國二）</option>
-            </select>
-            <button class="co-add-btn">＋ 加入</button>
-          </div>
-          <button class="co-clear-btn">🗑 整門課從登記簿移除（清改名殘留）</button>
+        <div class="cm-hint">這扇視窗只顯示現況。加退學生、設修課起訖、改時段／收費／課名 → 按 ✎ 編輯課程。</div>
+
+        <div class="cf-foot">
+          <button class="btn btns btnp">✎ 編輯課程</button>
+          <button class="btn btns cf-danger">🗑 刪除課程</button>
         </div>
       </div>
     </div>
   </div>
 
-  <!-- 狀態 B：練習課（唯讀，名單來自備註、每堂不同） -->
+  <!-- 狀態 B：練習課 -->
   <div class="screen">
-    <div class="screen-lbl">狀態 B · 練習課（唯讀）</div>
+    <div class="screen-lbl">狀態 B · 練習課（不收費＋名單總覽）</div>
     <div class="stu-modal">
       <div class="stu-modal-hd">
-        <div class="stu-modal-title"><span style="font-size:16px;font-weight:700">週末練習課</span></div>
+        <div class="stu-modal-title"><span style="font-size:16px;font-weight:700">週六上午練習課</span></div>
         <button class="stu-modal-close">✕</button>
       </div>
       <div class="stu-modal-body">
-        <div class="cm-meta">練習課　·　👤 郁庭　·　09:00 / 14:00</div>
 
-        <div class="cm-sec">
-          <div class="cm-lbl">課名</div>
-          <input class="cm-input" value="週末練習課" disabled>
-          <div class="cm-hint">改課名待「系統擁有課表」完成後開放——目前課表仍讀 Google 行事曆，系統改名會與行事曆標題對不上。</div>
+        <div class="cm-facts">
+          <div class="cm-fact"><span class="cm-fact-k">類型</span><span class="cm-fact-v"><span class="cm-tag">練習課</span><span class="cm-tag cm-tag-off">只點名</span></span></div>
+          <div class="cm-fact"><span class="cm-fact-k">時段</span><span class="cm-fact-v">週六 09:00–12:00</span></div>
+          <div class="cm-fact"><span class="cm-fact-k">老師</span><span class="cm-fact-v">郁庭</span></div>
+          <div class="cm-fact"><span class="cm-fact-k">教室</span><span class="cm-fact-v">北投・自習室</span></div>
+          <div class="cm-fact"><span class="cm-fact-k">每堂收費</span><span class="cm-fact-v">不收費<span class="cm-fact-sub">練習課不進學費結算</span></span></div>
+          <div class="cm-fact"><span class="cm-fact-k">老師費率</span><span class="cm-fact-v">打卡制<span class="cm-fact-sub">不在系統內設費率</span></span></div>
         </div>
 
         <div class="cm-sec">
-          <div class="cm-lbl">名單（練習課）</div>
-          <div class="co-note">練習課名單來自行事曆備註，每堂不同，此處唯讀。</div>
-          <div class="co-sess">
-            <span class="co-sess-d">6/21</span>
-            <span class="co-sess-r">
-              <span class="co-grp"><b>數學</b>：王小明、陳大華</span>
-              <span class="co-grp"><b>理化</b>：李小美</span>
-            </span>
+          <div class="cm-lbl">名單總覽（年級 → 科目）</div>
+          <div class="pv-grade">
+            <div class="pv-grade-hd">國二</div>
+            <div class="pv-subj"><span class="pv-subj-n">數學</span>王小明、陳大華</div>
+            <div class="pv-subj"><span class="pv-subj-n">理化</span>王小明</div>
           </div>
-          <div class="co-sess">
-            <span class="co-sess-d">6/22</span>
-            <span class="co-sess-r">張志強、黃淑芬、吳建宏</span>
+          <div class="pv-grade">
+            <div class="pv-grade-hd">國三</div>
+            <div class="pv-subj"><span class="pv-subj-n">英文</span>李小美、張志強</div>
+            <div class="pv-subj"><span class="pv-subj-n">（未填科目）</span>黃淑芬</div>
           </div>
+        </div>
+
+        <div class="cm-sec">
+          <div class="cm-lbl">名單<span class="cm-count">5</span></div>
+          <div class="co-roster co-roster-ro">
+            <span class="co-stu">王小明<span class="co-stu-subj">數學、理化</span></span>
+            <span class="co-stu">陳大華<span class="co-stu-subj">數學</span></span>
+            <span class="co-stu">李小美<span class="co-stu-subj">英文</span></span>
+            <span class="co-stu">張志強<span class="co-stu-subj">英文</span></span>
+            <span class="co-stu">黃淑芬<span class="co-undef">未填科目</span></span>
+          </div>
+        </div>
+
+        <div class="cm-hint">這扇視窗只顯示現況。加退學生、設修課起訖、改時段／收費／課名 → 按 ✎ 編輯課程。</div>
+
+        <div class="cf-foot">
+          <button class="btn btns btnp">✎ 編輯課程</button>
+          <button class="btn btns cf-danger">🗑 刪除課程</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 狀態 C：家教（滾動判型＋空值） -->
+  <div class="screen">
+    <div class="screen-lbl">狀態 C · 家教（滾動判型＋未定價）</div>
+    <div class="stu-modal">
+      <div class="stu-modal-hd">
+        <div class="stu-modal-title"><span style="font-size:16px;font-weight:700">佳潼數學家教</span></div>
+        <button class="stu-modal-close">✕</button>
+      </div>
+      <div class="stu-modal-body">
+
+        <div class="cm-facts">
+          <div class="cm-fact"><span class="cm-fact-k">類型</span><span class="cm-fact-v"><span class="cm-tag">一對二</span><span class="cm-tag cm-tag-off">只點名</span><span class="cm-fact-sub">今天 2 人・課型隨在籍人數變（開課時為一對一）</span></span></div>
+          <div class="cm-fact"><span class="cm-fact-k">時段</span><span class="cm-fact-v">週四 17:00–18:30</span></div>
+          <div class="cm-fact"><span class="cm-fact-k">老師</span><span class="cm-fact-v"><span class="co-undef">未指定</span></span></div>
+          <div class="cm-fact"><span class="cm-fact-k">教室</span><span class="cm-fact-v">不指定</span></div>
+          <div class="cm-fact"><span class="cm-fact-k">每堂收費</span><span class="cm-fact-v"><span class="co-undef">未定價</span></span></div>
+          <div class="cm-fact"><span class="cm-fact-k">老師費率</span><span class="cm-fact-v">600 元/小時<span class="cm-fact-sub">單位固定跟開課時的一對一走，不隨人數變</span></span></div>
+        </div>
+
+        <div class="cm-sec">
+          <div class="cm-lbl">名單<span class="cm-count">2</span></div>
+          <div class="co-roster co-roster-ro">
+            <span class="co-stu">佳潼<span class="co-stu-price"><span class="co-undef">未定價</span></span></span>
+            <span class="co-stu">冠羽<span class="co-stu-price">800</span><span class="co-stu-win">7/22 起加入</span></span>
+          </div>
+          <div class="cm-hint">淡色＝今天不在他的修課區間內；名單人數會依課堂日期自動變（過去的堂數不受影響）。</div>
+        </div>
+
+        <div class="cm-hint">這扇視窗只顯示現況。加退學生、設修課起訖、改時段／收費／課名 → 按 ✎ 編輯課程。</div>
+
+        <div class="cf-foot">
+          <button class="btn btns btnp">✎ 編輯課程</button>
+          <button class="btn btns cf-danger">🗑 刪除課程</button>
         </div>
       </div>
     </div>

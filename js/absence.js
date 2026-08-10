@@ -9,40 +9,37 @@ function buildAbsPanel(e, sfx=''){
     <div class="abs-opt" id="ao-s-${pid}" onclick="selAbsType('${eid}','${sfx}','${autoType}')">🧑‍🎓 學生請假</div>
   </div>`;
   if((e.type==='pair'||e.type==='group'||e.type==='practice')&&e.students.length>1){
-    const availableStudents=e.students.filter(s=>!e.absentStudents.includes(s)&&!e.noShowStudents.includes(s));
+    // 2026-08-06 起「已經標過的人也列出來」（chip 上標現況）：以前把他們濾掉，
+    // 想幫第二個人標不同狀態、或想把某人從請假改成曠課，都得先整堂取消請假重來
+    const chip=s=>{
+      const mark=(e.noShowStudents||[]).includes(s)?'曠課':(e.absentStudents||[]).includes(s)?'請假':'';
+      return`<div class="stu-chip${mark?' stu-chip-marked':''}" data-eid="${eid}" data-sfx="${sfx}" data-name="${esc(s)}" onclick="toggleChip(this)">${esc(s)}${mark?`<span class="stu-chip-tag">${mark}</span>`:''}</div>`;
+    };
     let chips='';
     if(e.type==='practice'&&e.studentGroups?.length>0){
       const groupedStudents=new Set(e.studentGroups.flatMap(g=>g.students));
       e.studentGroups.forEach(g=>{
-        const avail=g.students.filter(s=>availableStudents.includes(s));
-        if(avail.length===0)return;
+        const inRoster=g.students.filter(s=>e.students.includes(s));
+        if(!inRoster.length)return;
         chips+=`<div class="stu-subject-label">${esc(g.subject)}</div>`;
-        chips+=avail.map(s=>`<div class="stu-chip" data-eid="${eid}" data-sfx="${sfx}" data-name="${esc(s)}" onclick="toggleChip(this)">${esc(s)}</div>`).join('');
+        chips+=inRoster.map(chip).join('');
       });
-      const ungrouped=availableStudents.filter(s=>!groupedStudents.has(s));
+      const ungrouped=e.students.filter(s=>!groupedStudents.has(s));
       if(ungrouped.length>0){
         chips+=`<div class="stu-subject-label">其他</div>`;
-        chips+=ungrouped.map(s=>`<div class="stu-chip" data-eid="${eid}" data-sfx="${sfx}" data-name="${esc(s)}" onclick="toggleChip(this)">${esc(s)}</div>`).join('');
+        chips+=ungrouped.map(chip).join('');
       }
-      if(!chips)chips=`<div style="font-size:12px;color:var(--tx3)">所有學生已請假</div>`;
     }else{
-      chips=availableStudents.length>0
-        ? availableStudents.map(s=>`<div class="stu-chip" data-eid="${eid}" data-sfx="${sfx}" data-name="${esc(s)}" onclick="toggleChip(this)">${esc(s)}</div>`).join('')
-        : `<div style="font-size:12px;color:var(--tx3)">所有學生已請假</div>`;
+      chips=e.students.map(chip).join('');
     }
+    if(!chips)chips=`<div style="font-size:12px;color:var(--tx3)">這堂還沒有人登記</div>`;
     html+=`<div class="stu-wrap" id="sw-${pid}" style="display:none">
-      <div class="stu-label">選擇請假學生（可多選）</div>
+      <div class="stu-label">選擇請假學生（可多選；已標過的人再選一次可以改狀態）</div>
       <div class="stu-chips" id="sc-${pid}">${chips}</div>
     </div>`;
   }
-  html+=`<div class="stu-wrap" id="tw-${pid}" style="display:none">
-    <div class="stu-label">請假時機（系統已預選，可改）</div>
-    <div class="abs-opts" style="margin-bottom:0">
-      <div class="abs-opt" id="at-A-${pid}" onclick="selAbsTiming('${eid}','${sfx}','A')">課前 1hr 以上</div>
-      <div class="abs-opt" id="at-B-${pid}" onclick="selAbsTiming('${eid}','${sfx}','B')">課前 1hr 內</div>
-      <div class="abs-opt" id="at-C-${pid}" onclick="selAbsTiming('${eid}','${sfx}','C')">已開始·曠課</div>
-    </div>
-  </div>`;
+  // 時機區塊改成動態重繪（renderAbsTiming）：選一個人＝三顆大鈕，選多人＝每人一列各自選
+  html+=`<div class="stu-wrap" id="tw-${pid}" style="display:none"></div>`;
   // 一對二（剛好兩人）：一人請假時，常傾向整堂一起調課以省老師成本 → 提供捷徑導向既有調課流程
   if(e.type==='pair'&&e.students.length===2){
     html+=`<div style="margin:4px 0 10px;font-size:12px;color:var(--tx2)">
@@ -78,22 +75,6 @@ function toggleAbsPanelWeek(id){
   updatePreview(id,'');
 }
 
-function toggleAbsPanel(id,ctx){
-  document.querySelectorAll('.abs-panel.open').forEach(p=>p.classList.remove('open'));
-  const panel=document.getElementById('absp-'+id);if(!panel)return;
-  const isOpen=panel.classList.contains('open');
-  if(isOpen){panel.classList.remove('open');return;}
-  absState[id]={type:null,students:[]};
-  panel.classList.add('open');
-  document.getElementById('ao-t-'+id)?.classList.remove('st','ss');
-  document.getElementById('ao-s-'+id)?.classList.remove('st','ss');
-  const sw=document.getElementById('sw-'+id);if(sw)sw.style.display='none';
-  const tw=document.getElementById('tw-'+id);if(tw)tw.style.display='none';
-  ['A','B','C'].forEach(k=>document.getElementById('at-'+k+'-'+id)?.classList.remove('st','ss'));
-  const sc=document.getElementById('sc-'+id);if(sc)sc.querySelectorAll('.stu-chip').forEach(c=>c.classList.remove('checked'));
-  const ap=document.getElementById('ap-'+id);if(ap)ap.innerHTML='';
-}
-
 function closeAbsPanel(id,sfx){
   if(sfx==='-w'){const pw=document.getElementById('absp-w-'+id);if(pw)pw.classList.remove('open');closeWeekModal();}
   else{const p=document.getElementById('absp-'+id);if(p)p.classList.remove('open');}
@@ -103,7 +84,7 @@ function closeAbsPanel(id,sfx){
 function selAbsType(id,sfx,type){
   const pid=id+(sfx||'');
   if(!absState[id])absState[id]={type:null,students:[]};
-  absState[id].type=type;absState[id].students=[];
+  absState[id].type=type;absState[id].students=[];absState[id].timings={};
   const sc=document.getElementById('sc-'+pid);if(sc)sc.querySelectorAll('.stu-chip').forEach(c=>c.classList.remove('checked'));
   document.getElementById('ao-t-'+pid)?.classList.remove('st','ss');
   document.getElementById('ao-s-'+pid)?.classList.remove('st','ss');
@@ -118,53 +99,96 @@ function selAbsType(id,sfx,type){
     document.getElementById('ao-s-'+pid)?.classList.add('ss');
     if(type==='student'){const sw=document.getElementById('sw-'+pid);if(sw)sw.style.display='block';}
     if(tw)tw.style.display='block';
-    const ev=findEventById(id);
-    selAbsTiming(id,sfx,ev?defaultTiming(ev):'B'); // 預選 + 內含 updatePreview
+    absState[id].timing=null;   // 2026-08-06 老闆要求：時機一律不預選，每次自己點
+    renderAbsTiming(id,sfx);
+    updatePreview(id,sfx);
   }
 }
 
-// 依「現在 vs 上課時間」預選請假時機：已開始→C(曠課)、距上課<1hr→B、否則A
-function defaultTiming(ev){
-  const now=Date.now(),start=ev.startDt.getTime();
-  if(now>=start)return'C';
-  if(start-now<=3600000)return'B';
-  return'A';
+// ── 請假時機：一批人可以各自不同 ──
+// 2026-08-06 起**不預選**（以前會依「現在 vs 上課時間」自動帶一個）：時機直接決定要不要排補課、
+// 要不要算多收費，猜錯了是安靜地錯，所以寧可每次都讓人自己點。沒點完不給按確認標記。
+// state.timing＝這批的共同值（單人課沒有 chip 可選，就只吃這個）；
+// state.timings[name]＝某個人的個別選擇。取值一律走 absTimingOf，兩邊才不會各算各的。
+var ABS_TIMING_OPTS=[['A','課前 1hr 以上'],['B','課前 1hr 內'],['C','已開始·曠課']];
+function absTimingOf(state,name){return(state.timings||{})[name]||state.timing||null;}
+// 這次要標的人（student-auto＝單人課，名單就是那一位）
+function absTargets(ev,state){
+  return state.type==='student-auto'?ev.students.slice(0,1):(state.students||[]);
 }
+// 選了人但還沒選時機的那幾個（確認前擋下來，不能默默當成「課前 1hr 內」）
+function absMissingTiming(ev,state){
+  if(state.type==='teacher')return[];
+  return absTargets(ev,state).filter(n=>!absTimingOf(state,n));
+}
+
+// 重繪時機區塊。選 1 人（或單人課）＝原本的三顆大鈕；選 2 人以上＝每人一列，可各自選
+function renderAbsTiming(id,sfx){
+  const pid=id+(sfx||''),tw=document.getElementById('tw-'+pid);if(!tw)return;
+  const st=absState[id]||{};
+  const names=st.type==='student'?(st.students||[]):[];
+  const btn=(t,lbl,cur,name)=>`<div class="abs-opt${cur===t?(t==='C'?' st':' ss'):''}" data-eid="${esc(id)}" data-sfx="${sfx||''}" data-t="${t}"${name?` data-name="${esc(name)}"`:''} onclick="pickAbsTiming(this)">${lbl}</div>`;
+  if(names.length<=1){
+    const cur=names.length?absTimingOf(st,names[0]):st.timing;
+    tw.innerHTML=`<div class="stu-label">請假時機</div>
+      <div class="abs-opts" style="margin-bottom:0">${ABS_TIMING_OPTS.map(([t,lbl])=>btn(t,lbl,cur,names[0])).join('')}</div>`;
+    return;
+  }
+  tw.innerHTML=`<div class="stu-label">請假時機（每個人分別選）</div>
+    <div class="abs-timings">${names.map(n=>`<div class="abs-timing-row">
+      <span class="abs-timing-who">${esc(n)}</span>
+      <div class="abs-opts" style="margin-bottom:0">${ABS_TIMING_OPTS.map(([t,lbl])=>btn(t,lbl,absTimingOf(st,n),n)).join('')}</div>
+    </div>`).join('')}</div>`;
+}
+
+// 點時機鈕：有 data-name＝只改那個人，沒有＝改這批的預設值
+function pickAbsTiming(el){
+  const id=el.dataset.eid,sfx=el.dataset.sfx||'',t=el.dataset.t,name=el.dataset.name;
+  const st=absState[id]||(absState[id]={type:'student',students:[]});
+  st.timings=st.timings||{};
+  if(name)st.timings[name]=t;else st.timing=t;
+  renderAbsTiming(id,sfx);
+  updatePreview(id,sfx);
+}
+
+// 程式指定時機（今日卡點名面板按「沒來」直接帶 C）：共同值與目前選到的人一起蓋
 function selAbsTiming(id,sfx,t){
-  const pid=id+(sfx||'');
-  if(!absState[id])absState[id]={type:'student',students:[]};
-  absState[id].timing=t;
-  ['A','B','C'].forEach(k=>document.getElementById('at-'+k+'-'+pid)?.classList.remove('st','ss'));
-  // C(曠課) 用紅色警示，A/B 用琥珀色
-  document.getElementById('at-'+t+'-'+pid)?.classList.add(t==='C'?'st':'ss');
+  const st=absState[id]||(absState[id]={type:'student',students:[]});
+  st.timing=t;st.timings=st.timings||{};
+  (st.students||[]).forEach(n=>{st.timings[n]=t;});
+  renderAbsTiming(id,sfx);
   updatePreview(id,sfx);
 }
 
 function toggleChip(el){
   const id=el.dataset.eid,sfx=el.dataset.sfx||'',name=el.dataset.name;
-  if(!absState[id])absState[id]={type:'student',students:[]};
-  const arr=absState[id].students,idx=arr.indexOf(name);
-  if(idx>=0)arr.splice(idx,1);else arr.push(name);
+  const st=absState[id]||(absState[id]={type:'student',students:[]});
+  const arr=st.students,idx=arr.indexOf(name);
+  st.timings=st.timings||{};
+  // 加進來的人不預帶時機（含已經標過的人：要改就自己重點一次，免得手滑把他改掉）
+  if(idx>=0){arr.splice(idx,1);delete st.timings[name];}
+  else arr.push(name);
   el.classList.toggle('checked',arr.includes(name));
+  renderAbsTiming(id,sfx);
   updatePreview(id,sfx);
 }
 
-// 依目前面板選擇算出新標題＋時機 map。請假與曠課並存：標一邊保留另一邊，同一人改標會搬組
+// 依目前面板選擇算出新標題＋時機 map。請假與曠課並存：標一邊保留另一邊，同一人改標會搬組。
+// 一批人可以各自不同時機 → 同一次確認就能一人請假、一人曠課
 function computeAbsResult(ev,state){
   if(state.type==='teacher')return{title:`【老師請假】${ev.origTitle}`,timing:null,empty:false};
-  const newOnes=state.type==='student-auto'?ev.students.slice(0,1):(state.students||[]);
+  const newOnes=absTargets(ev,state);
   if(newOnes.length===0)return{empty:true};
   const leave=new Set(ev.isAbsent&&ev.absType!=='老師請假'?ev.absentStudents:[]);
   const noshow=new Set(ev.noShowStudents||[]);
   newOnes.forEach(n=>{leave.delete(n);noshow.delete(n);});       // 先抽離舊組
-  if(state.timing==='C')newOnes.forEach(n=>noshow.add(n));        // C→曠課組
-  else newOnes.forEach(n=>leave.add(n));                          // A/B→請假組
+  newOnes.forEach(n=>{(absTimingOf(state,n)==='C'?noshow:leave).add(n);}); // C→曠課組、A/B→請假組
   let title='';
   if(leave.size)title+=`【${[...leave].join('、')}請假】`;
   if(noshow.size)title+=`【${[...noshow].join('、')}曠課】`;
   title+=ev.origTitle;
   const timing=Object.assign({},ev.absenceTiming||{});           // 保留既有時機
-  newOnes.forEach(n=>{timing[n]=state.timing||'B';});
+  newOnes.forEach(n=>{timing[n]=absTimingOf(state,n);});
   return{title,timing,empty:false};
 }
 
@@ -173,9 +197,18 @@ function updatePreview(id,sfx){
   const state=absState[id]||{};const el=document.getElementById('ap-'+pid);if(!el)return;
   const ev=findEventById(id);if(!ev)return;
   if(!state.type){el.innerHTML='';return;}
+  if(state.type!=='teacher'&&!absTargets(ev,state).length){
+    el.innerHTML='<span style="color:var(--tx3)">請選擇請假學生</span>';return;
+  }
+  const miss=absMissingTiming(ev,state);
+  if(miss.length){
+    el.innerHTML=`<span style="color:var(--tx3)">請選擇${miss.length>1||(state.students||[]).length>1?` ${esc(miss.join('、'))} 的`:''}請假時機</span>`;
+    return;
+  }
   const res=computeAbsResult(ev,state);
   if(res.empty){el.innerHTML='<span style="color:var(--tx3)">請選擇請假學生</span>';return;}
-  const hint=state.timing==='C'?'<span style="color:var(--dg);font-size:12px">（曠課：不排補課、不計欠課）</span>':'';
+  const anyNoShow=state.type!=='teacher'&&absTargets(ev,state).some(n=>absTimingOf(state,n)==='C');
+  const hint=anyNoShow?'<span style="color:var(--dg);font-size:12px">（曠課：不排補課、不計欠課）</span>':'';
   el.innerHTML=`新標題：<strong>${esc(res.title)}</strong> ${hint}`;
 }
 
@@ -192,11 +225,17 @@ function sysApplyAbsence(ev,state){
   }
   if(state.type==='teacher'){rec.teacherAbsent=true;rec.leave=[];rec.noShow=[];}
   else{
-    const newOnes=state.type==='student-auto'?ev.students.slice(0,1):(state.students||[]);
+    const newOnes=absTargets(ev,state);
     rec.leave=(rec.leave||[]).filter(x=>!newOnes.includes(x.name));
     rec.noShow=(rec.noShow||[]).filter(x=>!newOnes.includes(x.name));
-    if(state.timing==='C')newOnes.forEach(n=>rec.noShow.push({studentId:idOf.get(n)??null,name:n}));
-    else newOnes.forEach(n=>rec.leave.push({studentId:idOf.get(n)??null,name:n,timing:state.timing||'B'}));
+    newOnes.forEach(n=>{
+      // 面板已擋掉「沒選時機」（confirmAbs），這裡的 ||'B' 只是給程式呼叫端的保底，不寫 null 進資料庫
+      const t=absTimingOf(state,n)||'B';
+      if(t==='C')rec.noShow.push({studentId:idOf.get(n)??null,name:n});
+      else rec.leave.push({studentId:idOf.get(n)??null,name:n,timing:t});
+    });
+    // 改成曠課的人不留不補課標記（那個標記只對請假有意義）
+    rec.makeupSkip=(rec.makeupSkip||[]).filter(n=>(rec.leave||[]).some(x=>x.name===n));
   }
   rec.updatedAt=new Date().toISOString();
   saveAbsences(list);
@@ -207,11 +246,18 @@ var ABS_TIMING_LBL={A:'課前 1 小時以上',B:'課前 1 小時內',C:'已開�
 function logAbsenceAct(ev,state){
   if(typeof logAct!=='function')return;
   if(state.type==='teacher'){logAct('absence','標記 老師請假',actEvLabel(ev),'整堂不上');return;}
-  const names=(state.type==='student-auto'?ev.students.slice(0,1):(state.students||[])).join('、');
-  if(!names)return;
-  const noShow=state.timing==='C';
-  logAct('absence',`標記 ${names} ${noShow?'曠課':'請假'}`,actEvLabel(ev),
-    noShow?'曠課：不排補課、不計欠課':(ABS_TIMING_LBL[state.timing||'B']||''));
+  // 一批人可能各自不同時機 → 同時機的併成一則，不同的各記一則（動態才看得出誰是曠課）
+  const byT=new Map();
+  absTargets(ev,state).forEach(n=>{
+    const t=absTimingOf(state,n);
+    if(!byT.has(t))byT.set(t,[]);
+    byT.get(t).push(n);
+  });
+  byT.forEach((who,t)=>{
+    const noShow=t==='C';
+    logAct('absence',`標記 ${who.join('、')} ${noShow?'曠課':'請假'}`,actEvLabel(ev),
+      noShow?'曠課：不排補課、不計欠課':(ABS_TIMING_LBL[t]||''));
+  });
 }
 
 // ── 請假次數提醒 ──
@@ -247,12 +293,13 @@ function countStudentLeaves(ev,studentId,name,period,excludeOccId){
 
 // 這次要標記的人裡，哪些人算完會達到門檻。回傳 [{name,count}]，空陣列＝不用跳提醒
 function leaveThresholdWarnings(ev,state){
-  if(state.type==='teacher'||state.timing==='C')return[]; // 老師請假、曠課都不計多收費
+  if(state.type==='teacher')return[];                     // 老師請假不計多收費
   const period=periodOfDate(ev.startDt);
   if(!period)return[];
   const threshold=getThreshold(period.id);
   const idOf=new Map(eventRosterWithId(ev).map(r=>[r.name,r.studentId]));
-  const newOnes=state.type==='student-auto'?ev.students.slice(0,1):(state.students||[]);
+  // 同一批裡標成曠課的人不算（一人請假一人曠課時，只有請假那個要提醒）
+  const newOnes=absTargets(ev,state).filter(n=>absTimingOf(state,n)!=='C');
   return newOnes
     .map(n=>({name:n,count:countStudentLeaves(ev,idOf.get(n)??null,n,period,ev.id)+1}))
     .filter(x=>x.count>=threshold)
@@ -265,6 +312,9 @@ async function confirmAbs(id,sfx){
   if(!state?.type||!ev)return;
   const res=computeAbsResult(ev,state);
   if(res.empty){toast('請選擇請假學生','inf');return;}
+  // 時機不預選（2026-08-06）→ 沒點的人不能默默當成「課前 1hr 內」，補課與多收費都靠它
+  const miss=absMissingTiming(ev,state);
+  if(miss.length){toast(`請選擇 ${miss.join('、')} 的請假時機`,'inf');return;}
   const warns=leaveThresholdWarnings(ev,state);
   if(warns.length){
     const p=warns[0].period,t=warns[0].threshold;
@@ -284,6 +334,11 @@ async function confirmAbs(id,sfx){
   const panel=document.getElementById('absp-'+id);if(panel)panel.classList.remove('open');
   const panelW=document.getElementById('absp-w-'+id);if(panelW)panelW.classList.remove('open');
   sysApplyAbsence(ev,state);
+  // 從請假改標成曠課的人：原本排好的補課要跟著撤（曠課不排補課）
+  if(state.type!=='teacher'){
+    const toNoShow=absTargets(ev,state).filter(n=>absTimingOf(state,n)==='C'&&(ev.absentStudents||[]).includes(n));
+    if(toNoShow.length&&typeof dropMakeupsForNoShow==='function')dropMakeupsForNoShow(ev.id,toNoShow);
+  }
   logAbsenceAct(ev,state);
   toast('已標記：'+newTitle,'ok');
   await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
@@ -324,10 +379,14 @@ async function pickUndoStudents(names,o){
 // 已排好的補課／調課會被連帶撤掉 → 確認視窗裡要講清楚是哪一場
 // definite=true：這次一定會撤（單人取消）；false：要看等下勾了誰（多人選人器）
 function makeupWarnHtml(id,definite){
-  const rec=findMakeupScheduledById(id);if(!rec)return'';
-  const s=new Date(rec.scheduledDate);
-  const what=esc(rec.calName||'補課');
-  return`<div class="ask-note ask-warn" style="margin-top:12px">⚠ 這堂已排好${what}：<b>${fmtD(s)} ${fmtT(s)}${rec.room?'　'+esc(rec.room):''}</b><br>${definite?`取消後這場${what}會一併移除。`:`若取消後沒人請假，這場${what}會一併移除。`}</div>`;
+  const recs=getMakeupsFor(id);if(!recs.length)return'';
+  const what=esc(recs[0].calName||'補課');
+  const lines=recs.map(rec=>{
+    const s=new Date(rec.scheduledDate);
+    const who=(rec.absentStudents||[]).join('、');
+    return`<div>・${recs.length>1&&who?esc(who)+'　':''}<b>${fmtD(s)} ${fmtT(s)}${rec.room?'　'+esc(rec.room):''}</b></div>`;
+  }).join('');
+  return`<div class="ask-note ask-warn" style="margin-top:12px">⚠ 這堂已排好${recs.length>1?` ${recs.length} 場`:''}${what}：${lines}${definite?`取消後這${recs.length>1?'些':'場'}${what}會一併移除。`:`補課場次上的人若都不請假了，那場${what}會一併移除。`}</div>`;
 }
 
 // 取消請假：從請假紀錄移除（保留曠課群組），紀錄清空即刪整筆

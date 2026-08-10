@@ -47,15 +47,27 @@ function eventDayStr(e){return e&&e.startDt?toDateStr(new Date(e.startDt)):null;
 // 不再只看 Calendar 備註。過渡期：尚未對帳的課登記簿是空的，回 e.students（備註解析）
 // 避免顯示空名單。名冊依「該堂日期」裁切（enrollmentActiveOn）：
 // 起訖判斷放在 fallback 判定之後，才不會因為「當天沒人」誤退回備註名單。
+// 併班補課（2026-08-06 第 2 刀）：這堂課今天多了幾個「來補課的人」→ 疊在名冊最後。
+// 疊在 eventRoster / eventRosterWithId 這一層而不是展開器，是因為系統課的名冊本來就
+// 從登記簿重算、不看課堂物件的 students；疊在這裡才會一路長到點名、成績、日曆側欄。
+// ⚠ 請假面板的學生 chips 走的是 e.students（展開器的在籍名冊），刻意不含補課生——
+//   他們要是在這堂被標請假，會變成「主課的請假紀錄」而長出一筆不存在的欠課。
+function _joinRows(e){
+  return (e&&e.courseId!=null&&typeof joinRosterOn==='function')?joinRosterOn(e.id):[];
+}
+
 function eventRoster(e){
   const descNames=e.students||[];
   const day=eventDayStr(e);
   // 系統自有課堂：直接以 courseId 反查本期登記簿（同名不混、與展開器一致）
   if(e.courseId!=null){
     const byId=new Map(getStudentList().map(s=>[s.id,s]));
-    return getEnrollments({periodId:yearPeriodId()})
+    const names=getEnrollments({periodId:yearPeriodId()})
       .filter(en=>en.courseId===e.courseId&&enrollmentActiveOn(en,day))
       .map(en=>byId.get(en.studentId)?.name).filter(Boolean);
+    // 已經在名單上的補課生不重複列（同一人既在籍又來補課的邊角情況）
+    const joins=_joinRows(e).map(r=>r.name).filter(n=>!names.includes(n));
+    return joins.length?[...names,...joins]:names;
   }
   if(!e.origTitle)return descNames;
   // 只看行事曆課的登記（courseId==null）；系統自有課程若恰好同名，名冊各自獨立不混
@@ -76,9 +88,11 @@ function eventRosterWithId(e){
   const day=eventDayStr(e);
   // 系統自有課堂：以 courseId 反查本期登記簿，studentId 直接來自登記（同名終結）
   if(e.courseId!=null){
-    return getEnrollments({periodId:yearPeriodId()})
+    const rows=getEnrollments({periodId:yearPeriodId()})
       .filter(en=>en.courseId===e.courseId&&enrollmentActiveOn(en,day))
       .map(en=>({studentId:en.studentId,name:byId.get(en.studentId)?.name||'(未知)'}));
+    const joins=_joinRows(e).filter(j=>!rows.some(r=>r.name===j.name));
+    return joins.length?[...rows,...joins]:rows;
   }
   // 同 eventRoster：只看行事曆課的登記，系統課（courseId）不混入
   const ens=e.origTitle?getEnrollments({courseTitle:e.origTitle,periodId:yearPeriodId()}).filter(en=>en.courseId==null):[];
