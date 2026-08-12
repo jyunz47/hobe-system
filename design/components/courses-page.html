@@ -1572,7 +1572,7 @@
        大教室 19:00 多排一堂國二理化班 → 四堂並行。
        ═══════════════════════════════════════════════════════════ -->
   <div>
-    <div class="screen-lbl"><span class="n">E</span>多堂同時進行<span class="note">週五 19:10 · 四堂並行 → 右欄 hero 疊成一座塔，左邊時間軸只有一點高</span></div>
+    <div class="screen-lbl"><span class="n">E</span>多堂同時進行<span class="note">週五 19:10 · 四堂並行 → 右欄改「摘要列」，一堂一行；時間軸維持完整高度。剩 1 堂時走回原本的大 hero</span></div>
     <div class="screen">
       <div class="page">
         <div class="wrap">
@@ -1644,79 +1644,26 @@
               </div>
             </div>
             <div class="tl-b">
-              <!-- 真實 app：nowEvs.map(e=>heroHtml(e,true)).join('')（today.js:129-130）
-                   → 幾堂進行中就吐幾張 thero，沒有上限、沒有摺疊。 -->
+              <!-- 真實 app：nowEvs.length>=2 → nowListHtml(nowEvs)（today.js）
+                   → 一堂一行的摘要列，再多堂也只是多幾行；剩 1 堂時走回 heroHtml 大卡。 -->
               <div id="today-hero">
-                <div class="thero">
-                  <div class="thero-bar" style="background:var(--cal-general)"></div>
-                  <div class="thero-hd">
-                    <span class="thero-tag"><span class="ndot"></span>進行中</span>
-                    <span class="tpill t-pair"><span class="pdot"></span>一對二</span>
-                    <div class="thero-time">17:30 – 19:30<span class="sub">2 小時</span></div>
+                <div class="now-list">
+                  <div class="now-list-hd">進行中 <b>4</b></div>
+                  <div class="now-row">
+                    <span class="now-bar" style="background:var(--cal-general)"></span>
+                    <span class="now-nm">新力、晨宇理化</span><span class="now-left">剩 20 分</span>
                   </div>
-                  <div class="thero-title">新力、晨宇理化</div>
-                  <div class="thero-meta">
-                    <span><span class="lbl">授課</span><b>陳老師</b></span>
-                    <span><span class="lbl">教室</span><b>小教室</b></span>
-                    <span><span class="lbl">學生</span><b>2 人</b> <span class="stu-rest">新力、晨宇</span></span>
+                  <div class="now-row">
+                    <span class="now-bar" style="background:var(--cal-general)"></span>
+                    <span class="now-nm">高三物理</span><span class="now-left">剩 20 分</span>
                   </div>
-                  <div class="thero-prog">
-                    <div class="thero-prog-bar"><div class="thero-prog-fill" style="width:83%"></div></div>
-                    <div class="thero-prog-txt"><span class="prog-elap">已進行 100 分</span><span class="prog-remain">剩 20 分</span></div>
+                  <div class="now-row">
+                    <span class="now-bar" style="background:var(--cal-general)"></span>
+                    <span class="now-nm">國一英文班</span><span class="now-left">剩 110 分</span>
                   </div>
-                </div>
-                <div class="thero">
-                  <div class="thero-bar" style="background:var(--cal-general)"></div>
-                  <div class="thero-hd">
-                    <span class="thero-tag"><span class="ndot"></span>進行中</span>
-                    <span class="tpill t-one"><span class="pdot"></span>一對一</span>
-                    <div class="thero-time">18:00 – 19:30<span class="sub">1.5 小時</span></div>
-                  </div>
-                  <div class="thero-title">高三物理</div>
-                  <div class="thero-meta">
-                    <span><span class="lbl">授課</span><b>郭老師</b></span>
-                    <span><span class="lbl">教室</span><b>208</b></span>
-                    <span><span class="lbl">學生</span><b>張志強</b></span>
-                  </div>
-                  <div class="thero-prog">
-                    <div class="thero-prog-bar"><div class="thero-prog-fill" style="width:78%"></div></div>
-                    <div class="thero-prog-txt"><span class="prog-elap">已進行 70 分</span><span class="prog-remain">剩 20 分</span></div>
-                  </div>
-                </div>
-                <div class="thero">
-                  <div class="thero-bar" style="background:var(--cal-general)"></div>
-                  <div class="thero-hd">
-                    <span class="thero-tag"><span class="ndot"></span>進行中</span>
-                    <span class="tpill t-regular"><span class="pdot"></span>一般課程</span>
-                    <div class="thero-time">19:00 – 21:00<span class="sub">2 小時</span></div>
-                  </div>
-                  <div class="thero-title">國一英文班</div>
-                  <div class="thero-meta">
-                    <span><span class="lbl">授課</span><b>黃老師</b></span>
-                    <span><span class="lbl">教室</span><b>301教室</b></span>
-                    <span><span class="lbl">學生</span><b>6 人</b> <span class="stu-rest">林佳蓉、鄭凱文、可茵…</span></span>
-                  </div>
-                  <div class="thero-prog">
-                    <div class="thero-prog-bar"><div class="thero-prog-fill" style="width:8%"></div></div>
-                    <div class="thero-prog-txt"><span class="prog-elap">已進行 10 分</span><span class="prog-remain">剩 110 分</span></div>
-                  </div>
-                </div>
-                <div class="thero">
-                  <div class="thero-bar" style="background:var(--cal-general)"></div>
-                  <div class="thero-hd">
-                    <span class="thero-tag"><span class="ndot"></span>進行中</span>
-                    <span class="tpill t-regular"><span class="pdot"></span>一般課程</span>
-                    <div class="thero-time">19:00 – 21:00<span class="sub">2 小時</span></div>
-                  </div>
-                  <div class="thero-title">國二理化班</div>
-                  <div class="thero-meta">
-                    <span><span class="lbl">授課</span><b>林老師</b></span>
-                    <span><span class="lbl">教室</span><b>大教室</b></span>
-                    <span><span class="lbl">學生</span><b>8 人</b> <span class="stu-rest">王小明、陳大華、李小美…</span></span>
-                  </div>
-                  <div class="thero-prog">
-                    <div class="thero-prog-bar"><div class="thero-prog-fill" style="width:8%"></div></div>
-                    <div class="thero-prog-txt"><span class="prog-elap">已進行 10 分</span><span class="prog-remain">剩 110 分</span></div>
+                  <div class="now-row">
+                    <span class="now-bar" style="background:var(--cal-general)"></span>
+                    <span class="now-nm">國二理化班</span><span class="now-left">剩 110 分</span>
                   </div>
                 </div>
               </div>

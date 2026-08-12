@@ -4,49 +4,106 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Typography · 字體階層</title>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;1,400&display=swap" rel="stylesheet">
+<title>Typography · 字級階梯</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="../../tokens.css">
 <link rel="stylesheet" href="../../style.css">
 <style>
-  /* 來源：style.css 字體設定（方向C 換皮）。
-     四種字族各司其職：Noto Sans TC（內文中文）、DM Sans（標題/英數）、
-     DM Mono（時間/數字）、Newsreader（襯線點綴）。 */
-  body{background:var(--bg);padding:32px;font-family:'Noto Sans TC',sans-serif;color:var(--tx)}
-  .wrap{max-width:640px;display:flex;flex-direction:column;gap:28px}
-  .ty-row{display:flex;flex-direction:column;gap:6px;border-bottom:1px solid var(--br);padding-bottom:20px}
-  .ty-tag{font-size:11px;color:var(--tx3);text-transform:uppercase;letter-spacing:.08em;font-family:'DM Mono',monospace}
-  .ty-sans{font-family:'Noto Sans TC',sans-serif}
+  /* 唯一真相＝tokens.css 的 --fs-*。這張卡直接吃 token 渲染，
+     所以永遠不會跟系統脫節（不像寫死 px 的舊版）。
+     2026-08-12：字級從 21 種收斂成 9 階，Newsreader 移除。 */
+  body{background:var(--bg);padding:var(--sp-9);font-family:'Noto Sans TC',sans-serif;color:var(--tx)}
+  .wrap{max-width:820px;display:flex;flex-direction:column;gap:var(--sp-9)}
+  h2{font-family:'DM Sans','Noto Sans TC',sans-serif;font-size:var(--fs-xl);font-weight:700;margin-bottom:var(--sp-2)}
+  .lead{font-size:var(--fs-md);color:var(--tx2);line-height:1.8;margin-bottom:var(--sp-6)}
+  .scale{background:var(--sf);border:1px solid var(--br);border-radius:var(--r);overflow:hidden}
+  .srow{display:flex;align-items:baseline;gap:var(--sp-6);padding:var(--sp-5) var(--sp-7);border-bottom:1px solid var(--br-l)}
+  .srow:last-child{border-bottom:none}
+  .stok{font-family:'DM Mono',monospace;font-size:var(--fs-sm);color:var(--ac);width:96px;flex-shrink:0;font-weight:500}
+  .spx{font-family:'DM Mono',monospace;font-size:var(--fs-xs);color:var(--tx3);width:44px;flex-shrink:0}
+  .suse{font-size:var(--fs-xs);color:var(--tx3);margin-left:auto;flex-shrink:0;text-align:right;width:220px}
+  .samp{flex:1;min-width:0;color:var(--tx)}
+  .ty-row{display:flex;flex-direction:column;gap:var(--sp-3);border-bottom:1px solid var(--br);padding-bottom:var(--sp-7)}
+  .ty-row:last-child{border-bottom:none}
+  .ty-tag{font-size:var(--fs-xs);color:var(--tx3);text-transform:uppercase;letter-spacing:.08em;font-family:'DM Mono',monospace}
   .ty-dmsans{font-family:'DM Sans','Noto Sans TC',sans-serif}
   .ty-mono{font-family:'DM Mono',monospace}
-  .ty-serif{font-family:'Newsreader',serif}
+  .note{background:var(--sf3);border-left:3px solid var(--ac);border-radius:8px;padding:var(--sp-5) var(--sp-6);font-size:var(--fs-md);color:var(--tx2);line-height:1.8}
+  .note b{color:var(--tx)}
 </style>
 </head>
 <body>
   <div class="wrap">
 
-    <div class="ty-row">
-      <div class="ty-tag">DM Sans · 標題 / 品牌 700</div>
-      <div class="ty-dmsans" style="font-size:30px;font-weight:700;letter-spacing:-.01em">HOBE 排程系統</div>
-      <div class="ty-dmsans" style="font-size:20px;font-weight:600">今日與本週課程</div>
-    </div>
+    <section>
+      <h2>字級階梯 · 9 階</h2>
+      <p class="lead">
+        2026-08-12 之前全站有 <b>21 種</b>字級，包含 9.5 / 10.5 / 11.5 / 12.5 / 13.5px 這種肉眼分不出來的半 px 級距——
+        沒有階層，只有連續灰階，所以畫面讀起來是雜訊不是層級。收斂成 9 階。
+      </p>
+      <div class="scale">
+        <div class="srow"><span class="stok">--fs-2xs</span><span class="spx">10</span><span class="samp" style="font-size:var(--fs-2xs)">角標與微標籤 BADGE</span><span class="suse">舊 9 / 9.5 / 10</span></div>
+        <div class="srow"><span class="stok">--fs-xs</span><span class="spx">11</span><span class="samp" style="font-size:var(--fs-xs)">輔助說明、狀態 badge</span><span class="suse">舊 10.5 / 11</span></div>
+        <div class="srow"><span class="stok">--fs-sm</span><span class="spx">12</span><span class="samp" style="font-size:var(--fs-sm)">次要內文、meta 資訊列</span><span class="suse">舊 11.5 / 12</span></div>
+        <div class="srow"><span class="stok">--fs-md</span><span class="spx">13</span><span class="samp" style="font-size:var(--fs-md)">內文、按鈕文字</span><span class="suse">舊 12.5 / 13</span></div>
+        <div class="srow"><span class="stok">--fs-base</span><span class="spx">14</span><span class="samp" style="font-size:var(--fs-base)">主內文 · body 預設</span><span class="suse">舊 13.5 / 14</span></div>
+        <div class="srow"><span class="stok">--fs-lg</span><span class="spx">16</span><span class="samp" style="font-size:var(--fs-lg)">卡片標題、區塊小標</span><span class="suse">舊 15 / 16</span></div>
+        <div class="srow"><span class="stok">--fs-xl</span><span class="spx">18</span><span class="samp" style="font-size:var(--fs-xl)">頁面標題、視窗標題</span><span class="suse">舊 17 / 18 / 19</span></div>
+        <div class="srow"><span class="stok">--fs-2xl</span><span class="spx">22</span><span class="samp" style="font-size:var(--fs-2xl)">大標題與統計數字</span><span class="suse">舊 20 / 21 / 22 / 26</span></div>
+        <div class="srow"><span class="stok">--fs-3xl</span><span class="spx">32</span><span class="samp" style="font-size:var(--fs-3xl)">登入頁主標</span><span class="suse">舊 34</span></div>
+      </div>
+    </section>
 
-    <div class="ty-row">
-      <div class="ty-tag">Noto Sans TC · 內文 400 / 500 / 700</div>
-      <div class="ty-sans" style="font-size:16px;font-weight:400">把請假、補課、調課一次排好。國二數學班，今日 19:00 進行中。</div>
-      <div class="ty-sans" style="font-size:14px;font-weight:500;color:var(--tx2)">王小明、陳大華、李小美、張志強</div>
-      <div class="ty-sans" style="font-size:13px;font-weight:700">需登記成績</div>
-    </div>
+    <section>
+      <h2>間距階梯 · 4px 網格</h2>
+      <p class="lead">
+        原本 padding 有 <b>146 種</b>組合、gap 從 1px 到 38px 幾乎每個整數都出現過——沒有任何兩個區塊在呼吸同一個節拍。
+        小端留 2px 半階給密集介面用。
+      </p>
+      <div class="scale">
+        <div class="srow"><span class="stok">--sp-1</span><span class="spx">2</span><span class="samp"><span style="display:inline-block;height:12px;width:var(--sp-1);background:var(--ac)"></span></span><span class="suse">badge 內距</span></div>
+        <div class="srow"><span class="stok">--sp-2</span><span class="spx">4</span><span class="samp"><span style="display:inline-block;height:12px;width:var(--sp-2);background:var(--ac)"></span></span><span class="suse">最小間隙</span></div>
+        <div class="srow"><span class="stok">--sp-3</span><span class="spx">6</span><span class="samp"><span style="display:inline-block;height:12px;width:var(--sp-3);background:var(--ac)"></span></span><span class="suse">chip 之間</span></div>
+        <div class="srow"><span class="stok">--sp-4</span><span class="spx">8</span><span class="samp"><span style="display:inline-block;height:12px;width:var(--sp-4);background:var(--ac)"></span></span><span class="suse">元素之間 · 最常用</span></div>
+        <div class="srow"><span class="stok">--sp-5</span><span class="spx">12</span><span class="samp"><span style="display:inline-block;height:12px;width:var(--sp-5);background:var(--ac)"></span></span><span class="suse">卡片內距（緊）</span></div>
+        <div class="srow"><span class="stok">--sp-6</span><span class="spx">16</span><span class="samp"><span style="display:inline-block;height:12px;width:var(--sp-6);background:var(--ac)"></span></span><span class="suse">卡片內距（標準）</span></div>
+        <div class="srow"><span class="stok">--sp-7</span><span class="spx">20</span><span class="samp"><span style="display:inline-block;height:12px;width:var(--sp-7);background:var(--ac)"></span></span><span class="suse">頁面內距</span></div>
+        <div class="srow"><span class="stok">--sp-8</span><span class="spx">24</span><span class="samp"><span style="display:inline-block;height:12px;width:var(--sp-8);background:var(--ac)"></span></span><span class="suse">區塊之間</span></div>
+        <div class="srow"><span class="stok">--sp-9</span><span class="spx">32</span><span class="samp"><span style="display:inline-block;height:12px;width:var(--sp-9);background:var(--ac)"></span></span><span class="suse">大區塊之間</span></div>
+        <div class="srow"><span class="stok">--sp-10</span><span class="spx">40</span><span class="samp"><span style="display:inline-block;height:12px;width:var(--sp-10);background:var(--ac)"></span></span><span class="suse">空狀態留白</span></div>
+        <div class="srow"><span class="stok">--sp-11</span><span class="spx">48</span><span class="samp"><span style="display:inline-block;height:12px;width:var(--sp-11);background:var(--ac)"></span></span><span class="suse">登入頁品牌欄</span></div>
+      </div>
+    </section>
 
-    <div class="ty-row">
-      <div class="ty-tag">DM Mono · 時間 / 數字</div>
-      <div class="ty-mono" style="font-size:24px;font-weight:500">18:00 – 20:00</div>
-      <div class="ty-mono" style="font-size:14px;color:var(--tx2)">100+ 在學學生　·　5 教室　·　2 分校</div>
-    </div>
+    <section>
+      <h2>字族 · 3 種</h2>
+      <p class="lead">
+        原本載入 4 種。第四種 <b>Newsreader</b> 只出現在 logo 的 SVG data-URI 裡，
+        而 data-URI 的 SVG 當背景圖是獨立文件、讀不到頁面載入的 webfont——那顆 H
+        其實一直是 fallback 的 Georgia 在畫。等於白下載一個字體家族，已移除。
+      </p>
+      <div class="ty-row">
+        <div class="ty-tag">DM Sans · 標題 / 品牌 700</div>
+        <div class="ty-dmsans" style="font-size:var(--fs-3xl);font-weight:700;letter-spacing:-.01em">HOBE 排程系統</div>
+        <div class="ty-dmsans" style="font-size:var(--fs-2xl);font-weight:600">今日與本週課程</div>
+      </div>
+      <div class="ty-row">
+        <div class="ty-tag">Noto Sans TC · 內文 400 / 500 / 700</div>
+        <div style="font-size:var(--fs-lg);font-weight:400">把請假、補課、調課一次排好。國二數學班，今日 19:00 進行中。</div>
+        <div style="font-size:var(--fs-base);font-weight:500;color:var(--tx2)">王小明、陳大華、李小美、張志強</div>
+        <div style="font-size:var(--fs-md);font-weight:700">需登記成績</div>
+      </div>
+      <div class="ty-row">
+        <div class="ty-tag">DM Mono · 時間 / 數字</div>
+        <div class="ty-mono" style="font-size:var(--fs-2xl);font-weight:500">18:00 – 20:00</div>
+        <div class="ty-mono" style="font-size:var(--fs-base);color:var(--tx2)">100+ 在學學生　·　5 教室　·　2 分校</div>
+      </div>
+    </section>
 
-    <div class="ty-row" style="border-bottom:none">
-      <div class="ty-tag">Newsreader · 襯線點綴</div>
-      <div class="ty-serif" style="font-size:26px">把每一堂課，排得剛剛好</div>
+    <div class="note">
+      <b>規則：</b>新寫 CSS 一律用 <code>var(--fs-*)</code> 與 <code>var(--sp-*)</code>，不要再寫裸 px。
+      要調全站字級或鬆緊，改 <code>tokens.css</code> 一行就好。
+      唯一例外是<b>刻意的負值位移與 calc()</b>（如 <code>margin-top:-8px</code>），那些維持原樣。
     </div>
 
   </div>

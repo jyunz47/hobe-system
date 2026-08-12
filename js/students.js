@@ -187,14 +187,15 @@ function getStudentStats(studentId,periodId){
         label:co?courseNameOn(co,new Date()):a.origTitle};
     }
     byCourse[c].total++;
-    // 「不補課」（家教課前1hr內請假、確認不補）不算欠課
-    if(!isMakeupSkipped(a)&&(!m||new Date(m.scheduledEnd)>=now))byCourse[c].owed++;
+    // 「不補課」（家教課前1hr內請假、確認不補）不算欠課。
+    // 補完沒改看時數（2026-08-10 第 3 刀）：拆成兩場補足時，只看第一場上完沒會提前消掉整筆欠課
+    if(!isMakeupSkipped(a)&&!mkMadeUpBy(a,name,now))byCourse[c].owed++;
     if(a.absType==='學生請假')byCourse[c].studentAbs++;
     else if(a.absType==='調課')byCourse[c].reschedules++;
     else if(a.absType==='老師請假')byCourse[c].teacherAbs++;
     byCourse[c].pairs.push({absence:a,makeup:m});
   });
-  const owed=pairs.filter(p=>!isMakeupSkipped(p.absence)&&(!p.makeup||new Date(p.makeup.scheduledEnd)>=now)).length;
+  const owed=pairs.filter(p=>!isMakeupSkipped(p.absence)&&!mkMadeUpBy(p.absence,name,now)).length;
   // 曠課次數（含純曠課事件與請假/曠課並存事件中該生被標曠課的）
   const noShow=makeupList.filter(e=>e.startDt>=period.start&&e.startDt<=period.end&&(e.noShowStudents||[]).includes(name)).length;
   // 加退費（半堂）：家教/一對二課前1hr內請假 → 補(已排)+半堂、不補−半堂、未決待確認

@@ -79,8 +79,10 @@ function renderWeek(monday){
     const shown = evs.slice(0,3);
     const rest = evs.length - shown.length;
     const items = shown.map(e=>{
-      const clr=calColor(e.calName);
-      const nm=esc((e.subject||e.origTitle)+(e.isFullAbsent&&!e.isRescheduled?'·假':e.isRescheduled?'·調':''));
+      const clr=calIsAccent(e.calName)?calColor(e.calName):'var(--brs)';
+      // 小格只放一個字：假／調（原課被移走）／補・調（排出去的場次）
+      const mk=mkOccKind(e);
+      const nm=esc((e.subject||e.origTitle)+(e.isFullAbsent&&!e.isRescheduled?'·假':e.isRescheduled?'·調':mk?'·'+mk.slice(0,1):''));
       return `<div class="wcell-it"><span class="wcell-dot" style="background:${clr}"></span><span class="wcell-nm">${nm}</span></div>`;
     }).join('');
     return `<button class="wcell${isSel?' w-sel':''}${isToday?' w-today':''}" onclick="selectWeekDay(${di})">
@@ -109,7 +111,7 @@ function renderWeek(monday){
 
   const focusCalTags=['補課','加課','試聽'].map(cal=>{
     const n=focus.evs.filter(e=>e.calName===cal).length;
-    return n>0?`<span style="color:${calColor(cal)};font-weight:500">${n} ${cal}</span>`:'';
+    return n>0?`<span style="color:${calInk(cal)};font-weight:500">${n} ${cal}</span>`:'';
   }).join('');
 
   let html = `<div class="wfocus-hd">
@@ -117,7 +119,7 @@ function renderWeek(monday){
       <div class="wfocus-date">${focus.date.getMonth()+1}/${focus.date.getDate()} ${WDL[selectedWeekDayIdx]}</div>
       ${isFocusToday?'<span class="wfocus-tag">TODAY</span>':''}
     </div>
-    <div class="wfocus-meta"><span>${focus.evs.length-absCnt-reschedCnt} 堂</span>${absCnt>0?`<span class="tsum-abs">${absCnt} 請假</span>`:''}${reschedCnt>0?`<span style="color:${calColor('調課')};font-weight:500">${reschedCnt} 調課</span>`:''}${focusCalTags}</div>
+    <div class="wfocus-meta"><span>${focus.evs.length-absCnt-reschedCnt} 堂</span>${absCnt>0?`<span class="tsum-abs">${absCnt} 請假</span>`:''}${reschedCnt>0?`<span style="color:${calInk('調課')};font-weight:500">${reschedCnt} 調課</span>`:''}${focusCalTags}</div>
   </div>
   <div class="wfocus-list">`;
   if(focusEvs.length===0){
@@ -140,13 +142,18 @@ function selectWeekDay(idx){
 // 週課程卡（樣式與今日卡片一致，id prefix wc-）
 function wcardHtml(e){
   const id=esc(e.id);
-  const tcv=calColor(e.calName);
+  // 跟今日課程卡同一條規則：一般課程走中性灰左緣，其他類別才上色
+  const tcv=calIsAccent(e.calName)?calColor(e.calName):'var(--brs)';
   const cls=`tcard t-${e.type}${e.status==='now'?' t-now':''}${e.status==='past'?' t-past':''}${e.isFullAbsent?' t-absent':''}`;
   const stat=
     e.status==='now'?'<span class="tstat tstat-now"><span class="ndot"></span>進行中</span>':
     e.status==='past'?'<span class="tstat tstat-past">已結束</span>':'';
   const roster=eventRoster(e);
   const stuTxt=roster.length===0?'—':roster.length<=2?roster.join('、'):`${roster.length} 人`;
+  // 補課／調課場次：標籤放在標籤列（跟課型 pill 同一排），原課日期放下面的細節區
+  const mkKind=mkOccKind(e);
+  const mkPill=mkKind?`<span class="tstat" style="background:${calTint(e.calName,.18)};color:${calInk(e.calName)}">${mkKind}</span>`:'';
+  const mkFromInline=mkOccFromTxt(e)?`<div class="tcard-abs"><span class="l">${mkKind}</span>${esc(mkOccFromTxt(e))}${roster.length?'・'+esc(roster.join('、')):''}</div>`:'';
   const absInline=e.isRescheduled?`<div class="tcard-abs"><span class="l">調課</span>${e.rescheduleReason?esc(e.rescheduleReason):'未輸入原因'}</div>`:
     `${e.isAbsent?`<div class="tcard-abs"><span class="l">請假</span>${e.absType==='老師請假'?'老師請假':esc(e.absentStudents.join('、'))+'請假'}</div>`:''}${e.isNoShow?`<div class="tcard-abs"><span class="l">曠課</span>${esc(e.noShowStudents.join('、'))}</div>`:''}`;
   const noteInline=e.notes?`<div class="tcard-note"><span class="l">備註</span>${esc(e.notes)}</div>`:'';
@@ -154,13 +161,14 @@ function wcardHtml(e){
   // 別班請假的學生今天併進這堂一起上（第 2 刀）→ 卡上講一行，名冊多的人才有來由
   const joinRows=joinRosterOn(e.id);
   const joinInline=joinRows.length?`<div class="tcard-abs"><span class="l">補課生</span>${esc(joinRows.map(r=>r.name).join('、'))}（${esc(joinRows[0].fromTitle||'')}）</div>`:'';
-  const extras=(absInline||noteInline||mkSt||joinInline)?`<div class="tcard-extras">${noteInline}${absInline}${joinInline}${mkSt}</div>`:'';
+  const extras=(absInline||noteInline||mkSt||joinInline||mkFromInline)?`<div class="tcard-extras">${noteInline}${mkFromInline}${absInline}${joinInline}${mkSt}</div>`:'';
   return `<div class="${cls}" id="wc-${id}" style="border-left-color:${tcv}" onclick="selectWeekEvent('${id}')">
     <div class="tcard-row">
       <div class="tcard-time">${fmtT(e.startDt)}<span class="dash">—</span>${fmtT(e.endDt)}</div>
       <div class="tcard-dur">${fmtDur(e.durMins)}</div>
       <div class="tcard-tags">
         <span class="tpill t-${e.type}"><span class="pdot"></span>${typeLbl(e.type)}</span>
+        ${mkPill}
         ${typeMismatchChip(e)}
         ${stat}
       </div>
@@ -235,6 +243,7 @@ function selectWeekEvent(id){
           ${ev.teacher?`<span>👤 ${esc(ev.teacher)}</span>`:''}
           <span style="color:${COLORS[ev.type]};font-weight:500">${typeLbl(ev.type)}${ev.classroom?`・${esc(ev.classroom)}`:''}</span>
           ${ev.isFullAbsent?`<span style="color:var(--dg);font-weight:500">${ev.isRescheduled?('調課'+(ev.rescheduleReason?'：'+esc(ev.rescheduleReason):'')): ev.absType==='老師請假'?'老師請假':esc(ev.absentStudents.join('、'))+'請假'}</span>`:''}
+          ${mkOccKind(ev)?`<span style="color:${calInk(ev.calName)};font-weight:500">${mkOccKind(ev)}${mkOccFromTxt(ev)?'・'+esc(mkOccFromTxt(ev)):''}</span>`:''}
           ${mkChipsHtml(ev)}
         </div>
       </div>

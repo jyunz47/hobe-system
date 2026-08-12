@@ -13,6 +13,7 @@ async function loadToday(){
     hideErr('courses');
     renderTL();
     renderToday();
+    if(typeof renderRemind==='function')renderRemind();   // 今日重點吃同一批資料（請假／補課一改就要跟著變）
     if(currentPanel==='dayview')renderDayView(); // 日檢視共用 dayEvents，換日/更新後同步重畫
     setUSt('ok',document.getElementById('uname').textContent,fmtDT(new Date())+' 更新');
   }catch(err){showErr('courses','讀取失敗：'+(err.result?.error?.message||err.message));}
@@ -80,7 +81,7 @@ function renderTimeline(evs){
       const left=((s-tlAxisStart)/tlTotalMins*100).toFixed(1);
       const width=Math.max((en-s)/tlTotalMins*100,1).toFixed(1);
       const clr=calColor(e.calName);
-      blocksHtml+=`<div class="tl-block" style="left:${left}%;width:${width}%;background:${clr}" onclick="selectWeekEvent('${esc(e.id)}')"><div class="tl-block-nm">${esc(e.origTitle)}</div><div class="tl-block-t">${fmtT(e.startDt)}</div></div>`;
+      blocksHtml+=`<div class="tl-block" style="left:${left}%;width:${width}%;background:${clr};color:${calOn(e.calName)}" onclick="selectWeekEvent('${esc(e.id)}')"><div class="tl-block-nm">${esc(e.origTitle)}</div><div class="tl-block-t">${fmtT(e.startDt)}</div></div>`;
     });
     rowsHtml+=`<div class="tl-room-lbl">${esc(room)}</div><div class="tl-track">${vlinesHtml}${nowLineHtml}${blocksHtml}</div>`;
   });
@@ -127,8 +128,9 @@ function renderToday(){
   const nowEvs=evs.filter(x=>x.status==='now');
   const nextEv=!nowEvs.length?evs.find(x=>x.status==='upcoming'):null;
   if(isToday&&(nowEvs.length||nextEv)){
-    hero.innerHTML=nowEvs.length
-      ?nowEvs.map(e=>heroHtml(e,true)).join('')
+    hero.innerHTML=nowEvs.length>=2
+      ?nowListHtml(nowEvs)                    // 兩堂以上：摘要列，不疊塔
+      :nowEvs.length?heroHtml(nowEvs[0],true) // 一堂：維持原本的大 hero
       :heroHtml(nextEv,false);
   }else{
     hero.innerHTML='';
@@ -139,15 +141,22 @@ function renderToday(){
   if(isToday&&nowEvs.length){
     heroProgressTimer=setInterval(()=>{
       const progs=hero.querySelectorAll('.thero-prog');
-      if(!progs.length){clearInterval(heroProgressTimer);heroProgressTimer=null;return;}
-      progs.forEach(prog=>{
-        const start=+prog.dataset.start,end=+prog.dataset.end;
+      const rows=hero.querySelectorAll('.now-row');   // 摘要列（多堂並行）也要走同一條更新
+      if(!progs.length&&!rows.length){clearInterval(heroProgressTimer);heroProgressTimer=null;return;}
+      const elapsed=el=>{
+        const start=+el.dataset.start,end=+el.dataset.end;
         const totalMin=(end-start)/60000;
-        const elapMin=Math.max(0,Math.min(totalMin,(Date.now()-start)/60000));
-        const pct=(elapMin/totalMin)*100;
-        prog.querySelector('.thero-prog-fill').style.width=pct+'%';
+        return{totalMin,elapMin:Math.max(0,Math.min(totalMin,(Date.now()-start)/60000))};
+      };
+      progs.forEach(prog=>{
+        const{totalMin,elapMin}=elapsed(prog);
+        prog.querySelector('.thero-prog-fill').style.width=(elapMin/totalMin)*100+'%';
         prog.querySelector('.prog-elap').textContent=`已進行 ${Math.round(elapMin)} 分`;
         prog.querySelector('.prog-remain').textContent=`剩 ${Math.round(totalMin-elapMin)} 分`;
+      });
+      rows.forEach(row=>{
+        const{totalMin,elapMin}=elapsed(row);
+        row.querySelector('.now-left').textContent=`剩 ${Math.round(totalMin-elapMin)} 分`;
       });
     },30000);
   }
@@ -166,10 +175,10 @@ function renderToday(){
     if(remain>0)sumHtml+=`<span>待上 <b style="color:var(--ac)">${remain}</b></span>`;
   }
   if(absCount>0)sumHtml+=`<span class="tsum-abs">${absCount} 請假</span>`;
-  if(reschedCount>0)sumHtml+=`<span style="color:${calColor('調課')};font-weight:500">${reschedCount} 調課</span>`;
+  if(reschedCount>0)sumHtml+=`<span style="color:${calInk('調課')};font-weight:500">${reschedCount} 調課</span>`;
   [['補課'],['加課'],['試聽']].forEach(([cal])=>{
     const n=evs.filter(x=>x.calName===cal).length;
-    if(n>0)sumHtml+=`<span style="color:${calColor(cal)};font-weight:500">${n} ${cal}</span>`;
+    if(n>0)sumHtml+=`<span style="color:${calInk(cal)};font-weight:500">${n} ${cal}</span>`;
   });
   sum.innerHTML=sumHtml;
 
@@ -253,6 +262,21 @@ function grRemove(eventId,gradeId){
   const e=findEventById(eventId);if(e)refreshGradePanel(e);
 }
 
+// 多堂同時進行 → 右欄改「摘要列」：一堂一行（色條＋課名＋剩幾分＋教室/老師＋細進度條）。
+// 疊大 hero 的話四堂就把右欄拉成一座塔、左邊時間軸只剩一點高，而且再多幾堂會看不完。
+// 點一行＝跟點大 hero 一樣開課程詳情。（方案 3「摘要列」，2026-08-10）
+function nowListHtml(evs){
+  const rows=evs.map(e=>{
+    const total=(e.endDt-e.startDt)/60000;
+    const elap=Math.max(0,Math.min(total,(new Date()-e.startDt)/60000));
+    return `<div class="now-row" data-start="${e.startDt.getTime()}" data-end="${e.endDt.getTime()}" onclick="selectWeekEvent('${esc(e.id)}')">
+      <span class="now-bar" style="background:${calColor(e.calName)}"></span>
+      <span class="now-nm">${esc(e.origTitle)}${mkOccKind(e)?`（${mkOccKind(e)}）`:''}</span><span class="now-left">剩 ${Math.round(total-elap)} 分</span>
+    </div>`;
+  }).join('');
+  return `<div class="now-list"><div class="now-list-hd">進行中 <b>${evs.length}</b></div>${rows}</div>`;
+}
+
 function heroHtml(e,isNow){
   const id=esc(e.id);
   const tcv=calColor(e.calName);
@@ -268,15 +292,20 @@ function heroHtml(e,isNow){
   }
   const roster=eventRoster(e);
   const stuRest=roster.length>4?` <span class="stu-rest">${esc(roster.slice(0,3).join('、'))}…</span>`:roster.length>0?` <span class="stu-rest">${esc(roster.join('、'))}</span>`:'';
+  // 補課／調課場次：hero 也要標（正在上的那堂如果是補課，這裡是最先被看到的地方）。
+  // 綠底 hero 上要看得清 → 用實心類別色＋自動決定黑白字（同教室時間軸的色塊）
+  const mkKind=mkOccKind(e);
   return `<div class="thero${isNow?'':' next'}" onclick="selectWeekEvent('${id}')">
     <div class="thero-bar" style="background:${tcv}"></div>
     <div class="thero-hd">
       <span class="thero-tag${isNow?'':' up'}">${isNow?'<span class="ndot"></span>進行中':'下一堂'}</span>
       <span class="tpill t-${e.type}"><span class="pdot"></span>${typeLbl(e.type)}</span>
+      ${mkKind?`<span class="tpill" style="background:${calColor(e.calName)};color:${calOn(e.calName)}">${mkKind}</span>`:''}
       <div class="thero-time">${fmtT(e.startDt)} – ${fmtT(e.endDt)}<span class="sub">${fmtDur(e.durMins)}</span></div>
     </div>
     <div class="thero-title">${esc(e.origTitle)}</div>
     <div class="thero-meta">
+      ${mkOccFromWhen(e)?`<span><span class="lbl">原課</span><b>${esc(mkOccFromWhen(e))}</b></span>`:''}
       ${e.teacher?`<span><span class="lbl">授課</span><b>${esc(e.teacher)}</b></span>`:''}
       ${e.classroom?`<span><span class="lbl">教室</span><b>${esc(e.classroom)}</b></span>`:''}
       <span><span class="lbl">學生</span><b>${roster.length} 人</b>${stuRest}</span>
@@ -298,9 +327,9 @@ function getMkSt(e){
     const join=isJoinRec(rec)?`　👥 併入 ${esc(rec.hostTitle||'另一堂課')}`:'';
     return`<div class="tcard-mk mk-arr"><span class="l">${isJoinRec(rec)?'併班'+lbl:lbl}</span>${recs.length>1&&who?esc(who)+'　':''}${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${fmtT(sd)}${join}</div>`;
   }).join('');
-  // 多人請假只排了一部分 → 剩下的人也要看得到還欠著
-  const left=mkPendingNames(e);
-  return rows+(left.length?`<div class="tcard-mk mk-un">${esc(left.join('、'))} 尚未安排${lbl}</div>`:'');
+  // 只排了一部分 → 剩下的也要看得到還欠著（「一部分」含多人只排幾個、以及同一人時數只補一半）
+  const left=mkWaitTxt(e);
+  return rows+(left.length?`<div class="tcard-mk mk-un">${esc(left.join('、'))} 尚未排完${lbl}</div>`:'');
 }
 
 // 科目字母（方向C 卡片左側方塊）
@@ -500,8 +529,11 @@ function tcardHtml(e){
   const stat=
     e.status==='now'?'<span class="tc-badge tc-badge-now"><span class="ndot"></span>進行中</span>':
     e.status==='past'?'<span class="tc-badge tc-badge-past">已結束</span>':'';
+  // 補課／調課場次：卡上要看得出來這不是常規課（顏色吃該類別的 token，跟日曆課塊同一組色）
+  const mkKind=mkOccKind(e);
   let badge='';
-  if(e.isRescheduled)badge=`<span class="tc-badge tc-badge-resched">調課</span>`;
+  if(mkKind)badge=`<span class="tc-badge tc-badge-mk" style="background:${calTint(e.calName,.18)};color:${calInk(e.calName)}">${mkKind}</span>`;
+  else if(e.isRescheduled)badge=`<span class="tc-badge tc-badge-resched">調課</span>`;
   else if(e.isAbsent){
     // 老師請假固定字樣；學生請假比照曠課：多人顯示誰請假、一對一只顯示「請假」
     const as=e.absentStudents||[];
@@ -519,6 +551,8 @@ function tcardHtml(e){
     const left=mkPendingCount(e);   // 「還差幾人」的唯一算法（老師請假沒有個別名單也算得對）
     return left?`<span class="tc-badge tc-badge-un">還有 ${left} 人未安排</span>`:`<span class="tc-badge tc-badge-arr">✓ 已安排</span>`;
   })();
+  // 這場是替哪一堂排的（副標那行）——同一門課一週可能出現兩次，講得出原課才對得上
+  const mkFrom=mkOccFromTxt(e);
   // 今天有別班的人來併班補課 → 卡上先講，不然名冊突然多兩個人會不知道是誰（2026-08-06 第 2 刀）
   const joinN=joinCountOn(e.id);
   const joinBadge=joinN?`<span class="tc-badge tc-badge-join" title="另一堂請假的學生併進這堂一起上">+${joinN} 補課生</span>`:'';
@@ -539,13 +573,15 @@ function tcardHtml(e){
   const attBtn=canAttend(e)?`<button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndAtt('${id}')">✓ 點名</button>`:'';
   const gradeBtn=canAttend(e)&&evNeedsGrade(e)?`<button class="tc-act" onclick="event.stopPropagation();selectWeekEventAndGrade('${id}')">✎ 成績</button>`:'';
   const rosterBtn=canAttend(e)?'':`<button class="tc-act roster" onclick="event.stopPropagation();toggleRoster('${id}')">名單 <b>${roster.length}</b></button>`;
-  const cls=`tcard2 t-${e.type}${e.status==='now'?' t-now':''}${e.status==='past'?' t-past':''}${e.isFullAbsent?' t-absent':''}${e.isRescheduled?' t-resched':''}`;
-  return `<div class="${cls}" id="cc-${id}" style="--tcv:${tcv}">
+  // 類別色只掛在「非一般課程」的卡上（調課的卡已經整張粉底＋調課標籤，不再疊一條色）
+  const calCls=(calIsAccent(e.calName)&&!e.isRescheduled)?' tc-cal':'';
+  const cls=`tcard2 t-${e.type}${e.status==='now'?' t-now':''}${e.status==='past'?' t-past':''}${e.isFullAbsent?' t-absent':''}${e.isRescheduled?' t-resched':''}${calCls}`;
+  return `<div class="${cls}" id="cc-${id}" style="--tcv:${tcv};--tcv-ink:${calInk(e.calName)};--tcv-bg:${calTint(e.calName,.15)}">
     <div class="tcard2-head" onclick="toggleTcard('${id}')">
       <div class="tcard2-av${avCls}">${esc(letter)}</div>
       <div class="tcard2-info">
         <div class="tcard2-name"><span class="tcard2-title${e.isFullAbsent?' struck':''}">${esc(e.origTitle)}</span>${badge}${mkBadge}${joinBadge}${stat}${canAttend(e)?attBadgeHtml(e):''}${typeMismatchChip(e)}</div>
-        <div class="tcard2-sub">${e.classroom?esc(e.classroom)+' · ':''}${e.teacher?esc(e.teacher)+' · ':''}${roster.length} 人</div>
+        <div class="tcard2-sub">${e.classroom?esc(e.classroom)+' · ':''}${e.teacher?esc(e.teacher)+' · ':''}${roster.length} 人${mkFrom?' · '+esc(mkFrom):''}</div>
       </div>
       <div class="tcard2-time"><b>${fmtT(e.startDt)}</b><span>${fmtT(e.endDt)}</span></div>
       <span class="tcard2-chev">▾</span>

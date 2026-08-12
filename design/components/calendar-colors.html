@@ -12,6 +12,7 @@
   .cc-pal{display:flex;flex-wrap:wrap;gap:16px}
   .cc-sw{display:flex;flex-direction:column;gap:8px;width:120px}
   .cc-chip{height:72px;border-radius:14px;border:1px solid rgba(0,0,0,.06)}
+  .cc-ink{background:var(--sf);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600}
   .cc-lbl{font-size:13px;font-weight:600;color:var(--tx)}
   .cc-hex{font-size:11px;color:var(--tx3);font-family:'DM Mono',monospace}
   h2{font-size:15px;color:var(--tx);margin:0 0 4px}
@@ -31,6 +32,18 @@
   <div class="cc-sw"><div class="cc-chip" style="background:var(--cal-extra)"></div><span class="cc-lbl">加課</span><span class="cc-hex">--cal-extra</span></div>
   <div class="cc-sw"><div class="cc-chip" style="background:var(--cal-trial)"></div><span class="cc-lbl">試聽</span><span class="cc-hex">--cal-trial</span></div>
   <div class="cc-sw"><div class="cc-chip" style="background:var(--cal-practice)"></div><span class="cc-lbl">練習課</span><span class="cc-hex">--cal-practice</span></div>
+</div>
+
+<h2 style="margin-top:32px">同六色的文字版（ink）</h2>
+<p>上面那組是給色塊用的；黃、橘、綠直接當文字在白底會糊掉，所以文字一律吃 <code>--cal-*-ink</code>（壓深到對比度 ≥ 4.5）。</p>
+
+<div class="cc-pal">
+  <div class="cc-sw"><div class="cc-chip cc-ink" style="color:var(--cal-general-ink)">一般課程</div><span class="cc-hex">--cal-general-ink</span></div>
+  <div class="cc-sw"><div class="cc-chip cc-ink" style="color:var(--cal-resched-ink)">調課</div><span class="cc-hex">--cal-resched-ink</span></div>
+  <div class="cc-sw"><div class="cc-chip cc-ink" style="color:var(--cal-makeup-ink)">補課</div><span class="cc-hex">--cal-makeup-ink</span></div>
+  <div class="cc-sw"><div class="cc-chip cc-ink" style="color:var(--cal-extra-ink)">加課</div><span class="cc-hex">--cal-extra-ink</span></div>
+  <div class="cc-sw"><div class="cc-chip cc-ink" style="color:var(--cal-trial-ink)">試聽</div><span class="cc-hex">--cal-trial-ink</span></div>
+  <div class="cc-sw"><div class="cc-chip cc-ink" style="color:var(--cal-practice-ink)">練習課</div><span class="cc-hex">--cal-practice-ink</span></div>
 </div>
 
 </body>

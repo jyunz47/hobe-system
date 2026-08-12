@@ -72,16 +72,21 @@ function getMakeupScheduledLS() { return driveData.makeupScheduled || []; }
 <script src="../js/makeup.js"></script>
 <script src="../js/students.js"></script>
 <script src="../js/search.js"></script>
+<script src="../js/remind.js"></script>
 
 <!-- 1b. 測試用包裝：saveMakeupScheduled 走 makeup.js 的真身（要驗真的寫進 makeupScheduled
      的形狀），外面再包一層記錄呼叫的 spy（dayview-move 的斷言靠 _mkCalls）。
      真身必須先被抓進另一個 <script>——同一塊裡 function 宣告會被提升，會抓到自己變成無限遞迴。 -->
 <script>var _realSaveMakeup = saveMakeupScheduled;</script>
 <script>
-function saveMakeupScheduled(ev, sS, sE, room, calEventId, calName, students, recId) {
+// ⚠ 參數要跟真身一模一樣地轉手（含最後的 teacher，以及「沒傳」和「傳 null」的差別：
+//    沒傳＝沿用原本存的老師，傳 null＝改回原班老師）
+function saveMakeupScheduled(ev, sS, sE, room, calEventId, calName, students, recId, teacher) {
   _mkCalls.push({ id: ev.id, students: (students || ev.absentStudents || []).slice(),
-    start: sS, end: sE, room, calName });
-  return _realSaveMakeup(ev, sS, sE, room, calEventId, calName, students, recId);
+    start: sS, end: sE, room, calName, teacher });
+  return arguments.length >= 9
+    ? _realSaveMakeup(ev, sS, sE, room, calEventId, calName, students, recId, teacher)
+    : _realSaveMakeup(ev, sS, sE, room, calEventId, calName, students, recId);
 }
 // 重畫類的下游（真身要 DOM／Firebase）：測的是資料寫入，畫面收掉就好
 function renderMakeup() {}
@@ -102,8 +107,16 @@ function toast() {}
 <script src="student-stats.test.js"></script>
 <script src="makeup-split.test.js"></script>
 <script src="makeup-join.test.js"></script>
+<script src="makeup-custom.test.js"></script>
+<script src="makeup-owed-freeze.test.js"></script>
+<script src="makeup-student-busy.test.js"></script>
+<script src="makeup-teacher.test.js"></script>
+<script src="makeup-notes.test.js"></script>
+<script src="makeup-occ-card.test.js"></script>
 <script src="absence-mixed.test.js"></script>
 <script src="search.test.js"></script>
+<!-- remind 放最後：它把 currentPeriodId 切成 summer 且不還原，排前面會影響後面的測試 -->
+<script src="remind.test.js"></script>
 
 </body>
 </html>

@@ -78,18 +78,51 @@ function readCalColors(){
   const cs=getComputedStyle(document.documentElement);
   const g=(n,f)=>cs.getPropertyValue(n).trim()||f;
   return{
-    '一般課程':g('--cal-general','#6B8F7A'),
-    '調課':g('--cal-resched','#C0504A'),
-    '補課':g('--cal-makeup','#C16B36'),
-    '加課':g('--cal-extra','#B98A4A'),
-    '試聽':g('--cal-trial','#7E8B83'),
-    '練習課':g('--cal-practice','#9A8552'),
+    '一般課程':g('--cal-general','#007AFF'),
+    '調課':g('--cal-resched','#FF3B30'),
+    '補課':g('--cal-makeup','#FF9500'),
+    '加課':g('--cal-extra','#FFCC00'),
+    '試聽':g('--cal-trial','#34C759'),
+    '練習課':g('--cal-practice','#AF52DE'),
+  };
+}
+// 同六色的文字版：亮色系（黃、橘、綠）直接當文字在白底上看不清，
+// 文字一律走這組壓深過的 ink（tokens.css --cal-*-ink），色塊才用 CAL_COLORS。
+function readCalInk(){
+  const cs=getComputedStyle(document.documentElement);
+  const g=(n,f)=>cs.getPropertyValue(n).trim()||f;
+  return{
+    '一般課程':g('--cal-general-ink','#0071ED'),
+    '調課':g('--cal-resched-ink','#DE332A'),
+    '補課':g('--cal-makeup-ink','#AD6500'),
+    '加課':g('--cal-extra-ink','#8F7200'),
+    '試聽':g('--cal-trial-ink','#23873D'),
+    '練習課':g('--cal-practice-ink','#A64ED3'),
   };
 }
 var CAL_COLORS=readCalColors();
+var CAL_INK=readCalInk();
 function calColor(calName){return CAL_COLORS[calName]||'#8A8276';}
+function calInk(calName){return CAL_INK[calName]||CAL_COLORS[calName]||'#6E675C';}
+// 類別色的淡底版（頭像方塊、標籤底）：直接壓在白底上，a 是不透明度。
+function calTint(calName,a){
+  const h=calColor(calName).replace('#','');
+  if(h.length<6)return'transparent';
+  return`rgba(${parseInt(h.slice(0,2),16)},${parseInt(h.slice(2,4),16)},${parseInt(h.slice(4,6),16)},${a})`;
+}
+// 「一般課程」是最大宗，上色會整頁都同一個顏色＝等於沒上色，所以維持中性米色，
+// 只有補課／調課／試聽／練習課／加課帶色 —— 要一眼看出來的本來就是這些例外。
+function calIsAccent(calName){return!!calName&&calName!=='一般課程';}
+// 實心色塊上的字要黑要白：亮色（黃、綠）配白字看不到，改配深字。
+function calOn(calName){
+  const h=calColor(calName).replace('#','');
+  if(h.length<6)return'#fff';
+  const r=parseInt(h.slice(0,2),16),g=parseInt(h.slice(2,4),16),b=parseInt(h.slice(4,6),16);
+  return(r*.299+g*.587+b*.114)>168?'#2A2410':'#fff';
+}
 var WD=['日','一','二','三','四','五','六'];
-var ROOM_CAP={'小教室':5,'108':6,'208':6,'309':6};
+// 教室可坐人數（2026-08-10 老闆更新：108/208/309 從 6 人改 8 人）
+var ROOM_CAP={'小教室':5,'108':8,'208':8,'309':8};
 var ROOMS_SMALL=['小教室','108','208','309'];
 
 // ── 營業時間（補課/調課「選時段」可挑的範圍）──
@@ -110,6 +143,6 @@ function bizHoursOn(date){
 // students＝這次要幫誰排（請假名單的子集，2026-08-05 起可只排一部分人）；
 // recId＝改期時沿用的那筆補課 id，null＝新排一場；
 // join＝併班補課選中的主課 occId（2026-08-06 第 2 刀），有值時時段/教室都跟著那堂走、不用再選
-var slotPicker={ev:null,mode:null,date:null,time:null,room:null,avail:null,students:null,recId:null,join:null};
+var slotPicker={ev:null,mode:null,date:null,time:null,room:null,avail:null,students:null,recId:null,join:null,custom:null};
 var heroProgressTimer=null;
 var tlAxisStart=0,tlTotalMins=0,tlNowTimer=null;

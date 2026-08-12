@@ -293,9 +293,11 @@ function _dvEvHtml(it,axisStart,isToday,now){
   // 重複課（每週排程）標 ↻；補課/調課場次與指定日期單場不標
   const co=(e.courseId!=null&&typeof findCourseById==='function')?findCourseById(e.courseId):null;
   const isRepeat=!!(co&&co.schedule&&co.schedule.mode!=='dates')&&!e.isMakeupOcc;
+  // 排出去的場次也要標（以前只認 calName==='補課'，調課場次整個沒標籤）
+  const mkKind=typeof mkOccKind==='function'?mkOccKind(e):'';
   const badge=
     e.isRescheduled?'<span class="dv-ev-badge">調課</span>':
-    (e.isMakeupOcc&&e.calName==='補課')?'<span class="dv-ev-badge">補課</span>':
+    mkKind?`<span class="dv-ev-badge">${mkKind}</span>`:
     e.isAbsent?'<span class="dv-ev-badge">請假</span>':
     e.isNoShow?'<span class="dv-ev-badge">曠課</span>':'';
   // 別班的人今天併進這堂補課（第 2 刀）→ 課塊上標「+N 補」，不然只有點開側欄才看得到
@@ -489,6 +491,8 @@ function dvSelect(id){
 
 // 狀態色：同一組色票在深色底要亮一點、亮色底要暗一點（沿用課塊那套算法）
 function _dvTone(hex){return _dvShift(hex,dvLight?-.12:.38);}
+// 類別 chip 專用：亮底時 -.12 壓不夠（黃/橘/綠會糊掉），直接吃 tokens 的 ink 版
+function _dvCalTone(cal){return dvLight?calInk(cal):_dvShift(calColor(cal),.38);}
 function _dvTag(txt,hex){return`<span class="dv-stu-tag" style="color:${_dvTone(hex)}">${txt}</span>`;}
 
 // 名冊每個人右邊那顆標籤：曠課／請假優先，其次才看點名紀錄
@@ -535,8 +539,8 @@ function renderDvInspector(){
 
   // ── 標頭的狀態 chips ──
   const chips=[`<span class="dv-chip">${typeLbl(ev.type)}</span>`];
-  if(ev.calName&&ev.calName!=='一般課程')chips.push(`<span class="dv-chip" style="color:${_dvTone(calColor(ev.calName))}">${esc(ev.calName)}</span>`);
-  if(ev.isRescheduled)chips.push(`<span class="dv-chip" style="color:${_dvTone('#C0504A')}">調課</span>`);
+  if(ev.calName&&ev.calName!=='一般課程')chips.push(`<span class="dv-chip" style="color:${_dvCalTone(ev.calName)}">${esc(ev.calName)}</span>`);
+  if(ev.isRescheduled)chips.push(`<span class="dv-chip" style="color:${_dvCalTone('調課')}">調課</span>`);
   else if(ev.isAbsent)chips.push(`<span class="dv-chip" style="color:${_dvTone('#C16B36')}">${ev.absType==='老師請假'?'老師請假':'請假 '+ev.absentStudents.length+' 人'}</span>`);
   if(ev.isNoShow)chips.push(`<span class="dv-chip" style="color:${_dvTone('#C0504A')}">曠課 ${ev.noShowStudents.length} 人</span>`);
   if(!faded&&_dvSameDay(ev.startDt,now)){
@@ -551,6 +555,8 @@ function renderDvInspector(){
     row('教室',ev.classroom?esc(ev.classroom):'未指定',!ev.classroom),
   ];
   if(ev.subject)rows.push(row('科目',esc(ev.subject)));
+  // 補課／調課場次：講得出替哪一堂排的（標頭 chips 已經標了類別）
+  if(typeof mkOccFromWhen==='function'&&mkOccFromWhen(ev))rows.push(row('原課',esc(mkOccFromWhen(ev))));
   if(ev.isRescheduled)rows.push(row('原因',ev.rescheduleReason?esc(ev.rescheduleReason):'未輸入',!ev.rescheduleReason));
   if(ev.isAbsent&&ev.absType!=='老師請假'&&ev.absentStudents.length)rows.push(row('請假',esc(ev.absentStudents.join('、'))));
   if(ev.isNoShow)rows.push(row('曠課',esc(ev.noShowStudents.join('、'))));
@@ -566,10 +572,22 @@ function renderDvInspector(){
       rows.push(row(recs.length>1&&who?`${lbl}・${esc(who)}`:lbl,
         `${sd.getMonth()+1}/${sd.getDate()}（${WD[sd.getDay()]}）${_dvHM(sd)}${where}`));
     });
-    const left=mkPendingNames(ev);
+    const left=mkWaitTxt(ev);
     if(!recs.length)rows.push(row(lbl,`<span style="color:${_dvTone('#C0504A')};font-weight:600">未安排</span>`));
-    else if(left.length)rows.push(row(lbl,`<span style="color:${_dvTone('#C0504A')};font-weight:600">${esc(left.join('、'))} 未安排</span>`));
+    else if(left.length)rows.push(row(lbl,`<span style="color:${_dvTone('#C0504A')};font-weight:600">${esc(left.join('、'))} 未排完</span>`));
   }
+
+  // ── 處理進度（跟待補課清單同一串留言，js/makeup.js）──
+  // 只有整堂沒上（請假／調課）才長出來：那才是「還要處理」的課，也才是排補課時
+  // 真的會停下來看一眼的地方。照常上的課不需要有人在這裡交代什麼。
+  const noteOpen=mkNoteState.openFor===ev.id&&mkNoteState.openIn==='dv';
+  const noteSec=faded?`
+     <div class="dv-insp-sec">
+       <div class="dv-insp-sec-hd">處理進度
+         <button class="dv-note-btn r" onclick="mkNoteOpen('${esc(ev.id)}','dv')">${noteOpen?'收起':'＋ 加進度'}</button>
+       </div>
+       ${mkNotesHtml(ev,true,'dv')||'<div class="dv-insp-row"><span class="v dim">還沒有人記進度</span></div>'}
+     </div>`:'';
 
   // ── 名冊（附每人的請假／曠課／點名狀態）──
   const roster=eventRosterWithId(ev);
@@ -610,6 +628,7 @@ function renderDvInspector(){
      </div>
      <div class="dv-insp-chips">${chips.join('')}</div>
      <div class="dv-insp-rows">${rows.join('')}</div>
+     ${noteSec}
      <div class="dv-insp-sec">
        <div class="dv-insp-sec-hd">名冊 ${roster.length} 人${att}</div>
        <div class="dv-insp-stu">${stuHtml}</div>

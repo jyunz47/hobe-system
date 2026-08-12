@@ -268,7 +268,9 @@ function expandMakeupForRange(start,end){
       id:'mk:'+rec.id,
       title:rec.origTitle,origTitle:rec.origTitle,
       desc:'',notes:'',
-      teacher:co?courseTeacherNames(co).join('、'):'',
+      // 這場換過老師的話用紀錄裡的快照，沒換就跟著母課程走（母課程換老師，補課也跟著換）
+      teacher:(rec.teacherNames||'')||(co?courseTeacherNames(co).join('、'):''),
+      ...(Array.isArray(rec.teacherIds)&&rec.teacherIds.length?{teacherIds:rec.teacherIds.slice()}:{}),
       classroom:rec.room||'',
       subject:co?(co.subject||''):'',
       type,students,studentGroups:[],
@@ -278,6 +280,7 @@ function expandMakeupForRange(start,end){
       courseId:null,               // 不走系統課請假路徑
       isMakeupOcc:true,            // 主頁動作列不出請假/調課鈕（要改期→待補課清單取消安排重排）
       makeupOriginalId:rec.originalId, // 來源請假課堂（反查母課程用）
+      makeupFromDate:rec.originalDate||null, // 原課堂什麼時候（卡片標「原課 8/11（二）19:00」用）
       makeupRecId:rec.id,              // 這一場自己的 id（拖曳改時段要改的就是這筆）
       isAbsent:false,isPartialAbsent:false,isFullAbsent:false,isRescheduled:false,
       rescheduleReason:'',absentWho:'',absType:'',absentStudents:[],

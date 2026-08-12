@@ -10,7 +10,13 @@ preview，第一行 `<!-- @dsCard group="…" -->` 讓 claude.ai/design 的 Desi
   一個元件比對，改一顆只同步一顆。
 - preview 一律 `link` 根目錄的 `../../tokens.css` 與 `../../style.css`，確保長相跟正式
   app 完全一致（同一份 CSS，零漂移）。
-- 改外觀優先改 `tokens.css`（色彩、圓角）；改元件結構才動對應的 component 檔。
+- 改外觀優先改 `tokens.css`（色彩、圓角、**字級 `--fs-*`、間距 `--sp-*`**）；改元件結構才動對應的 component 檔。
+- ⚠️ **新寫 CSS 一律用 token，不要再寫裸 px 的字級與間距**。2026-08-12 全站已收斂成
+  9 階字級 ＋ 11 階 4px 間距網格（詳見 `typography.html`）；再手寫 `font-size:12.5px`
+  這種值就是在重新製造「畫面沒有節奏」的問題。刻意的負值位移與 `calc()` 不在此限。
+- ⚠️ 改了 `style.css` 或 `tokens.css`，**兩個版號要一起升**（`style.css` 開頭的
+  `@import 'tokens.css?v=N'` 與主檔的 `style.css?v=N`）——只升一個會讓線上拿到
+  「新 CSS ＋ 舊快取 tokens」，所有 `var()` 一起失效。
 - 分組：**「全頁・整頁改版底稿」排最前面**（整頁快照，UI/UX 改版從這裡開始），其餘依裝置
   分「電腦版・〈頁面〉」與「手機版」；tokens、字體、按鈕等兩邊共用的進「共用・基礎」。
   手機寬度的 preview 一律進「手機版」，不跟桌面卡混在同一組。
@@ -27,7 +33,7 @@ preview，第一行 `<!-- @dsCard group="…" -->` 讓 claude.ai/design 的 Desi
 ## 目前涵蓋
 
 **全頁・整頁改版底稿** —— ⭐ 整頁快照，UI/UX 改版從這組開始
-- `courses-page.html` — 課程分頁全頁（六態：預設／課卡展開／詳情 modal・請假／詳情 modal・點名／多堂同時進行／請假次數提醒）
+- `courses-page.html` — 課程分頁全頁（六態：預設／課卡展開／詳情 modal・請假／詳情 modal・點名／多堂同時進行（≥2 堂＝摘要列）／請假次數提醒）
 - `students-page.html` — 學生管理頁全頁（四態：預設／編輯面板／學生詳情視窗／歷屆分頁）
 - `settings-page.html` — 設定後台全頁（課程總覽矩陣）
 - `calendar-day-view.html` — 桌面日曆全頁（五態：日檢視／依教室分欄／⊞ 展開橫列／拖曳移動確認／月檢視・亮色）
@@ -36,7 +42,9 @@ preview，第一行 `<!-- @dsCard group="…" -->` 讓 claude.ai/design 的 Desi
 **共用・基礎** —— 全站視覺語言（桌面手機通用）
 - `foundations.html` — 色彩、圓角 tokens
 - `calendar-colors.html` — 行事曆六類色（--cal-* token，全站課程色唯一真相來源）
-- `typography.html` — 字體階層（Noto Sans TC / DM Sans / DM Mono / Newsreader）
+- `typography.html` — ⭐ **字級階梯（9 階）＋ 間距階梯（4px 網格，11 階）＋ 字族（3 種）**。
+  2026-08-12 重寫：整張卡**直接吃 `var(--fs-*)` / `var(--sp-*)` 渲染**，不再寫死 px，所以永遠不會跟系統脫節。
+  這是全站視覺節奏的權威說明——新寫 CSS 前先看這張。
 - `buttons.html` — 按鈕全系列
 - `form-elements.html` — 表單元素（date / 搜尋框 / 修課登記列 / 價目表列）
 - `small-elements.html` — 小元素（sec-hd / legend / date-nav / nbadge / tc-badge*）

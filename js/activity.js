@@ -3,6 +3,8 @@
 // 兩件事共用一份 Firestore 文件 sharedData/activity（rules 的 sharedData/{docId} 白名單已涵蓋，不用改 rules）：
 //   events[] — 系統自動記的事件，只增不改，寫入一律用 arrayUnion（多人同時操作不會互相蓋掉）
 //   todos[]  — 員工自己寫的待辦，共用清單＋可認領（2026-08-03 老闆定案）
+//   reminders[] — 今日重點的手寫提醒（2026-08-11 加，程式在 js/remind.js，讀取搭這裡的監聽便車）
+//   mkNotes[]   — 待補課卡的處理進度留言（2026-08-12 加，程式在 js/makeup.js，同樣搭便車）
 //
 // ⚠️ 事件流只記「從上線那天起發生的事」，舊資料補不回來。
 // ⚠️ 保留 ACT_KEEP_DAYS 天，過期的在載入時用 arrayRemove 清掉（避免撞 Firestore 單文件 1MB 上限）。
@@ -98,6 +100,10 @@ function actApplySnap(d){
   actEvents=all.filter(e=>new Date(e.ts).getTime()>=cut).sort((a,b)=>a.ts<b.ts?-1:a.ts>b.ts?1:0);
   actTodos=(Array.isArray(d.todos)?d.todos:[]).filter(Boolean);
   actLoaded=true;
+  // 今日重點的手寫提醒住在同一份文件（reminders[]）→ 搭同一條監聽的便車，不另開連線
+  if(typeof rmdApplySnap==='function')rmdApplySnap(d);
+  // 待補課卡的處理進度也住這裡（mkNotes[]，程式在 js/makeup.js）→ 同一條監聽
+  if(typeof mkNotesApplySnap==='function')mkNotesApplySnap(d);
   // 別人做的事、而且我人不在動態頁 → 側欄留個小圓點。自己剛做的不算（自己知道自己做了什麼）
   if(wasLoaded&&currentPanel!=='activity'
      &&actEvents.some(e=>!seen.has(e.id)&&e.by!==actMe()))actHasNew=true;

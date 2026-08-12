@@ -22,8 +22,8 @@ if(new URLSearchParams(location.search).get('app')==='dayview'){
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HOBE">
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&family=Newsreader:opsz,wght@6..72,400;6..72,500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=60">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=69">
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -142,6 +142,9 @@ if ('serviceWorker' in navigator) {
     <!-- Courses -->
     <div id="panel-courses" class="panel" style="display:none">
       <div id="err-courses" class="err" style="display:none"></div>
+
+      <!-- 今日重點：手寫提醒 + 系統自動撈的補課/調課/請假（js/remind.js） -->
+      <div id="remind-card"></div>
 
       <!-- A+B: 教室時間軸 + 進行中 -->
       <div class="tl-ab-box">
@@ -393,6 +396,17 @@ if ('serviceWorker' in navigator) {
       .dv-insp-sec{margin-top:15px}
       .dv-insp-sec-hd{display:flex;align-items:baseline;gap:6px;font-size:11px;font-weight:600;color:var(--dvfg3);margin-bottom:5px}
       .dv-insp-sec-hd .r{margin-left:auto;font-weight:600}
+      /* 處理進度留言（2026-08-12）：markup 跟待補課清單共用 .mk-note-*（js/makeup.js），
+         但那組色票是亮色主題的，這裡整片是深色 → 只覆蓋顏色，版型照舊 */
+      .dv-note-btn{border:none;background:none;color:var(--dvfg2);font:inherit;font-size:11px;cursor:pointer;padding:0}
+      .dv-note-btn:hover{color:var(--dvfg)}
+      .dv-insp .mk-note{border-left-color:var(--dvline)}
+      .dv-insp .mk-note-meta{color:var(--dvfg3)}
+      .dv-insp .mk-note-who{color:var(--dvfg2)}
+      .dv-insp .mk-note-text{color:var(--dvfg)}
+      .dv-insp .mk-note-del,.dv-insp .mk-note-more{color:var(--dvfg3)}
+      .dv-insp .mk-note-more:hover{color:var(--dvfg)}
+      .dv-insp .act-add-inp{background:var(--dvbg2);border-color:var(--dvline);color:var(--dvfg);font-size:12.5px;padding:6px 9px}
       /* 名冊自己捲，不要把下面的動作鈕擠出畫面（側欄高度被迷你月曆吃掉一大半）*/
       .dv-insp-stu{max-height:186px;overflow-y:auto}
       .dv-stu{display:flex;align-items:center;gap:7px;font-size:12.5px;padding:3px 0;color:var(--dvfg);border-top:1px solid var(--dvline2)}
@@ -614,21 +628,22 @@ if ('serviceWorker' in navigator) {
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <!-- 應用程式分模組（順序：state → utils → 解析 → 各 panel → init 最後）-->
-<script src="js/state.js?v=14"></script>
+<script src="js/state.js?v=16"></script>
 <script src="js/utils.js?v=13"></script>
 <script src="js/schedule.js?v=9"></script>
-<script src="js/today.js?v=29"></script>
-<script src="js/week.js?v=18"></script>
-<script src="js/dayview.js?v=27"></script>
+<script src="js/today.js?v=31"></script>
+<script src="js/week.js?v=20"></script>
+<script src="js/dayview.js?v=29"></script>
 <script src="js/absence.js?v=16"></script>
-<script src="js/makeup.js?v=14"></script>
+<script src="js/makeup.js?v=16"></script>
 <script src="js/enrollment.js?v=14"></script>
 <script src="js/students.js?v=23"></script>
 <script src="js/attendance.js?v=2"></script>
 <script src="js/grades.js?v=3"></script>
 <script src="js/settings.js?v=25"></script>
 <script src="js/courses.js?v=24"></script>
-<script src="js/activity.js?v=4"></script>
+<script src="js/activity.js?v=6"></script>
+<script src="js/remind.js?v=2"></script>
 <script src="js/search.js?v=5"></script>
 <script src="js/init.js?v=27"></script>
 
