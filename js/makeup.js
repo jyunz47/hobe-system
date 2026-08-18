@@ -226,8 +226,51 @@ function mkChipsHtml(ev){
   return chips+(left.length?`<span style="${noCss}">${esc(left.join('、'))} 未排完${lbl}</span>`:'');
 }
 
+// ── 跨學年的期別分頁（2026-08-13 老闆回報）──
+// 期別分頁是照**今天所在的學年**現算的（state.js getPeriods），四顆只涵蓋 9/1～隔年 8/31。
+// 8 月標一堂 9/12 的調課 → 落在四顆之外，切遍每個分頁都找不到它，整筆等於在系統裡消失。
+// 補法：四顆基本分頁之外，凡是「還有沒排完的補課／調課」但落在四顆之外的期別，
+// 自己長一顆分頁出來（例：「2026學年 上學期（1）」），排完就自動消失——分頁存在＝那邊還有事。
+// ⚠ 這種分頁**只換這一頁在看哪一段日期**（mkPeriodSel），不動 currentPeriodId：
+//   那個變數同時是修課登記簿／點名／成績的 Firestore 文件 key，動它名冊會整片查不到。
+var mkPeriodSel=null;   // null＝跟著四顆基本分頁（currentPeriodId）；否則＝額外分頁的期別物件
+
+// 目前這一頁在看哪一段（renderMakeup 的唯一期別入口）
+function mkViewPeriod(){return mkPeriodSel||getCurrentPeriod();}
+
+// 落在四顆基本分頁之外、還有沒排完的補課／調課 → 該期別長一顆分頁（附還欠幾筆）
+function mkExtraPeriods(){
+  const base=getPeriods(),now=new Date();
+  const map=new Map();
+  makeupList.forEach(e=>{
+    if(isPureNoShow(e))return;
+    if(base.some(p=>e.startDt>=p.start&&e.startDt<=p.end))return;   // 四顆裡本來就看得到
+    if(mkStatusOf(e,now)!=='pending')return;                        // 排完的不長分頁
+    const p=periodRangeOfDate(e.startDt);
+    const hit=map.get(p.id);
+    if(hit)hit.n++;else map.set(p.id,{...p,n:1});
+  });
+  // 正在看的那顆即使剛剛排完（n 掉到 0）也要留著，不然分頁會在腳下消失
+  if(mkPeriodSel&&!map.has(mkPeriodSel.id))map.set(mkPeriodSel.id,{...mkPeriodSel,n:0});
+  return[...map.values()].sort((a,b)=>a.start-b.start);
+}
+
+function mkPeriodTabsHtml(){
+  const tab=(id,label,active,title)=>`<button class="period-tab${active?' active':''}"${title?` title="${title}"`:''} onclick="switchMkPeriod('${esc(id)}')">${label}</button>`;
+  const base=getPeriods().map(p=>tab(p.id,p.label,!mkPeriodSel&&p.id===currentPeriodId)).join('');
+  const extra=mkExtraPeriods().map(p=>tab(p.id,`${p.label}${p.n?`（${p.n}）`:''}`,
+    !!mkPeriodSel&&mkPeriodSel.id===p.id,'這一期還有沒排完的補課／調課')).join('');
+  return`<div class="period-tabs">${base}${extra}</div>`;
+}
+
+function switchMkPeriod(id){
+  const ex=mkExtraPeriods().find(p=>p.id===id);
+  if(ex){mkPeriodSel=ex;renderMakeup();return;}   // 額外分頁：只換這一頁的視野
+  mkPeriodSel=null;switchPeriod(id);              // 四顆基本分頁：維持原本行為（學生頁也跟著換）
+}
+
 function renderMakeup(){
-  const period=getCurrentPeriod();
+  const period=mkViewPeriod();
   const fs=document.getElementById('f-subject').value;
   const ft=document.getElementById('f-type').value;
   const fq=(document.getElementById('f-search')?.value||'').trim().toLowerCase();
@@ -260,7 +303,7 @@ function renderMakeup(){
 
   const topArea=document.getElementById('mk-top-area');
   if(topArea){
-    topArea.innerHTML=periodTabsHtml()+`<div class="mk-stats">
+    topArea.innerHTML=mkPeriodTabsHtml()+`<div class="mk-stats">
       <div class="mk-stat mk-stat-pending"><div class="mk-stat-icon">⏰</div><div><div class="mk-stat-num">${pendingStatCnt}</div><div class="mk-stat-lbl">待安排</div></div></div>
       <div class="mk-stat mk-stat-arr"><div class="mk-stat-icon">🗓️</div><div><div class="mk-stat-num">${scheduledStatCnt}</div><div class="mk-stat-lbl">已安排</div></div></div>
       <div class="mk-stat mk-stat-done mk-stat-link" onclick="jumpToMkCompleted()" title="點擊查看已完成安排"><div class="mk-stat-icon">✅</div><div><div class="mk-stat-num">${completedStatCnt}</div><div class="mk-stat-lbl">已完成</div></div></div>
@@ -479,11 +522,51 @@ async function gotoMakeupEvent(id, ts){
 
 function updateBadge(n){const b=document.getElementById('badge-makeup');b.textContent=n;b.style.display=n>0?'inline':'none';}
 // 側欄紅點＝本期還有幾筆沒排完（只排掉一部分人的也算，跟清單「待安排」區同一個判斷）
-function updateMakeupBadge(){
-  const period=getCurrentPeriod(),now=new Date();
-  const n=makeupList.filter(e=>e.startDt>=period.start&&e.startDt<=period.end&&!isPureNoShow(e)
-    &&mkStatusOf(e,now)==='pending').length;
-  updateBadge(n);return n;
+// 側欄紅色數字的起算點＝**今天所在期別**的第一天，往後不設上限
+// （＝這學期 + 之後所有學期的加總，2026-08-13 老闆定）。兩個方向都是刻意的：
+//   · 不設上限 → 8 月標的 9 月調課才數得到（綁單一期別的話數字不會動，等於從沒提醒過）
+//   · 有下限   → 上個學期沒處理完的舊帳不再一直吵；要查舊帳去清單切那一期的分頁
+// ⚠ 起算點看**今天**，不是上面選的分頁——分頁切來切去，側欄數字不該跟著跳。
+// ⚠ 閏年 2/29 卡在寒假（2/1–2/28）與下學期（3/1）之間的縫裡，periodOfDate 會回 null →
+//   這裡改用「開始日已經過了的最後一段」，寧可多算也不要漏算。
+function mkCountFromDate(now){
+  const t=now||new Date(),ps=getPeriods();
+  return (ps.filter(p=>p.start<=t).pop()||ps[0]).start;
+}
+// 還沒排的補課／調課有幾筆（側欄數字與今日頁提醒共用同一支，口徑只有這一份）
+function mkPendingTotal(now){
+  const t=now||new Date(),from=mkCountFromDate(t);
+  return makeupList.filter(e=>e.startDt>=from&&!isPureNoShow(e)&&mkStatusOf(e,t)==='pending').length;
+}
+function updateMakeupBadge(now){const n=mkPendingTotal(now);updateBadge(n);return n;}
+
+// ── 標記完請假／調課，原地接上排補課（2026-08-13 老闆要求）──
+// 以前標記完只丟一句 toast 就結束，要排補課得自己換頁去待補課清單、在一堆卡片裡把
+// 剛剛那筆找回來——系統當下明明就知道是誰、哪一堂、欠多久，卻要人重講一次。
+// 這裡問一句就直接把選時段視窗開起來；按「晚點再排」＝跟以前完全一樣（紀錄照樣進清單）。
+// 走 startMakeupArrange 而不是直接開視窗，是為了跟待補課清單那顆「安排」走同一條路
+// （多人請假一樣會先問「這次要幫誰排」），不另長一套行為。
+async function offerArrangeNow(id,mode){
+  if(typeof startMakeupArrange!=='function')return;
+  const ev=findEventById(id);
+  if(!ev)return;
+  if(!mkPendingCount(ev))return;   // 這堂該排的都排完了（多人請假分批標時會遇到）就別再問
+  // 顯示的名字用「還沒排的人」而不是「這次剛標的人」——按下去之後真正會被排的就是這一批，
+  // 兩邊講的人不一樣的話，視窗說要補甲、下一步卻列出甲乙丙
+  const names=mkSplittable(ev)?mkPendingNames(ev):[];
+  const isResched=mode==='reschedule';
+  const sub=`${esc(ev.origTitle)}　${fmtD(ev.startDt)} ${fmtT(ev.startDt)}`;
+  const line=isResched?'整堂移到新的時段'
+    :names.length?`要補的人：<b>${esc(names.join('、'))}</b>`:'整堂補課';
+  const ok=await uiConfirm({
+    title:isResched?'要現在排調課時段嗎？':'要現在排補課嗎？',
+    html:`<div class="abs-title" style="margin-bottom:8px">${sub}</div>
+      <div style="font-size:13.5px;line-height:1.7">${line}</div>
+      <div class="ask-note" style="margin-top:10px">日期上會直接標出哪幾天排得進去（已扣掉教室、老師、學生自己的課）。
+        現在不排也沒關係，這筆已經進<b>待補課/調課清單</b>，隨時可以回去排。</div>`,
+    ok:'好，選時段',cancel:'晚點再排'});
+  if(!ok)return;
+  await startMakeupArrange(id,mode);
 }
 
 // ── 安排補課的入口：多人請假時先問「這次要幫誰排」──
@@ -579,7 +662,7 @@ function openSlotPicker(id,mode,students,recId){
   const prevRec=recId?findMakeupRec(recId):null;
   const prevT=(prevRec&&Array.isArray(prevRec.teacherIds)&&prevRec.teacherIds.length)?prevRec.teacherIds[0]:null;
   slotPicker={ev,mode,date:null,time:null,room:null,avail:null,branch,students:students||null,recId:recId||null,join:null,custom:null,teacherId:prevT};
-  spAvailCache={};   // 自訂各列逐日展開的快取：換一筆請假就作廢
+  spAvailCache={};spDayCache={};   // 逐日展開／逐日空檔統計的快取：換一筆請假就作廢
   const d=ev.startDt;
   const ds=`${d.getMonth()+1}/${d.getDate()}（${WD[d.getDay()]}）${fmtT(d)}  ⏱ ${fmtDur(ev.durMins)}`;
   const who=mkSplittable(ev)?spStudents():[];
@@ -593,7 +676,7 @@ function openSlotPicker(id,mode,students,recId){
 function closeSlotPicker(){
   document.getElementById('sp-modal').classList.remove('open');
   slotPicker={ev:null,mode:null,date:null,time:null,room:null,avail:null,branch:null,students:null,recId:null,join:null,custom:null,teacherId:null};
-  spAvailCache={};
+  spAvailCache={};spDayCache={};
 }
 
 // ── 這場補課／調課誰來上（2026-08-11 老闆要求）──
@@ -657,21 +740,42 @@ function buildSpStepper(cur,joined,custom){
 
 function buildSpDateSection(){
   const sec=document.createElement('div');
-  sec.innerHTML=`<div class="sp-lbl">選擇日期</div><div class="sp-chips"></div>`;
+  sec.innerHTML=`<div class="sp-lbl">選擇日期</div><div class="sp-date-sum"></div><div class="sp-chips"></div>`;
   const chips=sec.querySelector('.sp-chips');
   const today=new Date();today.setHours(0,0,0,0);
   const quickDates=new Set();
+  const open=[];      // 這 14 天裡排得進去的（給上面那行摘要用）
+  let joinDays=0;
   for(let i=0;i<14;i++){
     const d=new Date(today);d.setDate(today.getDate()+i);
     const ds=toDateStr(d);
     quickDates.add(ds);
+    const sum=spDaySummary(ds);
+    if(sum.n)open.push({d,sum});
+    if(sum.join)joinDays++;
     const el=document.createElement('div');
-    el.className='sp-date'+(slotPicker.date===ds?' sp-sel':'');
+    el.className='sp-date'+(slotPicker.date===ds?' sp-sel':'')+((sum.n||sum.join)?'':' sp-date-full');
     const tag=i===0?'今天':i===1?'明天':'&nbsp;';
-    el.innerHTML=`<div class="sp-date-tag">${tag}</div><div class="sp-date-num">${d.getMonth()+1}/${d.getDate()}</div><div class="sp-date-wd">週${WD[d.getDay()]}</div>`;
+    // 併班優先標（零旋鈕、最省事的一條路），沒得併才標可排時段數
+    const badge=sum.join?`<div class="sp-date-av sp-av-join">⭐併</div>`
+      :sum.n?`<div class="sp-date-av">${sum.n}</div>`
+      :`<div class="sp-date-av sp-av-0">滿</div>`;
+    el.title=sum.join?`可併進 ${sum.join} 堂現有的課`:sum.n?`${sum.n} 個可排時段，最早 ${sum.first}`:'當天沒有整段空檔';
+    el.innerHTML=`<div class="sp-date-tag">${tag}</div><div class="sp-date-num">${d.getMonth()+1}/${d.getDate()}</div><div class="sp-date-wd">週${WD[d.getDay()]}</div>${badge}`;
     el.onclick=()=>selectSpDate(ds);
     chips.appendChild(el);
   }
+  // 摘要行：要打電話問老師／家長「哪天可以」時，這一行直接照著念
+  const sumEl=sec.querySelector('.sp-date-sum');
+  const parts=[];
+  if(open.length){
+    const f=open[0];
+    parts.push(`<b>${open.length}</b> 天排得進去，最早 <b>${f.d.getMonth()+1}/${f.d.getDate()}（${WD[f.d.getDay()]}）${f.sum.first}</b>`);
+  }
+  if(joinDays)parts.push(`<span class="sp-sum-join">⭐ ${joinDays} 天可併進現有的課</span>`);
+  sumEl.className='sp-date-sum'+(open.length||joinDays?'':' sp-date-sum-none');
+  sumEl.innerHTML=parts.length?`接下來 14 天：${parts.join('　・　')}`
+    :'接下來 14 天都沒有整段空檔——可用上面的「自訂時段」自己指定，系統只警告不擋';
   const custom=document.createElement('div');
   const isCustomSel=slotPicker.date&&!quickDates.has(slotPicker.date);
   custom.className='sp-date-custom'+(isCustomSel?' sp-sel':'');
@@ -821,9 +925,58 @@ function switchSpBranch(b){
   renderSpBody();
 }
 
-function hasSuitableRoomShipai(sStart,sEnd){
+// ── 日期列直接標「那天排不排得進去」（2026-08-13 老闆要求）──
+// 以前 14 顆日期長得一模一樣，哪天有空完全看不出來——要回答家長「哪天可以補」，
+// 只能一顆一顆點進去看時段列，等於一次決策要按十幾下。
+// 空檔判斷（教室夠不夠／老師撞不撞課／學生自己那時段有沒有別堂課）本來就寫好了，
+// 只是要等你選了某一天才跑；這裡把**完全同一套判斷**提前對每一天各跑一次，結果標回日期上。
+// ⚠ 刻意共用 hasSuitableRoom／mkTeacherBusyAt／mkStudentBusyAt 而不另寫一份簡化版：
+//    日期上寫「3 個時段」點進去卻全灰，比沒有這個標記更糟。
+// 回傳 {n:可排時段數, first:'19:00' 最早那個, join:可併班的課數}
+var spDayCache={};
+function spDaySummary(ds){
+  const ev=slotPicker.ev;
+  const out={n:0,first:null,join:0};
+  if(!ev||!ds)return out;
+  // 分校與老師一換，答案就不一樣（兩者都是灰不灰的判斷條件），所以都進快取鍵
+  const key=`${ds}|${slotPicker.branch}|${slotPicker.teacherId}`;
+  if(spDayCache[key])return spDayCache[key];
+  const avail=spAvailFor(ds);
+  const dur=getEffectiveDur();
+  const who=spStudents();
+  const [y,m,d]=ds.split('-').map(Number);
+  const {start:startMin,end:endMin}=bizHoursOn(new Date(y,m-1,d));
+  if(spCanJoin())out.join=mkJoinCandidates(ev,avail,who).filter(c=>c.exact).length;
+  const isPracticeMakeup=getEffectiveType()==='practice'&&slotPicker.mode==='makeup';
+  const newStu=who.length||1;
+  const tRef=spTeacherRef();
+  for(let total=startMin;total<=endMin-dur;total+=30){
+    const h=Math.floor(total/60),mi=total%60;
+    const sS=new Date(y,m-1,d,h,mi),sE=new Date(y,m-1,d,h,0,0);sE.setMinutes(mi+dur);
+    let ok;
+    if(isPracticeMakeup){
+      // 練習課補課：跟 buildSpTimeSection 同規則——有現成練習課就看塞不塞得下 16 人，沒有就是獨立時段
+      const practEvs=avail.filter(e=>e.type==='practice'&&overlaps(e.startDt,e.endDt,sS,sE));
+      ok=practEvs.length?practEvs.reduce((s,e)=>s+(e.students.length||1),0)+newStu<=16:true;
+    }else{
+      ok=hasSuitableRoom(sS,sE,avail)
+        &&!mkTeacherBusyAt(tRef,avail,sS,sE).length
+        &&!mkStudentBusyAt(who,avail,sS,sE,ev.id).length;
+    }
+    if(ok){
+      out.n++;
+      if(!out.first)out.first=`${String(h).padStart(2,'0')}:${String(mi).padStart(2,'0')}`;
+    }
+  }
+  spDayCache[key]=out;
+  return out;
+}
+
+// avail 省略＝看目前選的那一天（slotPicker.avail）。日期列要對 14 天各算一次，
+// 所以改成可以外面餵當天的課表進來，不然只能算「已經點開的那天」
+function hasSuitableRoomShipai(sStart,sEnd,availIn){
   const etype=getEffectiveType();
-  const active=slotPicker.avail.filter(e=>e.classroom==='石牌分校'&&!e.isAbsent&&!e.isRescheduled&&overlaps(e.startDt,e.endDt,sStart,sEnd));
+  const active=(availIn||slotPicker.avail).filter(e=>e.classroom==='石牌分校'&&!e.isAbsent&&!e.isRescheduled&&overlaps(e.startDt,e.endDt,sStart,sEnd));
   if(etype==='one')return active.filter(e=>e.type==='one').length<4;
   return !active.some(e=>e.type==='group'||e.type==='pair');
 }
@@ -841,9 +994,9 @@ function getRoomAvail(events,room,sStart,sEnd){
   return{available:!busy};
 }
 
-function hasSuitableRoom(sStart,sEnd){
-  if(slotPicker.branch==='石牌')return hasSuitableRoomShipai(sStart,sEnd);
-  const avail=slotPicker.avail;
+function hasSuitableRoom(sStart,sEnd,availIn){
+  if(slotPicker.branch==='石牌')return hasSuitableRoomShipai(sStart,sEnd,availIn);
+  const avail=availIn||slotPicker.avail;
   const etype=getEffectiveType();
   if(etype==='practice')return getRoomAvail(avail,'大教室',sStart,sEnd).available;
   if(etype==='one'){

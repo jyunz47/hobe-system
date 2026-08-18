@@ -181,6 +181,18 @@ input[type=date]:focus{border-color:var(--ac)}
 .sp-date-wd{font-size:var(--fs-2xs);color:var(--tx2);margin-top:var(--sp-1)}
 .sp-date.sp-sel .sp-date-tag,.sp-date.sp-sel .sp-date-num,.sp-date.sp-sel .sp-date-wd{color:rgba(255,255,255,.9)}
 .sp-date.sp-sel .sp-date-tag{color:rgba(255,255,255,.65)}
+/* 日期上的空檔標記：綠＝有幾個時段可排、⭐＝可併進現有的課、灰「滿」＝當天塞不下 */
+.sp-date-av{font-size:var(--fs-2xs);font-weight:700;line-height:1;padding:2px 6px;border-radius:99px;background:var(--al);color:var(--ac-dk);margin-top:var(--sp-1)}
+.sp-date-av.sp-av-join{background:var(--ac);color:#fff}
+.sp-date-av.sp-av-0{background:transparent;color:var(--tx3);font-weight:500;padding:2px 0}
+.sp-date.sp-date-full{opacity:.5}
+.sp-date.sp-date-full:hover{opacity:1}
+.sp-date.sp-sel .sp-date-av{background:rgba(255,255,255,.22);color:#fff}
+/* 摘要行：問家長「哪天可以」時直接照著念 */
+.sp-date-sum{font-size:var(--fs-xs);color:var(--tx2);margin-bottom:var(--sp-4);line-height:1.6}
+.sp-date-sum b{color:var(--ac-dk)}
+.sp-date-sum-none{color:var(--wn)}
+.sp-sum-join{color:var(--ac-dk);font-weight:600}
 .sp-time{display:inline-flex;align-items:center;padding:var(--sp-4) var(--sp-6);border-radius:99px;border:1.5px solid var(--br);cursor:pointer;transition:all .15s;background:var(--sf);font-size:var(--fs-md);font-weight:500;color:var(--tx);user-select:none;font-family:'DM Mono',monospace}
 .sp-time:hover:not(.sp-na){border-color:var(--ac);color:var(--ac);background:var(--al)}
 .sp-time.sp-sel{background:var(--ac);border-color:var(--ac);color:#fff}
@@ -1168,6 +1180,13 @@ body:has(#panel-login.active) .content{padding:0}
 .att-row:last-child{border-bottom:none}
 .att-nm{font-size:var(--fs-md);color:var(--tx1);font-weight:500}
 .att-subj{font-size:var(--fs-xs);color:var(--tx3);font-weight:400;margin-left:var(--sp-3)}
+/* 練習課的分段名單（點名／成績面板共用）：段頭「年級 ｜ 科目 ｜ N 人」，年級 chip 沿用課程卡的 .prac-grade 長相 */
+.att-grp{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-1) var(--sp-2)}
+.att-grp:first-child{padding-top:var(--sp-1)}
+.att-grp-g{flex:none;font-size:var(--fs-xs);font-weight:700;color:var(--tx3);background:var(--sf2);padding:var(--sp-1) var(--sp-4);border-radius:7px}
+.att-grp-s{font-size:var(--fs-xs);font-weight:600;color:var(--tx3);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.att-grp-n{margin-left:auto;flex:none;font-size:var(--fs-xs);color:var(--tx3)}
+.att-grp+.att-row,.att-grp+.gr-row{border-top:none}
 /* 今日課程分區標題（成績課在上／只點名在下），佔滿兩欄格線整列 */
 .tsec-hd{grid-column:1/-1;font-size:var(--fs-sm);font-weight:700;color:var(--tx3);letter-spacing:.5px;margin:6px 2px -2px;display:flex;align-items:center;gap:var(--sp-3)}
 /* 成績登記面板 */

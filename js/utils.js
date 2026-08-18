@@ -66,6 +66,57 @@ function pracSubjCats(subjects){
 }
 function pracSubjLabel(subjects){return pracSubjCats(subjects).join('、');}
 
+// 名字 → 練習科目（課堂物件的 studentGroups 攤平；一人多科時併成「數理、英文」）
+function pracSubjOf(ev){
+  const m=new Map();
+  ((ev&&ev.studentGroups)||[]).forEach(g=>g.students.forEach(nm=>m.set(nm,m.has(nm)?m.get(nm)+'、'+g.subject:g.subject)));
+  return m;
+}
+// 排序：年級低→高（未填年級 999、補課生最後）、科目照常用順序（數理跟在數學後面，未填科目最後）
+function pracGradeOrder(g){
+  if(g==='補課生')return 9999;
+  if(g==='未填年級')return 999;
+  const i=(typeof GRADES!=='undefined'?GRADES:[]).indexOf(g);
+  return i<0?99:i;
+}
+function pracSubjOrder(s){
+  const L=(typeof CF_PRAC_SUBJECTS!=='undefined'?CF_PRAC_SUBJECTS:[]);
+  if(s==='未填科目')return 999;
+  if(s==='數理')return L.indexOf('數學')+.5;
+  const i=L.indexOf(s);
+  return i<0?99:i;
+}
+// 這個人的年級（同名不只一個又沒有 studentId 時認不出來，寧可留白）
+function pracGradeOf(r){
+  const list=typeof getStudentList==='function'?getStudentList():[];
+  if(r.studentId!=null)return(list.find(s=>s.id===r.studentId)||{}).grade||'';
+  const m=list.filter(s=>s.name===r.name);
+  return m.length===1?(m[0].grade||''):'';
+}
+
+// ── 練習課名冊分段：點名／成績面板用（2026-08-13）──
+// 一段＝一個「年級 ｜ 科目」，段內一人一列。**一個人只會出現一次**：那幾列上有
+// 到／遲到／曠的按鈕和成績輸入框，同一個人出現兩次就是兩排按鈕、兩份分數。
+// 所以多科的人歸在合併標籤那一段（例「數理、英文」自成一段），跟課程卡與桌面日曆
+// 側欄「名單」那面（那面沒有按鈕，一人多科會拆到兩行）刻意不同。
+// 回傳 null＝不是練習課 → 呼叫端維持原本那條不分段的名單。
+function pracRosterSections(ev,roster){
+  if(!ev||ev.type!=='practice'||!roster||!roster.length)return null;
+  const subjOf=pracSubjOf(ev);
+  const secs=new Map();
+  roster.forEach(r=>{
+    // 併班補課的人在這堂沒有登記＝沒有練習科目，自成一段擺最後
+    const grade=r.join?'補課生':(pracGradeOf(r)||'未填年級');
+    const raw=r.join?'':(subjOf.get(r.name)||'');
+    const subj=(raw&&raw!=='（未填科目）')?raw:(r.join?'':'未填科目');   // 展開器用全形括號代表沒填
+    const key=grade+'｜'+subj;
+    if(!secs.has(key))secs.set(key,{grade,subj,rows:[]});
+    secs.get(key).rows.push(r);
+  });
+  return[...secs.values()].sort((a,b)=>
+    pracGradeOrder(a.grade)-pracGradeOrder(b.grade)||pracSubjOrder(a.subj)-pracSubjOrder(b.subj));
+}
+
 // ── 載入指示 / Toast / 錯誤橫條 ──
 function setUSt(s,n,sub){document.getElementById('udot').className='udot'+(s==='ok'?' ok':s==='busy'?' busy':'');document.getElementById('uname').textContent=n;document.getElementById('usub').textContent=sub;}
 function showErr(panel,msg){const el=document.getElementById('err-'+panel);if(el){el.textContent='⚠ '+msg;el.style.display='block';}}

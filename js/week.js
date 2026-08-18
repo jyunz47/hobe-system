@@ -300,9 +300,15 @@ async function confirmReschedule(id){
   rec.resched=true;rec.reschedReason=reason;
   rec.updatedAt=new Date().toISOString();
   saveAbsences(list);
-  toast('已標記調課，請至待補課/調課清單安排新時段','ok');
+  // 動態（2026-08-13 補）：請假／曠課／不補課／排補課／取消補課本來都有記，就調課這一對漏了
+  logAct('absence','標記調課',actEvLabel(ev),
+    ['整堂移走，待安排新時段',reason&&`原因：${reason}`].filter(Boolean).join('・'));
+  toast('已標記調課','ok');
   closeWeekModal();
   await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
+  // 標記完直接問要不要排新時段（2026-08-13）——以前只丟一句「請至待補課清單安排」，
+  // 要自己換頁把剛剛那筆找回來。重新讀完才問，選時段的空檔判斷才看得到這筆調課
+  if(typeof offerArrangeNow==='function')await offerArrangeNow(id,'reschedule');
 }
 
 // 取消調課：清調課旗標（已排的新時段一併取消），紀錄清空即刪
@@ -320,6 +326,11 @@ async function cancelReschedule(id){
     if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length)list=list.filter(a=>a!==rec);
     saveAbsences(list);
   }
+  // 動態要在撤場次之前記：deleteMakeupsForOcc 自己也會記一筆「取消調課場次」，
+  // 兩筆合起來才講得完整（先撤了幾場、再還原成正常上課）
+  const had=getMakeupsFor(id).length;
+  logAct('absence','取消調課',actEvLabel(ev),
+    had?`還原為正常上課，一併撤掉已排的 ${had} 場`:'還原為正常上課');
   await deleteMakeupsForOcc(id);   // 調課排出去的時段一併撤（一堂可能不只一場）
   toast('已取消調課','ok');
   closeWeekModal();

@@ -23,7 +23,7 @@ if(new URLSearchParams(location.search).get('app')==='dayview'){
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HOBE">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=69">
+<link rel="stylesheet" href="style.css?v=71">
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -413,6 +413,12 @@ if ('serviceWorker' in navigator) {
       .dv-stu:first-child{border-top:none}
       .dv-stu-nm{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
       .dv-stu-sub{font-size:11px;color:var(--dvfg3);flex-shrink:0}
+      /* 練習課名冊（預設那一面）：年級 ｜ 科目 ｜ 名字，版型對齊課程主頁課程卡的 .prac-* */
+      .dv-prac-row{display:flex;gap:8px;align-items:flex-start;padding:4px 0}
+      .dv-prac-g{flex:none;font-size:11px;font-weight:700;color:var(--dvfg2);background:var(--dvbg2);padding:2px 7px;border-radius:6px;margin-top:1px}
+      .dv-prac-lines{display:flex;flex-direction:column;gap:3px;flex:1;min-width:0}
+      .dv-prac-line{font-size:12.5px;line-height:1.55;color:var(--dvfg);word-break:break-word}
+      .dv-prac-s{font-size:11px;font-weight:600;color:var(--dvfg3);margin-right:7px}
       .dv-stu-tag{margin-left:auto;flex-shrink:0;font-size:10.5px;font-weight:600;padding:1px 6px;border-radius:5px;background:var(--dvbg2)}
       .dv-insp-acts{display:flex;flex-wrap:wrap;gap:6px;margin-top:16px}
       .dv-insp-b{border:1px solid var(--dvline);background:var(--dvbg2);color:var(--dvfg);border-radius:8px;
@@ -628,14 +634,14 @@ if ('serviceWorker' in navigator) {
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <!-- 應用程式分模組（順序：state → utils → 解析 → 各 panel → init 最後）-->
-<script src="js/state.js?v=16"></script>
-<script src="js/utils.js?v=13"></script>
+<script src="js/state.js?v=17"></script>
+<script src="js/utils.js?v=14"></script>
 <script src="js/schedule.js?v=9"></script>
-<script src="js/today.js?v=31"></script>
-<script src="js/week.js?v=20"></script>
-<script src="js/dayview.js?v=29"></script>
-<script src="js/absence.js?v=16"></script>
-<script src="js/makeup.js?v=16"></script>
+<script src="js/today.js?v=32"></script>
+<script src="js/week.js?v=21"></script>
+<script src="js/dayview.js?v=30"></script>
+<script src="js/absence.js?v=17"></script>
+<script src="js/makeup.js?v=18"></script>
 <script src="js/enrollment.js?v=14"></script>
 <script src="js/students.js?v=23"></script>
 <script src="js/attendance.js?v=2"></script>
@@ -643,7 +649,7 @@ if ('serviceWorker' in navigator) {
 <script src="js/settings.js?v=25"></script>
 <script src="js/courses.js?v=24"></script>
 <script src="js/activity.js?v=6"></script>
-<script src="js/remind.js?v=2"></script>
+<script src="js/remind.js?v=4"></script>
 <script src="js/search.js?v=5"></script>
 <script src="js/init.js?v=27"></script>
 

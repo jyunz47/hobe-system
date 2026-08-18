@@ -525,6 +525,47 @@ function dvEditCourse(id){
   openCourseForm(cid);
 }
 
+// 練習課名冊（2026-08-13）：側欄預設長的就是課程主頁課程卡那個樣子——
+// 「年級 ｜ 科目 ｜ 名字、名字…」一行一科。逐人的點名／請假狀態退成第二層，
+// 按標題右邊那顆「點名 x/y」才切過去（老闆：預設是顯示這個不是點名）。
+// 分法與卡片一致（js/today.js pracRosterHtml）：一位學生練兩類科目會在兩行各出現一次。
+// 回傳 null＝不是練習課 → 呼叫端維持原本那條逐人的名單。
+function _dvPracGroups(ev,roster,subjOf){
+  if(ev.type!=='practice'||!roster.length)return null;
+  const byId=new Map(getStudentList().map(s=>[s.id,s]));
+  const gradeOf=r=>{
+    if(r.studentId!=null)return byId.get(r.studentId)?.grade||'';
+    const m=getStudentList().filter(s=>s.name===r.name);   // 同名不只一個就認不出年級，寧可留白
+    return m.length===1?(m[0].grade||''):'';
+  };
+  const byGrade=new Map();
+  const put=(grade,subj,name)=>{
+    if(!byGrade.has(grade))byGrade.set(grade,new Map());
+    const lines=byGrade.get(grade);
+    if(!lines.has(subj))lines.set(subj,[]);
+    lines.get(subj).push(name);
+  };
+  roster.forEach(r=>{
+    // 併班補課的人在這堂沒有登記＝沒有練習科目，自成一段擺最後（列上還有「補・原課」標）
+    if(r.join)return put('補課生','',r.name);
+    const raw=subjOf.get(r.name)||'';
+    const cats=pracSubjCats(raw==='（未填科目）'?'':raw);   // 展開器用全形括號代表沒填
+    (cats.length?cats:['未填科目']).forEach(s=>put(gradeOf(r)||'未填年級',s,r.name));
+  });
+  const GR=typeof GRADES!=='undefined'?GRADES:[],PS=typeof CF_PRAC_SUBJECTS!=='undefined'?CF_PRAC_SUBJECTS:[];
+  const gOrder=g=>{if(g==='補課生')return 9999;if(g==='未填年級')return 999;const i=GR.indexOf(g);return i<0?99:i;};
+  // 數理＝數學＋理化合併類，排在數學後面（自訂科目 99、未填科目最後）
+  const sOrder=s=>s==='未填科目'?999:s==='數理'?PS.indexOf('數學')+.5:(PS.indexOf(s)<0?99:PS.indexOf(s));
+  return[...byGrade.entries()].sort((a,b)=>gOrder(a[0])-gOrder(b[0]))
+    .map(([grade,lines])=>({grade,lines:[...lines.entries()].sort((a,b)=>sOrder(a[0])-sOrder(b[0]))
+      .map(([subj,names])=>({subj,names}))}));
+}
+
+// 名冊要看哪一面：'list'＝名單（預設）、'att'＝逐人的點名／請假狀態。切過去會記著，
+// 一堂堂點過去不用每堂再按一次；重新整理回預設。只有練習課有這顆切換。
+var dvRosterView='list';
+function dvSetRosterView(v){dvRosterView=v;renderDvInspector();}
+
 function renderDvInspector(){
   const box=document.getElementById('dv-insp');if(!box)return;
   const ev=dvSelId?dvEvents.find(x=>x.id===dvSelId):null;
@@ -589,19 +630,35 @@ function renderDvInspector(){
        ${mkNotesHtml(ev,true,'dv')||'<div class="dv-insp-row"><span class="v dim">還沒有人記進度</span></div>'}
      </div>`:'';
 
-  // ── 名冊（附每人的請假／曠課／點名狀態）──
+  // ── 名冊（練習課預設看名單，其餘課型＝逐人的請假／曠課／點名狀態）──
   const roster=eventRosterWithId(ev);
-  const subjOf=new Map();   // 練習課：科目標在名字旁（同點名／成績面板）
+  const subjOf=new Map();   // 名字 → 練習科目（練習課用；同點名／成績面板的攤法）
   (ev.studentGroups||[]).forEach(g=>g.students.forEach(nm=>subjOf.set(nm,subjOf.has(nm)?subjOf.get(nm)+'、'+g.subject:g.subject)));
-  let att='';
+  // 點名進度文字（練習課拿它當切換鈕的字，其餘課型就是一段唯讀的字）
+  let attTxt='',attDone=false;
   if(canAttend(ev)&&roster.length){
     const s=attSummary(ev);
-    att=s.total&&s.here>=s.total?`<span class="r" style="color:${_dvTone('#5C7E6A')}">✓ 點名完成</span>`
-      :`<span class="r">點名 ${s.here}/${s.total}</span>`;
+    attDone=!!s.total&&s.here>=s.total;
+    attTxt=attDone?'✓ 點名完成':`點名 ${s.here}/${s.total}`;
   }
-  const stuHtml=roster.length
-    ?roster.map(r=>`<div class="dv-stu"><span class="dv-stu-nm">${esc(r.name)}</span>${subjOf.has(r.name)?`<span class="dv-stu-sub">${esc(subjOf.get(r.name))}</span>`:''}${r.join?_dvTag('補・'+(r.fromTitle||''),'#C16B36'):''}${_dvStuTag(ev,r)}</div>`).join('')
-    :'<div class="dv-insp-row"><span class="v dim">這堂還沒有人登記</span></div>';
+  const stuRow=(r,withSubj)=>`<div class="dv-stu"><span class="dv-stu-nm">${esc(r.name)}</span>${
+      withSubj&&subjOf.has(r.name)?`<span class="dv-stu-sub">${esc(subjOf.get(r.name))}</span>`:''
+    }${r.join?_dvTag('補・'+(r.fromTitle||''),'#C16B36'):''}${_dvStuTag(ev,r)}</div>`;
+  const grps=_dvPracGroups(ev,roster,subjOf);
+  const flatHtml=()=>roster.map(r=>stuRow(r,true)).join('');   // 逐人狀態那面：科目跟在名字後面（側欄太窄，不再切段）
+  // 練習課預設看名單（＝課程主頁課程卡的長相），要逐人狀態再按右上角切
+  const listHtml=()=>`<div class="dv-prac">${grps.map(g=>
+      `<div class="dv-prac-row"><span class="dv-prac-g">${esc(g.grade)}</span><div class="dv-prac-lines">${
+        g.lines.map(l=>`<div class="dv-prac-line">${l.subj?`<span class="dv-prac-s">${esc(l.subj)}</span>`:''}${esc(l.names.join('、'))}</div>`).join('')
+      }</div></div>`).join('')}</div>`;
+  const stuHtml=!roster.length
+    ?'<div class="dv-insp-row"><span class="v dim">這堂還沒有人登記</span></div>'
+    :(grps&&dvRosterView==='list'?listHtml():flatHtml());
+  // 標題右邊：練習課＝可按的切換（名單 ⇄ 逐人狀態）；其餘課型維持唯讀的點名進度
+  const attHd=grps
+    ?`<button class="dv-note-btn r"${attDone&&dvRosterView!=='list'?` style="color:${_dvTone('#5C7E6A')}"`:''} onclick="dvSetRosterView('${dvRosterView==='list'?'att':'list'}')">${
+        dvRosterView==='list'?(attTxt||'逐人狀態')+' ›':'‹ 名單'}</button>`
+    :(attTxt?`<span class="r"${attDone?` style="color:${_dvTone('#5C7E6A')}"`:''}>${attTxt}</span>`:'');
 
   // ── 動作：一律轉開既有的置中詳情視窗 ──
   const b=(fn,txt,cls)=>`<button class="dv-insp-b${cls||''}" onclick="${fn}('${esc(ev.id)}')">${txt}</button>`;
@@ -630,7 +687,7 @@ function renderDvInspector(){
      <div class="dv-insp-rows">${rows.join('')}</div>
      ${noteSec}
      <div class="dv-insp-sec">
-       <div class="dv-insp-sec-hd">名冊 ${roster.length} 人${att}</div>
+       <div class="dv-insp-sec-hd">名冊 ${roster.length} 人${attHd}</div>
        <div class="dv-insp-stu">${stuHtml}</div>
      </div>
      <div class="dv-insp-acts">${acts.join('')}</div>`;

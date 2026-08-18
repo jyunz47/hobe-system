@@ -339,10 +339,16 @@ async function confirmAbs(id,sfx){
     const toNoShow=absTargets(ev,state).filter(n=>absTimingOf(state,n)==='C'&&(ev.absentStudents||[]).includes(n));
     if(toNoShow.length&&typeof dropMakeupsForNoShow==='function')dropMakeupsForNoShow(ev.id,toNoShow);
   }
+  // 這次標記後「要排補課」的人＝時機 A/B（C＝曠課不排補課）。老師請假＝整堂補，沒有個別名單
+  const needMk=state.type==='teacher'?[]:absTargets(ev,state).filter(n=>absTimingOf(state,n)!=='C');
+  const offer=state.type==='teacher'||needMk.length>0;
   logAbsenceAct(ev,state);
   toast('已標記：'+newTitle,'ok');
   await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
   if(selectedWeekEvent===id) closeWeekModal();
+  // 標記完直接問要不要排補課（2026-08-13）——以前只丟 toast，要自己換頁去待補課清單找回這筆。
+  // 重新讀完才問：選時段要拿新的請假狀態算空檔
+  if(offer&&typeof offerArrangeNow==='function')await offerArrangeNow(id,'makeup');
 }
 
 // ── 取消請假流程 ──

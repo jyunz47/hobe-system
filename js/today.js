@@ -226,12 +226,12 @@ function refreshGradePanel(e){const p=document.getElementById('grp-'+e.id);if(p)
 function buildGradePanel(e){
   const roster=eventRosterWithId(e);
   if(!roster.length)return'<div class="att-empty">這堂沒有名單</div>';
-  // 練習課：科目顯示在名字旁（同點名面板）
-  const subjOf=new Map();
-  (e.studentGroups||[]).forEach(g=>g.students.forEach(nm=>subjOf.set(nm,subjOf.has(nm)?subjOf.get(nm)+'、'+g.subject:g.subject)));
-  const subjTag=nm=>subjOf.has(nm)?`<span class="att-subj">${esc(subjOf.get(nm))}</span>`:'';
+  // 練習課：切成「年級 ｜ 科目」幾段（同點名面板）；分不了段才把科目標在名字旁
+  const secs=pracRosterSections(e,roster);
+  const subjOf=pracSubjOf(e);
+  const subjTag=nm=>(!secs&&subjOf.has(nm))?`<span class="att-subj">${esc(subjOf.get(nm))}</span>`:'';
   const eid=esc(e.id);
-  const rows=roster.map(r=>{
+  const grRow=r=>{
     if(r.studentId==null)return`<div class="gr-row"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}${mkJoinTag(r)}</span><span class="att-hint">需對帳</span></div>`;
     const sid=r.studentId;
     const chips=getGrades(e.id,sid).map(g=>
@@ -243,7 +243,8 @@ function buildGradePanel(e){
         <input class="gr-sc" id="gr-sc-${eid}-${sid}" type="number" inputmode="numeric" placeholder="分數" onclick="event.stopPropagation()" onkeydown="if(enterSubmit(event)){grAdd('${eid}',${sid})}">
         <button class="att-min ok" title="登記" onclick="event.stopPropagation();grAdd('${eid}',${sid})">✓</button>
       </span></div>`;
-  }).join('');
+  };
+  const rows=secs?pracSecHtml(secs,grRow):roster.map(grRow).join('');
   return`<div class="att-list">${rows}</div>`;
 }
 function grAdd(eventId,studentId){
@@ -369,22 +370,31 @@ function attBadgeHtml(e){
 // 哪一列正在輸入遲到分鐘 {eid,sid}（transient UI 狀態）
 var attLatePick=null;
 
+// 練習課的分段名單（點名／成績面板共用）：段頭「年級 ｜ 科目 ｜ N 人」＋段內逐人一列
+function pracSecHtml(secs,rowFn){
+  return secs.map(s=>
+    `<div class="att-grp"><span class="att-grp-g">${esc(s.grade)}</span>${
+      s.subj?`<span class="att-grp-s">${esc(s.subj)}</span>`:''
+    }<span class="att-grp-n">${s.rows.length} 人</span></div>`+s.rows.map(rowFn).join('')).join('');
+}
+
 function buildAttPanel(e){
   const roster=eventRosterWithId(e);
   if(!roster.length)return'<div class="att-empty">這堂沒有名單</div>';
   const absSet=new Set(e.absentStudents||[]);
   const noShowSet=new Set(e.noShowStudents||[]);
-  // 練習課：每人的練習科目顯示在名字旁（來自展開器的 studentGroups）
-  const subjOf=new Map();
-  (e.studentGroups||[]).forEach(g=>g.students.forEach(nm=>subjOf.set(nm,subjOf.has(nm)?subjOf.get(nm)+'、'+g.subject:g.subject)));
-  const subjTag=nm=>subjOf.has(nm)?`<span class="att-subj">${esc(subjOf.get(nm))}</span>`:'';
+  // 練習課：整份名單切成「年級 ｜ 科目」幾段（同課程主頁課程卡的分法），科目標在段頭不標在名字旁；
+  // 分不了段（不是練習課）才退回舊的：科目跟在名字後面
+  const secs=pracRosterSections(e,roster);
+  const subjOf=pracSubjOf(e);
+  const subjTag=nm=>(!secs&&subjOf.has(nm))?`<span class="att-subj">${esc(subjOf.get(nm))}</span>`:'';
   const s=attSummary(e);
   // 常態整班都到 → 給「全部到」一鍵；沒到的再個別改
   const head=s.total?`<div class="att-hd">
     <button class="att-allbtn" onclick="event.stopPropagation();markAllHere('${esc(e.id)}')">全部到</button>
     <span class="att-hd-prog">${s.here}/${s.total} 到</span>
   </div>`:'';
-  const rows=roster.map(r=>{
+  const attRow=r=>{
     const lock=absSet.has(r.name)?'請假':noShowSet.has(r.name)?'曠課':null;
     if(lock)return`<div class="att-row att-locked"><span class="att-nm struck">${esc(r.name)}${subjTag(r.name)}</span><span class="att-lock">${lock}</span></div>`;
     if(r.studentId==null)return`<div class="att-row att-noid"><span class="att-nm">${esc(r.name)}${subjTag(r.name)}${mkJoinTag(r)}</span><span class="att-hint">需對帳</span></div>`;
@@ -411,7 +421,8 @@ function buildAttPanel(e){
         <button class="att-late${lateMin?' on':''}" onclick="event.stopPropagation();onLate('${eid}',${sid})">${lateMin?'遲 '+lateMin+' 分':'遲到'}</button>
         ${r.join?'':`<button class="att-skip" title="沒來 → 標曠課" onclick="event.stopPropagation();onSkip('${eid}',${sid})">曠</button>`}
       </span></div>`;
-  }).join('');
+  };
+  const rows=secs?pracSecHtml(secs,attRow):roster.map(attRow).join('');
   return`${head}<div class="att-list">${rows}</div>`;
 }
 function refreshAttPanel(e){const p=document.getElementById('attp-'+e.id);if(p)p.innerHTML=buildAttPanel(e);}

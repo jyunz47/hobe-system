@@ -28,8 +28,11 @@ var selectedWeekDayIdx=null; // 0=Mon..6=Sun, null = default to today
 
 // ── 學期 helpers ──
 function getSchoolYear(){const now=new Date();return now.getMonth()>=8?now.getFullYear():now.getFullYear()-1;}
-function getPeriods(){
-  const y=getSchoolYear();
+// 某個日期屬於哪個學年（9 月起算新的）。跨學年的東西要講得出年份時用
+function schoolYearOfDate(d){return d.getMonth()>=8?d.getFullYear():d.getFullYear()-1;}
+// year 省略＝今天所在的學年（原本的行為）；指定學年可長出別年的四段（待補課清單的跨學年分頁用）
+function getPeriods(year){
+  const y=year==null?getSchoolYear():year;
   return[
     {id:'sem1',label:'上學期',start:new Date(y,8,1),end:new Date(y+1,0,31,23,59,59)},
     {id:'winter',label:'寒假',start:new Date(y+1,1,1),end:new Date(y+1,1,28,23,59,59)},
@@ -38,13 +41,26 @@ function getPeriods(){
   ];
 }
 // 某個日期落在哪一期別。給「這堂課屬於哪一期」用（別拿學生頁上面選的分頁當答案）
+// ⚠ getPeriods() 只長出**現在這個學年**的四段，所以跨學年的日期（8 月看 9 月的課）會回 null。
 function periodOfDate(d){return getPeriods().find(p=>d>=p.start&&d<=p.end)||null;}
+// 一個日期落在「它自己那個學年」的哪一期，跨學年也答得出來（periodOfDate 只認今年）。
+// 回傳的 id 前面掛學年（'2026-sem1'）＝跟四顆基本分頁的 id 分得開，label 也帶學年。
+// ⚠ 這個 id **不可以**寫進 currentPeriodId：那個變數同時是修課登記簿／點名／成績的
+//   Firestore 文件 key（yearPeriodId），塞進去名冊會整片查不到。只給「看哪一段日期」用。
+function periodRangeOfDate(d){
+  const y=schoolYearOfDate(d);
+  const list=getPeriods(y);
+  const p=list.find(x=>d>=x.start&&d<=x.end)||list[0];
+  return{...p,id:y+'-'+p.id,label:`${y}學年 ${p.label}`};
+}
 // 多收費門檻：同一門課請假幾次要警示。寒暑假只有 1~2 個月，門檻比學期低一次
 // （學生卡片的「⚠ 多收費」標籤與請假面板的次數提醒共用這一個數字）
 function getThreshold(pid){return(pid==='sem1'||pid==='sem2')?3:2;}
 function detectPeriodId(){return(periodOfDate(new Date())||getPeriods()[0]).id;}
 var currentPeriodId=detectPeriodId();
-function switchPeriod(id){currentPeriodId=id;renderMakeup();renderStudents();}
+// 切四顆基本分頁（學生頁與待補課頁共用）。待補課頁若正停在跨學年的額外分頁上要收回來，
+// 不然在學生頁換了期別、切回待補課頁還停在別的學年（見 makeup.js mkPeriodSel）
+function switchPeriod(id){currentPeriodId=id;mkPeriodSel=null;renderMakeup();renderStudents();}
 function periodTabsHtml(){return`<div class="period-tabs">${getPeriods().map(p=>`<button class="period-tab${p.id===currentPeriodId?' active':''}" onclick="switchPeriod('${p.id}')">${p.label}</button>`).join('')}</div>`;}
 function getCurrentPeriod(){return getPeriods().find(p=>p.id===currentPeriodId)||getPeriods()[0];}
 

@@ -170,13 +170,10 @@ function rmdItemsFor(off){
   return [...notes,...rmdAutoItems(rmdDateOf(off))].sort((a,b)=>a.mins-b.mins);
 }
 
-// 還欠著的補課（不分日期）——放今天那頁，提醒去排。數法跟側欄的待補課數字同一套
-function rmdPendingCount(){
-  try{
-    const period=getCurrentPeriod(),now=new Date();
-    return (makeupList||[]).filter(e=>e.startDt>=period.start&&e.startDt<=period.end
-      &&!isPureNoShow(e)&&mkStatusOf(e,now)==='pending').length;
-  }catch(_){return 0;}
+// 還欠著的補課——放今天那頁，提醒去排。數法跟側欄的待補課數字**同一支**
+//（makeup.js mkPendingTotal：這學期開始起算、往後不設上限），兩處不會各數各的
+function rmdPendingCount(now){
+  try{return mkPendingTotal(now);}catch(_){return 0;}
 }
 
 // ── 複製成文字：直接貼 LINE 提醒老師（老闆 2026-08-11 要求）──
