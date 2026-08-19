@@ -337,6 +337,8 @@ input[type=date]:focus{border-color:var(--ac)}
 .mk-list-body{flex:1;padding:var(--sp-5) var(--sp-5);display:flex;flex-direction:column;gap:var(--sp-2);min-width:0}
 .mk-list-top{display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap}
 .mk-list-title{font-size:var(--fs-lg);font-weight:450;color:var(--tx)}
+/* 課名改過的課：卡上是「那堂當天」的舊名，補一句現名才找得到（2026-08-18） */
+.mk-title-now{font-size:var(--fs-xs);font-weight:400;color:var(--tx3);margin-left:var(--sp-2)}
 .mk-list-badges{display:flex;gap:var(--sp-2);flex-wrap:wrap}
 .mk-list-meta{display:flex;gap:var(--sp-4);flex-wrap:wrap;font-size:var(--fs-xs);color:var(--tx2)}
 .mk-list-makeup{display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;font-size:var(--fs-sm);color:var(--tx2);border:1px solid var(--br);border-radius:var(--rs);padding:var(--sp-3) var(--sp-5);margin-top:var(--sp-3)}
@@ -375,6 +377,11 @@ input[type=date]:focus{border-color:var(--ac)}
 .mk-badge-part{background:var(--wl);color:var(--wn)}   /* 已安排 1/3：排到一半，跟「全排完」要分得出來 */
 .mk-badge-arr{background:var(--al);color:var(--ac)}
 .mk-badge-done{background:var(--sf2);color:var(--ac)}
+/* 舊行事曆搬遷紀錄＝快照（課名停在搬遷當下）；疑似重複＝同一堂被記兩次（2026-08-19） */
+.mk-badge-legacy{background:var(--sf2);color:var(--tx3);border:1px solid var(--br);font-weight:500}
+.mk-badge-dup{background:var(--dl);color:var(--dg)}
+.mk-dup-notice{background:var(--dl);border:1px solid var(--dg-br);border-radius:var(--r);padding:var(--sp-5) var(--sp-6);margin-bottom:var(--sp-6);font-size:var(--fs-sm);color:var(--tx2);line-height:1.7;display:flex;flex-direction:column;gap:var(--sp-2)}
+.mk-dup-hd{font-size:var(--fs-lg);font-weight:700;color:var(--dg)}
 @media(max-width:640px){.mk-two-col{grid-template-columns:1fr}.mk-stats{flex-direction:column}}
 
 /* Student modal */
@@ -447,6 +454,10 @@ input[type=date]:focus{border-color:var(--ac)}
 .tsum-now{display:inline-flex;align-items:center;gap:var(--sp-3);padding:var(--sp-2) var(--sp-5);background:var(--al);color:var(--ac);border-radius:99px;font-weight:600;font-size:var(--fs-xs);cursor:pointer;border:1px solid var(--ac)}
 .tsum-now .dot{width:6px;height:6px;border-radius:3px;background:var(--ac);box-shadow:0 0 0 3px rgba(45,90,61,.18);animation:pulse 1.4s infinite}
 .tsum-abs{color:var(--dg)}
+/* 大教室家教桌（2026-08-19）：桌數快滿時整顆轉紅，一眼看得出還塞不塞得下 */
+.tsum-room{display:inline-flex;align-items:center;gap:var(--sp-3);padding:var(--sp-1) var(--sp-4);border:1px solid var(--br);border-radius:99px;color:var(--tx2);cursor:default}
+.tsum-room.full{border-color:var(--dg);color:var(--dg)}
+.tsum-room.full b{color:var(--dg)}
 .tgrid{display:grid;grid-template-columns:repeat(2,1fr);gap:var(--sp-5);align-items:start}
 @media (max-width:900px){.tgrid{grid-template-columns:1fr}}
 .tcard{background:var(--sf);border:1px solid var(--br);border-left:5px solid var(--brs);border-radius:var(--r);padding:var(--sp-5) var(--sp-6);cursor:pointer;display:flex;flex-direction:column;gap:var(--sp-4);transition:border-color .12s,box-shadow .12s;scroll-margin-top:80px}
@@ -681,6 +692,12 @@ body.hide-todo-chip .stu-info-chip{display:none}
 /* ── 設定頁（課程總覽）── */
 .set-card{background:var(--sf);border:1px solid var(--br);border-radius:var(--r);padding:var(--sp-8) var(--sp-8)}
 .set-card-sub{font-size:var(--fs-md);color:var(--tx3);line-height:1.6;margin:-4px 0 16px}
+/* 同時段撞堂檢查（2026-08-18）：沒問題時整塊不出現，所以做得醒目一點 */
+.co-clash{background:var(--wl);border:1px solid var(--wn-br);border-radius:var(--r);padding:var(--sp-5) var(--sp-6);margin-bottom:var(--sp-8)}
+.co-clash-hd{font-size:var(--fs-lg);font-weight:700;color:var(--wn)}
+.co-clash-note{font-size:var(--fs-sm);color:var(--tx2);line-height:1.7;margin:var(--sp-3) 0 var(--sp-4)}
+.co-clash-row{display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;font-size:var(--fs-sm);color:var(--tx);background:var(--sf);border:1px solid var(--br);border-radius:var(--rs);padding:var(--sp-3) var(--sp-5);margin-top:var(--sp-3)}
+.co-clash-vs{color:var(--wn);font-weight:700}
 /* 週課表矩陣：每個類型一區，底下週一～週日七欄，課程排進上課那天 */
 .co-type-sec{margin-bottom:var(--sp-8)}
 .co-type-sec:last-child{margin-bottom:0}

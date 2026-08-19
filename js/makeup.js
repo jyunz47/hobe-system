@@ -269,6 +269,40 @@ function switchMkPeriod(id){
   mkPeriodSel=null;switchPeriod(id);              // 四顆基本分頁：維持原本行為（學生頁也跟著換）
 }
 
+// ── 同一堂課被記了兩次請假（2026-08-19 老闆踩到）──
+// cutover 時從舊 Google 行事曆搬進來的請假是**快照**：課名／教室／老師凍結在搬遷當下，
+// 課程之後改名它完全不跟。學生升年級、課名從「高一數學班」滾成「高二數學班」之後，
+// 同一堂課若在系統這邊又被標了一次請假，清單上就會出現兩張卡：舊名一張、新名一張。
+// 看起來像「系統裡有兩門一樣的課」，其實只有一門課、一次請假被記兩次（各自還要排一場補課）。
+// 判斷：一筆是搬遷快照、一筆是系統紀錄、同一天而且時間重疊，再加上「回填過的課程編號相同」
+// 或「請假名單有交集」其中之一。兩個條件都不中就不標——寧可漏標，不要把真的兩堂課誤指為重複。
+function mkDupLegacyIds(list){
+  const legacy=list.filter(e=>e.isLegacyAbsence);
+  if(!legacy.length)return new Set();
+  const sys=list.filter(e=>e.courseId!=null);
+  const out=new Set();
+  legacy.forEach(L=>sys.forEach(S=>{
+    if(L.startDt.toDateString()!==S.startDt.toDateString())return;
+    if(L.endDt<=S.startDt||S.endDt<=L.startDt)return;                        // 時間沒重疊
+    const sameCourse=L.legacyCourseId!=null&&L.legacyCourseId===S.courseId;  // 回填過課程編號（2026-08-04）
+    const shareWho=(L.absentStudents||[]).some(n=>(S.absentStudents||[]).includes(n));
+    if(!sameCourse&&!shareWho)return;
+    out.add(L.id);out.add(S.id);
+  }));
+  return out;
+}
+
+// 清單最上面那條提醒（沒有重複就不出現）。講清楚「為什麼會這樣」與「留哪一筆」，
+// 因為兩張卡長得幾乎一樣，光標紅字的話還是不知道該動哪一張。
+function mkDupNoticeHtml(n){
+  if(!n)return'';
+  return`<div class="mk-dup-notice">
+    <div class="mk-dup-hd">⚠ 有 ${n} 堂課的請假被記了兩次</div>
+    <div>同一堂課有兩筆請假紀錄：一筆是 cutover 時從<b>舊 Google 行事曆搬進來</b>的（卡上標「舊行事曆紀錄」，課名停在學生升年級之前，例如還寫著「高一數學班」），一筆是後來<b>在系統裡標的</b>（顯示現在的課名）。兩筆會各自要求排一場補課，實際上只需要補一次。</div>
+    <div>處理：留系統那筆、把「舊行事曆紀錄」那張按<b>取消請假</b>移除即可（若它已經排過補課，先「取消安排」再取消請假）。留哪一筆都行，重點是只留一筆。</div>
+  </div>`;
+}
+
 function renderMakeup(){
   const period=mkViewPeriod();
   const fs=document.getElementById('f-subject').value;
@@ -278,6 +312,7 @@ function renderMakeup(){
 
   // 純曠課事件雖收在 makeupList（供學生統計），但不進補課清單
   const allInPeriod=makeupList.filter(e=>e.startDt>=period.start&&e.startDt<=period.end&&!isPureNoShow(e));
+  const dupIds=mkDupLegacyIds(allInPeriod);   // 同一堂課記了兩次（搬遷快照 + 系統紀錄）
   const statusOf=new Map(allInPeriod.map(e=>[e.id,mkStatusOf(e,now)]));
   const cnt=st=>allInPeriod.filter(e=>statusOf.get(e.id)===st).length;
   // 排到一半（還欠人，但已經排掉幾場）＝兩邊都算：待安排要提醒還欠人、已安排要看得到排好的場次
@@ -307,20 +342,41 @@ function renderMakeup(){
       <div class="mk-stat mk-stat-pending"><div class="mk-stat-icon">⏰</div><div><div class="mk-stat-num">${pendingStatCnt}</div><div class="mk-stat-lbl">待安排</div></div></div>
       <div class="mk-stat mk-stat-arr"><div class="mk-stat-icon">🗓️</div><div><div class="mk-stat-num">${scheduledStatCnt}</div><div class="mk-stat-lbl">已安排</div></div></div>
       <div class="mk-stat mk-stat-done mk-stat-link" onclick="jumpToMkCompleted()" title="點擊查看已完成安排"><div class="mk-stat-icon">✅</div><div><div class="mk-stat-num">${completedStatCnt}</div><div class="mk-stat-lbl">已完成</div></div></div>
-    </div>`;
+    </div>`+mkDupNoticeHtml(allInPeriod.filter(e=>e.isLegacyAbsence&&dupIds.has(e.id)).length);
   }
 
   const c=document.getElementById('clist-makeup');
   if(!allInPeriod.length){c.innerHTML=`<div class="empty">${period.label}沒有待補課/調課 🎉</div>`;return;}
 
+  // 卡片上的課名是「那一堂當天」的名字（課名分段與滾動命名都不回溯，見 courses.js courseNameOn）。
+  // 那門課現在改叫別的了 → 補一句現名，否則舊名字在課表／搜尋上都找不到，看起來像幽靈課
+  //（2026-08-18 老闆踩到：8/14 的卡還寫「高一數學班」，課表上只剩「高二數學班」）。
+  // 順帶當「這兩張卡是不是同一門課」的照妖鏡：兩張都標同一個現名＝同一門，只有一張標＝兩門不同的課。
+  // 搬遷快照沒有 courseId（那個欄位一有值就會改走系統課路徑），改用回填過的 legacyCourseId
+  function mkNowName(e){
+    const cid=e.courseId!=null?e.courseId:(e.legacyCourseId??null);
+    if(cid==null)return'';
+    const co=findCourseById(cid);if(!co)return'';
+    const now=courseNameOn(co,new Date());
+    return now&&now!==e.origTitle?now:'';
+  }
   function mkCardTitle(e){
-    if(e.absType==='學生請假'&&e.absentWho)return`${esc(e.absentWho)} — ${esc(e.origTitle)}`;
-    return esc(e.origTitle);
+    const now=mkNowName(e);
+    const suffix=now?`<span class="mk-title-now">（現在叫：${esc(now)}）</span>`:'';
+    if(e.absType==='學生請假'&&e.absentWho)return`${esc(e.absentWho)} — ${esc(e.origTitle)}${suffix}`;
+    return esc(e.origTitle)+suffix;
   }
   function absBadge(e){
-    if(e.absType==='老師請假')return`<span class="mk-badge mk-badge-teacher">老師請假</span>`;
-    if(e.absType==='調課')return`<span class="mk-badge mk-badge-reschedule">調課</span>`;
-    return`<span class="mk-badge mk-badge-student">學生請假</span>`;
+    const main=e.absType==='老師請假'?`<span class="mk-badge mk-badge-teacher">老師請假</span>`
+      :e.absType==='調課'?`<span class="mk-badge mk-badge-reschedule">調課</span>`
+      :`<span class="mk-badge mk-badge-student">學生請假</span>`;
+    // 搬遷快照：課名／教室／老師都是搬遷當下凍結的，之後課程改名不會跟 → 標出來，
+    // 不然它掛著升年級前的舊課名，看起來像系統裡多了一門查無此課的幽靈課
+    const legacy=e.isLegacyAbsence
+      ?`<span class="mk-badge mk-badge-legacy" title="這筆是 cutover（2026-07-29）從舊 Google 行事曆搬進系統的請假紀錄。課名／教室／老師是搬遷當下的快照，課程之後改名不會跟著變。">舊行事曆紀錄</span>`:'';
+    const dup=dupIds.has(e.id)
+      ?`<span class="mk-badge mk-badge-dup" title="同一堂課的同一次請假被記了兩次：一筆是舊行事曆搬進來的、一筆是系統標的。兩筆會各自要求排一場補課。留一筆就好——決定留哪一筆之後，另一筆按「取消請假」移除（那一筆若已排過補課，先取消安排）。">⚠ 疑似重複</span>`:'';
+    return main+legacy+dup;
   }
 
   // 撤銷來源狀態：請假→取消請假、調課→取消調課（跟今日卡／週視窗同一套函式）
@@ -992,6 +1048,35 @@ function getRoomAvail(events,room,sStart,sEnd){
   }
   const busy=events.some(e=>e.classroom===room&&overlaps(e.startDt,e.endDt,sStart,sEnd));
   return{available:!busy};
+}
+
+// ── 大教室家教尖峰（2026-08-19 老闆要求：「直接告訴我今天大教室最多同時有幾組家教」）──
+// 以前只能盯著教室時間軸自己數。桌數上限沿用上面 getRoomAvail 同一套規則
+//（可用桌數隨當時的練習課人數變：<13 人 6 桌、≥13 人 5 桌、≥15 人 4 桌），
+// 不另寫一份簡化版，跟排補課時看到的答案才會一致。
+// 回傳 {peak 最多同時幾組, windows 尖峰時段（可能好幾段）, total 全天幾組, segs 逐段}。
+// 整堂沒上的（請假／調課移走）不佔桌；多人補課是「借整間」、type 不是 one，本來就不算家教。
+function bigRoomTutorPeak(events){
+  const live=(events||[]).filter(e=>e&&!e.isFullAbsent&&!e.isRescheduled);
+  const tut=live.filter(e=>e.classroom==='大教室'&&e.type==='one');
+  if(!tut.length)return{peak:0,windows:[],total:0,segs:[]};
+  // 用所有家教的起訖當切點，逐段數「那段同時幾組」
+  const pts=[...new Set(tut.flatMap(e=>[+e.startDt,+e.endDt]))].sort((a,b)=>a-b);
+  const segs=[];
+  for(let i=0;i<pts.length-1;i++){
+    const s=new Date(pts[i]),en=new Date(pts[i+1]);
+    const list=tut.filter(x=>x.startDt<en&&x.endDt>s);
+    if(!list.length)continue;                          // 中間的空檔
+    const max=getRoomAvail(live,'大教室',s,en).max;     // 那段的桌數上限（看同時的練習課人數）
+    const prev=segs[segs.length-1];
+    // 相鄰、組數與上限都一樣 → 併成同一段（17:30 接 18:00 都是 5 組 → 講成 17:30–19:00）
+    if(prev&&+prev.end===+s&&prev.n===list.length&&prev.max===max){
+      prev.end=en;list.forEach(e=>{if(!prev.list.includes(e))prev.list.push(e);});continue;
+    }
+    segs.push({start:s,end:en,n:list.length,max,list:list.slice()});
+  }
+  const peak=segs.reduce((m,s)=>Math.max(m,s.n),0);
+  return{peak,windows:segs.filter(s=>s.n===peak),total:tut.length,segs};
 }
 
 function hasSuitableRoom(sStart,sEnd,availIn){

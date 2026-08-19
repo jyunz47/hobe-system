@@ -54,6 +54,61 @@ var WEEK_ORDER=[1,2,3,4,5,6,0];
 var WEEK_LABEL={1:'週一',2:'週二',3:'週三',4:'週四',5:'週五',6:'週六',0:'週日'};
 function hhmm(d){return `${d.getHours()}:${String(d.getMinutes()).padStart(2,'0')}`;}
 
+// ── 同時段撞堂檢查（2026-08-18）──
+// 同一位學生（同 studentId）被排進兩門時段重疊的課 → 一個人不可能同時在兩堂，資料一定有問題。
+// 最常見的成因是**同一門課被建了兩次**：雲端課表不會即時推到每台裝置，另一台看不到就又建一次。
+// 後果會一路長到待補課清單——兩門課各自有那天的課堂、各自被標請假，就冒出兩張看起來一樣的卡。
+// ⚠ 只比「同一個 studentId」：兩位同名學生（高一淇倫／高二淇倫）各自上不同課是合法的，不該報。
+function _slotsOnDay(co,day){
+  const s=co&&co.schedule;
+  if(!s||!Array.isArray(s.slots)||!s.slots.length)return[];
+  if(s.mode==='dates')return s.slots.filter(x=>x&&x.date).map(x=>({key:'d'+x.date,start:x.start,end:x.end,lbl:x.date}));
+  return _activePhase(_schedulePhases(s),day).slots.filter(x=>x&&x.weekday!=null)
+    .map(x=>({key:'w'+x.weekday,start:x.start,end:x.end,lbl:WEEK_LABEL[Number(x.weekday)]||''}));
+}
+function _clashLabel(co){
+  const t=courseTeacherNames(co).join('、');
+  return `${courseNameOn(co,new Date())||'(未命名)'}${t?'／'+t:''}${co.room?'／'+co.room:''}`;
+}
+function courseClashes(){
+  const pid=yearPeriodId(),today=new Date(),tStr=toDateStr(today);
+  const ens=getEnrollments({periodId:pid});
+  const items=getCourses().filter(co=>!co.status||co.status==='開課中').map(co=>({
+    co,
+    slots:_slotsOnDay(co,today),
+    ids:new Set(ens.filter(en=>en.courseId===co.id&&enrollmentActiveOn(en,tStr)).map(en=>en.studentId)),
+  })).filter(x=>x.slots.length&&x.ids.size);
+  const out=[];
+  for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++){
+    const a=items[i],b=items[j];
+    const both=[...a.ids].filter(id=>b.ids.has(id));
+    if(!both.length)continue;
+    a.slots.forEach(sa=>b.slots.forEach(sb=>{
+      if(sa.key!==sb.key)return;
+      if(hhmmToMin(sa.end)<=hhmmToMin(sa.start)||hhmmToMin(sb.end)<=hhmmToMin(sb.start))return; // 時段沒填全的先跳過
+      if(hhmmToMin(sa.end)<=hhmmToMin(sb.start)||hhmmToMin(sb.end)<=hhmmToMin(sa.start))return; // 沒重疊
+      out.push({when:`${sa.lbl} ${sa.start}–${sa.end}`,names:both.map(studentName),a:a.co,b:b.co});
+    }));
+  }
+  return out;
+}
+function clashHtml(){
+  const list=courseClashes();
+  if(!list.length)return'';
+  const rows=list.map(c=>`<div class="co-clash-row">
+    <b>${esc(c.names.join('、'))}</b>
+    <span class="mk-dot">•</span><span>${esc(c.when)}</span>
+    <span class="mk-dot">•</span><span>${esc(_clashLabel(c.a))}</span>
+    <span class="co-clash-vs">⇄</span><span>${esc(_clashLabel(c.b))}</span>
+  </div>`).join('');
+  return`<div class="co-clash">
+    <div class="co-clash-hd">⚠ 有 ${list.length} 組「同一位學生、同時段兩堂課」</div>
+    <div class="co-clash-note">一個人不可能同時在兩堂課，多半是同一門課被建了兩次。兩門各自請假，待補課清單就會長出兩張很像的卡。
+    處理順序：先確定要留哪一門 → 另一門若排過補課，先到待補課清單「取消安排」→ 再「取消請假」→ 最後才刪那門課（刪課不會清已排好的補課場次）。</div>
+    ${rows}
+  </div>`;
+}
+
 function renderSettings(){
   _coCardCtx.clear();
   const list=buildCourseOverview();
@@ -65,7 +120,7 @@ function renderSettings(){
   // 有排課（有 session、判斷得出類型）→ 進週課表矩陣；其餘 → 底部「未分類」
   const typed=list.filter(c=>c.type!==null&&c.sessions.length);
   const untyped=list.filter(c=>!(c.type!==null&&c.sessions.length));
-  let html='';
+  let html=clashHtml();   // 撞堂檢查：沒問題就是空字串，不佔版面
 
   ['one','pair','group','practice','trial'].forEach(type=>{
     const courses=typed.filter(c=>c.type===type);
