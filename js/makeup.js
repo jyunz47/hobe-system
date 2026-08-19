@@ -168,6 +168,25 @@ function isPureNoShow(e){return e.isNoShow&&!e.isAbsent&&!e.isRescheduled;}
 function isMakeupSkipped(e){
   return (e.absentStudents?.length>0)&&e.absentStudents.every(s=>(e.makeupSkip||[]).includes(s));
 }
+// ── 練習課不補課（2026-08-19 老闆定）──
+// 練習課不收費（課程表單的 noFee 一直是這樣認定的），請假就是請假、不欠一堂：
+// 不進待補課清單、不算欠課、標記完也不再問「要現在排補課嗎」。
+// 請假紀錄本身照記（課堂上看得到誰請假、動態照留、請假次數照算），只是不長出補課義務。
+// ⚠ **調課不在此列**：調課是整堂移到別的時間、不是補一堂，練習課照樣要排得出新時間，
+//   所以只有「學生請假／老師請假」走這條，`absType==='調課'` 仍照舊進清單。
+// ⚠ **這條規則之前已經排好的場次留著**：整筆藏起來的話，清單上就沒有卡片能按「取消安排」，
+//   場次還站在課表上卻沒人管得到＝孤兒（刪課那個洞的同一個症頭）。所以「已經有場次」的
+//   練習課請假照舊看得到，只是不再長出新的補課義務；把那些場次取消掉，它自己就退場。
+// 判斷看課堂物件：系統課展開時練習課的 type 是 'practice'、calName 是 '練習課'（schedule.js）。
+// 這一堂是不是練習課。不收費的後果有兩個，都走這一支：**不補課**（下面）＋
+// **不算多收費**（2026-08-19 老闆補的：練習課不收錢，就不可能收過頭）。
+function isPracticeEv(e){return !!e&&(e.type==='practice'||e.calName==='練習課');}
+function mkNoMakeupNeeded(e){
+  if(!e||e.absType==='調課')return false;
+  if(!isPracticeEv(e))return false;
+  return !getMakeupsFor(e.id).length;
+}
+
 // 課前1hr內請假、且補/不補有學費分歧 → 待與家長確認（補 +半堂、不補 −半堂）
 // 適用：一對一家教(one)、一對二(pair 兩人，沒一起調課成功而走個別補課的)。團班不適用
 function needsMakeupDecision(e){
@@ -209,6 +228,7 @@ function makeupForStudent(e,name){
 // 週檢視課卡與桌面日曆側欄共用（以前各自寫一份、都假設只有一場）
 function mkChipsHtml(ev){
   if(!ev.isFullAbsent&&!ev.isRescheduled)return'';
+  if(mkNoMakeupNeeded(ev))return'';   // 練習課不補課 → 不掛「未安排補課」那顆紅的
   const lbl=ev.isRescheduled?'調課':'補課';
   const okCss='color:#5C7E6A;font-weight:500;background:#EDF0EA;border:1px solid #CFE0D5;padding:2px 8px;border-radius:6px;font-size:12px';
   const noCss='color:#C0504A;font-weight:500;background:#F8EDEA;border:1px solid #E8C5BF;padding:2px 8px;border-radius:6px;font-size:12px';
@@ -243,7 +263,7 @@ function mkExtraPeriods(){
   const base=getPeriods(),now=new Date();
   const map=new Map();
   makeupList.forEach(e=>{
-    if(isPureNoShow(e))return;
+    if(isPureNoShow(e)||mkNoMakeupNeeded(e))return;
     if(base.some(p=>e.startDt>=p.start&&e.startDt<=p.end))return;   // 四顆裡本來就看得到
     if(mkStatusOf(e,now)!=='pending')return;                        // 排完的不長分頁
     const p=periodRangeOfDate(e.startDt);
@@ -310,8 +330,9 @@ function renderMakeup(){
   const fq=(document.getElementById('f-search')?.value||'').trim().toLowerCase();
   const now=new Date();
 
-  // 純曠課事件雖收在 makeupList（供學生統計），但不進補課清單
-  const allInPeriod=makeupList.filter(e=>e.startDt>=period.start&&e.startDt<=period.end&&!isPureNoShow(e));
+  // 純曠課事件雖收在 makeupList（供學生統計），但不進補課清單；練習課的請假同理（不補課）
+  const allInPeriod=makeupList.filter(e=>e.startDt>=period.start&&e.startDt<=period.end
+    &&!isPureNoShow(e)&&!mkNoMakeupNeeded(e));
   const dupIds=mkDupLegacyIds(allInPeriod);   // 同一堂課記了兩次（搬遷快照 + 系統紀錄）
   const statusOf=new Map(allInPeriod.map(e=>[e.id,mkStatusOf(e,now)]));
   const cnt=st=>allInPeriod.filter(e=>statusOf.get(e.id)===st).length;
@@ -592,7 +613,8 @@ function mkCountFromDate(now){
 // 還沒排的補課／調課有幾筆（側欄數字與今日頁提醒共用同一支，口徑只有這一份）
 function mkPendingTotal(now){
   const t=now||new Date(),from=mkCountFromDate(t);
-  return makeupList.filter(e=>e.startDt>=from&&!isPureNoShow(e)&&mkStatusOf(e,t)==='pending').length;
+  return makeupList.filter(e=>e.startDt>=from&&!isPureNoShow(e)&&!mkNoMakeupNeeded(e)
+    &&mkStatusOf(e,t)==='pending').length;
 }
 function updateMakeupBadge(now){const n=mkPendingTotal(now);updateBadge(n);return n;}
 
@@ -1060,8 +1082,13 @@ function bigRoomTutorPeak(events){
   const live=(events||[]).filter(e=>e&&!e.isFullAbsent&&!e.isRescheduled);
   const tut=live.filter(e=>e.classroom==='大教室'&&e.type==='one');
   if(!tut.length)return{peak:0,windows:[],total:0,segs:[]};
-  // 用所有家教的起訖當切點，逐段數「那段同時幾組」
-  const pts=[...new Set(tut.flatMap(e=>[+e.startDt,+e.endDt]))].sort((a,b)=>a-b);
+  // 用所有家教的起訖當切點，逐段數「那段同時幾組」。
+  // 練習課的起訖也要當切點：可用桌數是看**那個當下**的練習課人數，不切的話
+  // 17:00–19:00 會整段套用 18:00 才進來的那班練習課，上限被低估（誤報「已滿」）。
+  const pts=[...new Set([
+    ...tut.flatMap(e=>[+e.startDt,+e.endDt]),
+    ...live.filter(e=>e.type==='practice').flatMap(e=>[+e.startDt,+e.endDt]),
+  ])].sort((a,b)=>a-b);
   const segs=[];
   for(let i=0;i<pts.length-1;i++){
     const s=new Date(pts[i]),en=new Date(pts[i+1]);
@@ -1828,7 +1855,7 @@ function saveMakeupJoin(ev,host,students,recId){
     room:host.classroom||'',calEventId:null,absentStudents:who,calName:'補課'};
   driveData.makeupScheduled=[...list.filter(x=>x.id!==rec.id),rec];
   rebuildMakeupMatchMap();
-  scheduleDriveSave();
+  scheduleDriveSave('makeupScheduled');
   logAct('makeup',`${prev?'改了':'排好'}${who.length?` ${who.join('、')} 的`:''}併班補課`,
     `${fmtD(host.startDt)} ${fmtT(host.startDt)} ${host.classroom||''} ${host.origTitle}`.trim(),
     `跟著這堂一起上、不另開場次（原課堂 ${fmtD(ev.startDt)} ${fmtT(ev.startDt)} ${ev.origTitle||''}）`.trim());
@@ -1857,7 +1884,7 @@ function saveMakeupScheduled(ev,sS,sE,room,calEventId,calName='補課',students,
     ...(t&&t.ids&&t.ids.length?{teacherIds:t.ids.slice(),teacherNames:t.names||''}:{})};
   driveData.makeupScheduled=[...list.filter(x=>x.id!==rec.id),rec];
   rebuildMakeupMatchMap();
-  scheduleDriveSave();
+  scheduleDriveSave('makeupScheduled');
   // 動態：排定／改時段（補課與調課共用這支，calName 就是類別）
   logAct('makeup',`${prev?'改了':'排好'}${who.length?` ${who.join('、')} 的`:''}${calName}`,
     `${fmtD(sS)} ${fmtT(sS)}–${fmtT(sE)} ${room||''} ${ev.origTitle||''}${rec.teacherNames?` 👤${rec.teacherNames}`:''}`.trim(),
@@ -1881,7 +1908,7 @@ async function deleteMakeupScheduled(recId){
   const prev=findMakeupRec(recId);   // 刪掉之前先抄，動態才講得出取消的是哪一場
   driveData.makeupScheduled=getMakeupScheduledLS().map(normalizeMakeupRec).filter(x=>x.id!==recId);
   rebuildMakeupMatchMap();
-  scheduleDriveSave();
+  scheduleDriveSave('makeupScheduled');
   if(prev){
     const s=new Date(prev.scheduledDate);
     logAct('makeup',`取消${(prev.absentStudents||[]).length?` ${prev.absentStudents.join('、')} 的`:''}${prev.calName||'補課'}`,
@@ -1897,7 +1924,7 @@ async function deleteMakeupsForOcc(occId){
   if(!recs.length)return;
   driveData.makeupScheduled=getMakeupScheduledLS().map(normalizeMakeupRec).filter(x=>x.originalId!==occId);
   rebuildMakeupMatchMap();
-  scheduleDriveSave();
+  scheduleDriveSave('makeupScheduled');
   recs.forEach(prev=>{
     const s=new Date(prev.scheduledDate);
     logAct('makeup',`取消${(prev.absentStudents||[]).length?` ${prev.absentStudents.join('、')} 的`:''}${prev.calName||'補課'}`,
@@ -1927,7 +1954,7 @@ function syncMakeupOnLeaveCancel(occId){
   });
   driveData.makeupScheduled=kept;
   rebuildMakeupMatchMap();
-  scheduleDriveSave();
+  scheduleDriveSave('makeupScheduled');
   removed.forEach(prev=>{
     const s=new Date(prev.scheduledDate);
     logAct('makeup',`取消${(prev.absentStudents||[]).length?` ${prev.absentStudents.join('、')} 的`:''}${prev.calName||'補課'}`,
@@ -1953,7 +1980,7 @@ function dropMakeupsForNoShow(occId,names){
   });
   driveData.makeupScheduled=kept;
   rebuildMakeupMatchMap();
-  scheduleDriveSave();
+  scheduleDriveSave('makeupScheduled');
   removed.forEach(prev=>{
     const s=new Date(prev.scheduledDate);
     logAct('makeup',`取消${(prev.absentStudents||[]).length?` ${prev.absentStudents.join('、')} 的`:''}${prev.calName||'補課'}`,

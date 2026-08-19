@@ -11,7 +11,7 @@
 // 名單同時存 studentId（同名終結、供學費/薪資）與 name（顯示與既有 UI 慣例）。
 // 紀錄清空（無老師請假、無請假、無曠課）即整筆刪除。
 function getAbsences(){return driveData.absences||[];}
-function saveAbsences(list){driveData.absences=list;scheduleDriveSave();}
+function saveAbsences(list){driveData.absences=list;scheduleDriveSave('absences');}
 function findAbsenceByOcc(occId){return getAbsences().find(a=>a.occId===occId);}
 
 // ── 滾動判型（2026-08-03）──
@@ -92,6 +92,11 @@ function courseOccurrencesInRange(course,start,end){
   const byId=new Map(getStudentList().map(s=>[s.id,s]));
   const ens=(driveData.enrollments||[]).filter(en=>en.courseId===course.id&&en.periodId===pid);
   const hasWindow=ens.some(en=>en.startDate||en.endDate);
+  // 沒人在籍的那天不長課堂（2026-08-19 老闆定，需求 #16）：學生畢業／離開時把修課
+  // 「從那天起結束」，一對一的課就自己從課表上消失，不會留一張沒有任何學生的課程卡。
+  // ⚠ 只在「本期有人登記過這門課」時才套用：本期完全沒有登記的課（剛建好還沒加人、
+  //   或名冊落在別的期別）照舊長出來——不然新建的課會在課表上直接看不見，像壞掉。
+  const skipEmptyDays=ens.length>0;
   const rosterCache=new Map();
   function rosterOn(day){
     const key=hasWindow?toDateStr(day):'*';
@@ -120,7 +125,11 @@ function courseOccurrencesInRange(course,start,end){
       if(!slot.date)return;
       const[y,mo,dd]=String(slot.date).split('-').map(Number);
       const d=new Date(y,(mo||1)-1,dd||1);d.setHours(0,0,0,0);
-      if(d>=s0&&d<=e0){const r=rosterOn(d);out.push(_makeOccurrence(course,d,si,_atTime(d,slot.start),_atTime(d,slot.end),r.names,r.groups));}
+      if(d>=s0&&d<=e0){
+        const r=rosterOn(d);
+        if(skipEmptyDays&&!r.names.length)return;   // 那天沒人在籍 → 不長課堂
+        out.push(_makeOccurrence(course,d,si,_atTime(d,slot.start),_atTime(d,slot.end),r.names,r.groups));
+      }
     });
   }else{
     // 每週重複：逐日掃，套用「當天生效的時段段落」（多段依日期自動切換）
@@ -132,6 +141,7 @@ function courseOccurrencesInRange(course,start,end){
         const slot=slots[si];
         if(Number(slot.weekday)===cur.getDay()){
           const r=rosterOn(cur);
+          if(skipEmptyDays&&!r.names.length)continue;   // 那天沒人在籍 → 不長課堂
           out.push(_makeOccurrence(course,new Date(cur),si,_atTime(cur,slot.start),_atTime(cur,slot.end),r.names,r.groups));
         }
       }

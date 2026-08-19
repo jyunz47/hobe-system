@@ -294,6 +294,7 @@ function countStudentLeaves(ev,studentId,name,period,excludeOccId){
 // 這次要標記的人裡，哪些人算完會達到門檻。回傳 [{name,count}]，空陣列＝不用跳提醒
 function leaveThresholdWarnings(ev,state){
   if(state.type==='teacher')return[];                     // 老師請假不計多收費
+  if(typeof isPracticeEv==='function'&&isPracticeEv(ev))return[];  // 練習課不收費 → 不可能多收（2026-08-19）
   const period=periodOfDate(ev.startDt);
   if(!period)return[];
   const threshold=getThreshold(period.id);
@@ -341,7 +342,8 @@ async function confirmAbs(id,sfx){
   }
   // 這次標記後「要排補課」的人＝時機 A/B（C＝曠課不排補課）。老師請假＝整堂補，沒有個別名單
   const needMk=state.type==='teacher'?[]:absTargets(ev,state).filter(n=>absTimingOf(state,n)!=='C');
-  const offer=state.type==='teacher'||needMk.length>0;
+  // 練習課不補課（2026-08-19）→ 標完就結案，不再問「要現在排補課嗎」
+  const offer=(state.type==='teacher'||needMk.length>0)&&!mkNoMakeupNeeded(ev);
   logAbsenceAct(ev,state);
   toast('已標記：'+newTitle,'ok');
   await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);

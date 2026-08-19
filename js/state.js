@@ -15,9 +15,25 @@ var weekEvents=[];
 var dvEvents=[];   // 桌面日曆當前檢視（日/週/月）展開出來的課堂；範圍跟 dayEvents/weekEvents 不同，要獨立一份
 var absState={};
 var makeupList=[];
-var driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[],courses:[],teachers:[],absences:[]};
+// ── 雲端共用資料（sharedData/main）──
+// 這 8 個頂層欄位＝寫回 Firestore 的單位。以前是「整包寫回去」，於是任何一台只要
+// 資料不是最新的，它的下一個動作就會把別台這段時間做的事整片蓋掉（2026-08-18 老闆踩到：
+// A 排好的補課在 B 看不到、同一門課被建兩次）。改成**只寫自己這台真的改過的那幾欄**，
+// 並掛 onSnapshot 讓別台一改自己就跟上（見 init.js watchMain）。
+var DRIVE_KEYS=['studentList','makeupScheduled','enrollments','coursePrices','courseSettings','courses','teachers','absences'];
+// 給使用者看的欄位名（別台更新時的提示用）
+var DRIVE_LABEL={studentList:'學生',makeupScheduled:'補課安排',enrollments:'修課',
+  coursePrices:'價目表',courseSettings:'課程設定',courses:'課程',teachers:'老師',absences:'請假'};
+function emptyDriveData(){const o={};DRIVE_KEYS.forEach(k=>o[k]=[]);return o;}
+var driveData=emptyDriveData();
 var driveSaveTimer=null;
+// 本機改過、還沒寫上雲端的欄位。身兼兩職：
+//   ① 存檔時只送這幾欄　② 別台的更新不准蓋這幾欄（自己的編輯優先，寫上去後才放行）
+var driveDirty=new Set();
 var drivePendingSave=false; // 本機是否有尚未寫入 Firestore 的改動（refreshCurrent 重讀前用來決定要不要先 flush）
+var mainUnsub=null;         // sharedData/main 的 onSnapshot 取消訂閱函式（登出要叫）
+var mainRepaintPending=false; // 收到別台的更新、但畫面正開著表單 → 先記著，關掉再重畫
+var mainRepaintTimer=null;
 // 請假課堂 occId → 這堂的補課場次**陣列**（2026-08-05 從單筆改多筆：
 // 三人同一堂請假可以各排各的時段，每場自己一筆、自己一份名單）。
 // 每筆 {id,originalId,scheduledDate,scheduledEnd,room,origTitle,absentStudents,calName,calEventId}

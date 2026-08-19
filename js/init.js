@@ -113,9 +113,13 @@ function setLoginErr(msg){
 }
 
 function signOut(){
+  // 還有沒寫上去的改動就先送（1.5 秒的 debounce 內按登出會剛好卡在這）；不等它回來
+  if(drivePendingSave){clearTimeout(driveSaveTimer);saveToFirestore();}
   dayEvents=[];weekEvents=[];makeupList=[];
-  driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[],courses:[],teachers:[],absences:[]};
-  unwatchActivity();   // 先斷監聽再登出，免得換帳號還聽著舊連線
+  driveData=emptyDriveData();
+  driveDirty.clear();drivePendingSave=false;clearTimeout(driveSaveTimer);
+  unwatchMain();       // 先斷監聽再登出，免得換帳號還聽著舊連線
+  unwatchActivity();
   actEvents=[];actTodos=[];actLoaded=false;actHasNew=false;actPruned=false;updateActivityBadge();
   firebase.auth().signOut();
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='none');
@@ -131,6 +135,7 @@ async function onSignedIn(){
   if(u?.email)localStorage.setItem('ghint',u.email);
   await loadFromFirestore();
   showPanel('courses');
+  watchMain();      // 掛上課表那包的即時監聽：別台一改自己就跟上（2026-08-19）
   watchActivity();  // 掛上動態／待辦的即時監聽：側欄待辦數一登入就對，之後同事寫什麼自己浮出來
   await Promise.all([loadToday(),loadWeek(),loadMakeup()]);
   updateWeekTitle();
@@ -143,8 +148,22 @@ firebase.initializeApp(firebaseConfig);
 var db=firebase.firestore();
 var SHARED_DOC=db.collection('sharedData').doc('main');
 
+// 把雲端那份套進 driveData。**跳過 driveDirty 裡的欄位**——那幾欄本機有還沒寫上去的改動，
+// 被雲端的舊值蓋掉就等於使用者剛做的事憑空消失。回傳這次真的變動的欄位（沒變就不用重畫）。
+// ⚠️ DRIVE_KEYS 少一欄＝那欄永遠讀不到（歷史上 courses/teachers/absences 都各漏過一次，
+//    症狀是「新增課程按更新後消失」「請假標記被空陣列蓋掉」）。加新欄位記得同步 state.js。
+function applyRemoteMain(d){
+  const changed=[];
+  DRIVE_KEYS.forEach(k=>{
+    if(driveDirty.has(k))return;
+    const next=(d&&d[k])||[];
+    if(JSON.stringify(next)===JSON.stringify(driveData[k]||[]))return;
+    driveData[k]=next;changed.push(k);
+  });
+  return changed;
+}
+
 async function loadFromFirestore(){
-  driveData={studentList:[],makeupScheduled:[],enrollments:[],coursePrices:[],courseSettings:[],courses:[],teachers:[],absences:[]};
   try{
     // 等 Firebase 從 localStorage 還原登入狀態（cmd+R 後 currentUser 起初是 null）
     if(!firebase.auth().currentUser){
@@ -157,32 +176,112 @@ async function loadFromFirestore(){
       return;
     }
     const snap=await SHARED_DOC.get();
-    if(snap.exists){
-      const d=snap.data();
-      driveData={
-        studentList:d.studentList||[],
-        makeupScheduled:d.makeupScheduled||[],
-        enrollments:d.enrollments||[],
-        coursePrices:d.coursePrices||[],
-        courseSettings:d.courseSettings||[],
-        courses:d.courses||[],           // 系統自有課程（2026-07-04 起）——漏讀會導致新增課程按「更新」後消失
-        teachers:d.teachers||[],          // 老師檔（同上）
-        absences:d.absences||[],          // 系統請假紀錄（2026-07-17 起）——漏讀會導致請假標記消失、甚至被空陣列蓋掉
-      };
-    }
+    if(snap.exists)applyRemoteMain(snap.data());
+    else driveData=emptyDriveData();
   }catch(e){
+    // ⚠️ 讀失敗時**保留本機既有資料**：以前這裡會先把 driveData 清空再讀，一旦讀失敗
+    // 就整份留在空的狀態，下一個動作直接把空陣列寫回雲端＝把所有人的資料清光。
     console.error('loadFromFirestore failed',e);
     const denied=e?.code==='permission-denied'||/permission|denied|unauthor/i.test(e?.message||'');
     if(denied)toast('此帳號未獲授權使用系統（白名單、或信箱尚未完成驗證），請聯繫管理員','err',false);
-    else toast('讀取雲端資料失敗：'+(e?.message||e),'err');
+    else toast('讀取雲端資料失敗（畫面上的資料維持原樣）：'+(e?.message||e),'err');
   }
 }
 
-function scheduleDriveSave(){drivePendingSave=true;clearTimeout(driveSaveTimer);driveSaveTimer=setTimeout(saveToFirestore,1500);}
+// 呼叫時把改到的欄位名帶上，例如 scheduleDriveSave('absences')。
+// 不帶＝保守回退成「整包都算改過」，跟舊行為一樣（漏帶只會多寫，不會漏寫）。
+function scheduleDriveSave(...keys){
+  (keys.length?keys.flat():DRIVE_KEYS).forEach(k=>driveDirty.add(k));
+  drivePendingSave=true;
+  clearTimeout(driveSaveTimer);
+  driveSaveTimer=setTimeout(saveToFirestore,1500);
+}
 
 async function saveToFirestore(){
-  try{await SHARED_DOC.set(driveData,{merge:true});drivePendingSave=false;}
-  catch(e){console.error('saveToFirestore failed',e);}
+  if(!driveDirty.size){drivePendingSave=false;return;}
+  const sending=[...driveDirty];
+  driveDirty.clear();   // 先清：寫的這段時間又改到的欄位要留在集合裡、下一發再送
+  const payload={};
+  sending.forEach(k=>{payload[k]=driveData[k]||[];});
+  try{
+    await SHARED_DOC.set(payload,{merge:true});
+    drivePendingSave=driveDirty.size>0;
+  }catch(e){
+    console.error('saveToFirestore failed',e);
+    sending.forEach(k=>driveDirty.add(k));   // 還回去，不然這批改動就這樣無聲消失
+    drivePendingSave=true;
+    toast('存到雲端失敗，改動只在這台裝置上：'+(e?.message||e),'err',true);
+  }
+}
+
+// ── 別台改了就跟上（sharedData/main 的即時監聽，2026-08-19）──
+// 以前這份資料只有登入與按 ↻ 時抄一次，中間別台做的事完全看不到；配上「整包寫回」
+// 就會互相蓋掉。動態／待辦（sharedData/activity）早就走 onSnapshot，這裡補上同一套。
+function watchMain(){
+  if(!isSignedIn()||mainUnsub)return;
+  try{
+    mainUnsub=SHARED_DOC.onSnapshot(snap=>{
+      if(!snap.exists)return;
+      // 自己剛寫出去、伺服器還沒確認的那一發回音：資料就是本機這份，不用理
+      if(snap.metadata.hasPendingWrites)return;
+      onMainRemote(snap.data());
+    },err=>{
+      console.error('main onSnapshot failed',err);
+      mainUnsub=null;   // 監聽掉了就退回舊行為（按 ↻ 更新），不影響其他功能
+    });
+  }catch(e){console.error('watchMain failed',e);}
+}
+function unwatchMain(){
+  if(mainUnsub){try{mainUnsub();}catch(_){}mainUnsub=null;}
+  clearInterval(mainRepaintTimer);mainRepaintTimer=null;mainRepaintPending=false;
+}
+
+// 畫面上是不是正在編輯？是的話先別重畫，不然打到一半的表單／點名面板會被抽掉。
+function isEditingNow(){
+  if(currentPanel==='add')return true;                       // 建檔工作站：整頁都是打字中的表單
+  if(document.querySelector('.stu-modal-wrap.open'))return true; // 學生／課程／價格／確認視窗
+  if(document.querySelector('#sp-modal.open'))return true;   // 排補課選時段
+  if(document.querySelector('#week-modal.open'))return true;  // 週視圖課堂視窗
+  if(document.querySelector('.abs-panel.open'))return true;   // 卡內的請假／調課／點名／成績面板
+  if(document.querySelector('#lo.open'))return true;          // 有別的載入正在跑，等它
+  return false;
+}
+
+async function onMainRemote(d){
+  const changed=applyRemoteMain(d);
+  if(!changed.length)return;
+  if(changed.includes('makeupScheduled'))rebuildMakeupMatchMap();
+  if(isEditingNow()){
+    // 正在編輯 → 資料已經進 driveData 了（安全的，dirty 欄位不會被動到），只是先不重畫。
+    // 用輪詢等它關掉：關閉的路徑太多，逐個掛 hook 遲早漏一個。
+    if(!mainRepaintPending){
+      mainRepaintPending=true;
+      toast('別台更新了：'+changed.map(k=>DRIVE_LABEL[k]||k).join('、')+'（關掉目前的視窗後會自動更新）','inf');
+      clearInterval(mainRepaintTimer);
+      mainRepaintTimer=setInterval(()=>{
+        if(isEditingNow())return;
+        clearInterval(mainRepaintTimer);mainRepaintTimer=null;
+        repaintFromRemote();
+      },1500);
+    }
+    return;
+  }
+  toast('別台更新了：'+changed.map(k=>DRIVE_LABEL[k]||k).join('、'),'inf');
+  await repaintFromRemote();
+}
+
+// 重畫目前這頁（不顯示載入遮罩——這是背景同步，不該蓋住使用者的畫面）
+async function repaintFromRemote(){
+  mainRepaintPending=false;
+  try{
+    await loadMakeup(true);   // 側欄待補課數不管在哪一頁都要對
+    if(currentPanel==='courses')await Promise.all([loadToday(true),loadWeek()]);
+    else if(currentPanel==='dayview')await loadToday(true);   // loadToday 尾端會 renderDayView
+    else if(currentPanel==='makeup'){populateMkFilters();renderMakeup();}
+    else if(currentPanel==='students')renderStudents();
+    else if(currentPanel==='teachers')renderTeacherAdmin();
+    else if(currentPanel==='settings')renderSettings();
+  }catch(e){console.error('repaintFromRemote failed',e);}
 }
 
 // ── 導覽（側邊欄 panel 切換）──
@@ -220,8 +319,9 @@ async function refreshCurrent(){
   if(!isSignedIn()){toast('尚未登入','inf');return;}
   showL('更新中…');
   try{
-    if(drivePendingSave)await saveToFirestore();   // 先把本機待存改動寫上去，避免被雲端舊值蓋掉
+    if(drivePendingSave){clearTimeout(driveSaveTimer);await saveToFirestore();} // 先把本機待存改動寫上去，避免被雲端舊值蓋掉
     await loadFromFirestore();                       // 三頁都先重讀雲端最新（學生／修課／補課）
+    if(!mainUnsub)watchMain();                       // 監聽斷過（斷網／權限）就趁這次重新掛上
     if(currentPanel==='courses')await Promise.all([loadToday(),loadWeek()]);
     else if(currentPanel==='makeup'){await loadMakeup(true);populateMkFilters();renderMakeup();}
     else if(currentPanel==='students')renderStudents();

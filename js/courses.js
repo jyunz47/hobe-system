@@ -6,9 +6,9 @@
 
 // ── 存取 helpers ──
 function getCourses(){return driveData.courses||[];}
-function saveCourses(list){driveData.courses=list;scheduleDriveSave();}
+function saveCourses(list){driveData.courses=list;scheduleDriveSave('courses');}
 function getTeachers(){return driveData.teachers||[];}
-function saveTeachers(list){driveData.teachers=list;scheduleDriveSave();}
+function saveTeachers(list){driveData.teachers=list;scheduleDriveSave('teachers');}
 function teacherNameById(id){const t=getTeachers().find(t=>t.id===id);return t?t.name:'';}
 // 課程老師（可多位）：新資料 teacherIds 陣列；舊資料單一 teacherId 自動相容
 function courseTeacherIds(co){return Array.isArray(co.teacherIds)?co.teacherIds:(co.teacherId!=null?[co.teacherId]:[]);}
@@ -767,17 +767,19 @@ function renderTeacherAdmin(){
     const used=getCourses().filter(c=>courseTeacherIds(c).includes(t.id));
     const retired=(t.status||'在職')==='離職';
     const courseList=used.length?used.map(c=>c.name).join('、'):'（尚未指派課程）';
+    const schOpen=!!tschState&&tschState.tid===t.id;
     return`<div class="ta-row${retired?' ta-retired':''}" data-tid="${t.id}">
       <div class="ta-main">
         <div class="ta-line1">
           <input class="ta-name" value="${esc(t.name)}" maxlength="10" onchange="taRename(${t.id},this.value)" title="點擊直接改名">
           <button class="ta-status${retired?' off':''}" onclick="taToggleStatus(${t.id})" title="點擊切換在職/離職">${esc(t.status||'在職')}</button>
+          <button class="ta-sch${schOpen?' on':''}" onclick="toggleTeacherSch(${t.id})" title="看這位老師週一到週日哪些時段有課">${schOpen?'收起課表':'課表'}</button>
           <span class="ta-courses">${esc(courseList)}</span>
           <button class="co-stu-x" title="刪除老師" onclick="taDelete(${t.id})">✕</button>
         </div>
         <div class="ta-count">${used.length} 門課</div>
       </div>
-    </div>`;
+    </div>`+(schOpen?teacherSchHtml(t):'');
   }).join('');
   box.innerHTML=(rows||'<div class="co-empty">還沒有老師。在下方新增，或在新增課程表單裡順手建。</div>')+
     `<div class="co-add">
@@ -829,7 +831,222 @@ async function taDelete(id){
   saveTeachers(getTeachers().filter(x=>x.id!==id));
   logAct('student','刪除老師',t.name,'');
   toast(`已刪除老師 ${t.name}`,'ok');
+  if(tschState&&tschState.tid===id)tschState=null;
   renderTeacherAdmin();
+}
+
+// ══════════════════════════════════════════════════════════════
+// 老師個人課表（2026-08-19 老闆要求：「看到老師的個人課表」，放在老師管理頁）
+// 老師檔上不存課表——課掛在課程本體（teacherIds），所以這裡是把那一週的系統課表
+// 展開後篩出這個人的，週一到週日一天一格。補課／調課場次也算（那場換過老師就照
+// 場次上的老師走）；整堂沒上的（請假／調課移走）畫成劃掉、不算時數。
+// ══════════════════════════════════════════════════════════════
+var tschState=null;   // {tid, offset}：展開哪位老師、看第幾週（0＝本週）
+
+function toggleTeacherSch(id){
+  tschState=(tschState&&tschState.tid===id)?null:{tid:id,offset:0};
+  renderTeacherAdmin();
+}
+function tschWeek(delta){
+  if(!tschState)return;
+  tschState.offset=delta===0?0:tschState.offset+delta;
+  renderTeacherAdmin();
+}
+// 這一堂是不是這位老師的：有 id 就只認 id（同名老師不會混），舊資料／快照才退回比名字
+function occHasTeacher(e,t){
+  if(!e||!t)return false;
+  const ids=(typeof mkTeacherIds==='function')?mkTeacherIds(e):new Set();
+  if(ids.size)return ids.has('t:'+t.id);
+  return String(e.teacher||'').split('、').filter(Boolean).includes(t.name);
+}
+function teacherOccurrences(t,start,end){
+  if(!t)return[];
+  return[...expandCoursesForRange(start,end),...expandMakeupForRange(start,end)]
+    .filter(e=>occHasTeacher(e,t)).sort((a,b)=>a.startDt-b.startDt);
+}
+// 第 offset 週的週一（0＝本週）
+function tschMonday(offset){
+  const d=new Date();d.setHours(0,0,0,0);
+  d.setDate(d.getDate()-((d.getDay()+6)%7)+(offset||0)*7);
+  return d;
+}
+
+// ── 老師的可排時段條件（2026-08-19 老闆要求：「適合安排／無法安排的時段」）──
+// 存在老師檔上：avail:[{id,weekday,start,end,kind:'ok'|'no'}]。
+// 語意刻意只有兩種、不做權重：'ok'＝這段可以排（推薦只從這裡面找）、'no'＝這段不能排（一律扣掉，跟 ok 重疊時 no 贏）。
+// 一條都沒設＝系統不知道這位老師的作息，就不推薦、也不擋任何事（現有排課流程完全不受影響）。
+var TSCH_WD=[[1,'週一'],[2,'週二'],[3,'週三'],[4,'週四'],[5,'週五'],[6,'週六'],[0,'週日']];
+function teacherAvail(t){return Array.isArray(t&&t.avail)?t.avail:[];}
+function taAvailSave(tid,list){
+  const all=getTeachers().slice();
+  const t=all.find(x=>x.id===tid);if(!t)return;
+  t.avail=list;
+  saveTeachers(all);
+  renderTeacherAdmin();
+}
+function taAvailAdd(tid,kind){
+  const t=getTeachers().find(x=>x.id===tid);if(!t)return;
+  taAvailSave(tid,[...teacherAvail(t),{id:Date.now(),weekday:1,start:'16:00',end:'21:30',kind:kind||'ok'}]);
+}
+function taAvailSet(tid,rid,field,val){
+  const t=getTeachers().find(x=>x.id===tid);if(!t)return;
+  const list=teacherAvail(t).map(r=>r.id===rid?{...r,[field]:field==='weekday'?Number(val):val}:r);
+  taAvailSave(tid,list);
+}
+function taAvailDel(tid,rid){
+  const t=getTeachers().find(x=>x.id===tid);if(!t)return;
+  taAvailSave(tid,teacherAvail(t).filter(r=>r.id!==rid));
+}
+
+// 區段相減：從 seg 裡挖掉 cut，回傳剩下的 0~2 段（分鐘制）
+function _segMinus(seg,cut){
+  if(cut.e<=seg.s||cut.s>=seg.e)return[seg];
+  const out=[];
+  if(cut.s>seg.s)out.push({s:seg.s,e:cut.s});
+  if(cut.e<seg.e)out.push({s:cut.e,e:seg.e});
+  return out;
+}
+function _minOfDay(d){return d.getHours()*60+d.getMinutes();}
+function _dayAtMin(day,min){const d=new Date(day);d.setHours(0,min,0,0);return d;}
+
+// 推薦時段＝「可排時段 ∩ 營業時間」－「不可排時段」－「這位老師那一週已經有的課」。
+// 只列 30 分鐘以上的空檔（再短排不進一堂課），並附上那段的教室狀況——
+// 光說老師有空沒用，沒教室一樣排不成，所以教室用的是排補課同一套 getRoomAvail。
+function teacherFreeSlots(t,monday){
+  const rules=teacherAvail(t);
+  const oks=rules.filter(r=>r.kind!=='no'),nos=rules.filter(r=>r.kind==='no');
+  if(!oks.length)return[];
+  const out=[];
+  for(let di=0;di<7;di++){
+    const day=new Date(monday);day.setDate(monday.getDate()+di);day.setHours(0,0,0,0);
+    const dayEnd=new Date(day);dayEnd.setHours(23,59,59,999);
+    const wd=day.getDay();
+    if(!oks.some(r=>Number(r.weekday)===wd))continue;
+    const biz=bizHoursOn(day);
+    const evs=[...expandCoursesForRange(day,dayEnd),...expandMakeupForRange(day,dayEnd)];
+    const busy=[
+      ...evs.filter(e=>occHasTeacher(e,t)&&!e.isFullAbsent&&!e.isRescheduled)
+        .map(e=>({s:_minOfDay(e.startDt),e:_minOfDay(e.endDt)})),
+      ...nos.filter(r=>Number(r.weekday)===wd).map(r=>({s:hhmmToMin(r.start),e:hhmmToMin(r.end)})),
+    ];
+    oks.filter(r=>Number(r.weekday)===wd).forEach(r=>{
+      let segs=[{s:Math.max(hhmmToMin(r.start),biz.start),e:Math.min(hhmmToMin(r.end),biz.end)}].filter(x=>x.e>x.s);
+      busy.forEach(b=>{segs=segs.flatMap(sg=>_segMinus(sg,b));});
+      segs.filter(sg=>sg.e-sg.s>=30).forEach(sg=>out.push({day:new Date(day),di,...sg,rooms:tschRoomsFree(evs,day,sg)}));
+    });
+  }
+  return out.sort((a,b)=>a.di-b.di||a.s-b.s);
+}
+// 那個空檔有哪些教室排得進去（大教室看家教桌數，小教室是一次一堂）
+function tschRoomsFree(evs,day,sg){
+  const s=_dayAtMin(day,sg.s),e=_dayAtMin(day,sg.e);
+  const big=getRoomAvail(evs,'大教室',s,e);
+  const small=ROOMS_SMALL.filter(r=>getRoomAvail(evs,r,s,e).available);
+  return{bigFree:big.free,small};
+}
+
+// ── 畫面 ──
+function teacherSchHtml(t){
+  const mon=tschMonday(tschState.offset);
+  const sun=new Date(mon);sun.setDate(mon.getDate()+6);sun.setHours(23,59,59,999);
+  const evs=teacherOccurrences(t,mon,sun);
+  const live=evs.filter(e=>!e.isFullAbsent&&!e.isRescheduled);
+  const mins=live.reduce((s,e)=>s+(e.durMins||0),0);
+  const stu=new Set(live.flatMap(e=>e.students||[])).size;
+  const off=evs.length-live.length;
+  const today=new Date();today.setHours(0,0,0,0);
+  const wkLbl=tschState.offset===0?'本週':tschState.offset===1?'下一週':tschState.offset===-1?'上一週'
+    :(tschState.offset>0?`往後 ${tschState.offset} 週`:`往前 ${Math.abs(tschState.offset)} 週`);
+
+  // 七格：一天一格，格內按時間排
+  const days=[];
+  for(let di=0;di<7;di++){
+    const d=new Date(mon);d.setDate(mon.getDate()+di);d.setHours(0,0,0,0);
+    const de=new Date(d);de.setHours(23,59,59,999);
+    const list=evs.filter(e=>e.startDt>=d&&e.startDt<=de);
+    const isToday=d.getTime()===today.getTime();
+    const blocks=list.map(e=>{
+      const dead=e.isFullAbsent||e.isRescheduled;
+      const tag=e.isRescheduled?'調課移走':e.isFullAbsent?(e.absType||'整堂沒上'):'';
+      const n=(e.students||[]).length;
+      const leave=!dead&&(e.absentStudents||[]).length?`・${e.absentStudents.length} 人請假`:'';
+      return`<div class="tsch-blk${dead?' tsch-dead':''}" style="border-left-color:${calColor(e.calName)}" title="${esc((e.origTitle||'')+' ／ '+(e.classroom||'未指定教室'))}">
+        <span class="tsch-t">${fmtT(e.startDt)}–${fmtT(e.endDt)}</span>
+        <span class="tsch-n">${esc(e.origTitle||'(未命名)')}</span>
+        <span class="tsch-m">${esc(e.classroom||'未指定教室')}${n?`・${n} 人`:''}${leave}</span>
+        ${tag?`<span class="tsch-tag">${esc(tag)}</span>`:''}
+      </div>`;
+    }).join('');
+    days.push(`<div class="tsch-day${isToday?' tsch-today':''}">
+      <div class="tsch-dhd"><b>${TSCH_WD[di][1]}</b><span>${d.getMonth()+1}/${d.getDate()}${isToday?'・今天':''}</span></div>
+      ${blocks||'<div class="tsch-none">沒課</div>'}
+    </div>`);
+  }
+
+  // 可排時段條件（沒設過就先講這塊是幹嘛的）
+  const rules=teacherAvail(t);
+  const ruleRows=rules.map(r=>`<div class="tsch-rule${r.kind==='no'?' no':''}">
+    <select class="tsch-sel" onchange="taAvailSet(${t.id},${r.id},'weekday',this.value)">
+      ${TSCH_WD.map(([v,l])=>`<option value="${v}"${Number(r.weekday)===v?' selected':''}>${l}</option>`).join('')}
+    </select>
+    <input class="tsch-time-in" type="time" value="${esc(r.start)}" onchange="taAvailSet(${t.id},${r.id},'start',this.value)">
+    <span class="tsch-dash">–</span>
+    <input class="tsch-time-in" type="time" value="${esc(r.end)}" onchange="taAvailSet(${t.id},${r.id},'end',this.value)">
+    <select class="tsch-sel" onchange="taAvailSet(${t.id},${r.id},'kind',this.value)">
+      <option value="ok"${r.kind!=='no'?' selected':''}>可以排</option>
+      <option value="no"${r.kind==='no'?' selected':''}>不能排</option>
+    </select>
+    <button class="co-stu-x" title="刪掉這條" onclick="taAvailDel(${t.id},${r.id})">✕</button>
+  </div>`).join('');
+
+  // 推薦（依上面的條件算這一週）
+  const free=teacherFreeSlots(t,mon);
+  const recBody=!rules.some(r=>r.kind!=='no')
+    ? `<div class="tsch-none">還沒設「可以排」的時段——上面加一條，這裡就會算出這一週哪幾段排得進去。</div>`
+    : (!free.length
+      ? `<div class="tsch-none">這一週的可排時段都被自己的課或「不能排」佔滿了（換一週看看）。</div>`
+      : free.map(f=>{
+          const len=f.e-f.s;
+          const roomTxt=[f.rooms.bigFree>0?`大教室 ${f.rooms.bigFree} 桌`:'',f.rooms.small.length?`${f.rooms.small.join('／')} 空著`:'']
+            .filter(Boolean).join('・')||'⚠ 這段沒有空教室';
+          return`<div class="tsch-rec${f.rooms.bigFree<=0&&!f.rooms.small.length?' warn':''}">
+            <span class="tsch-rec-d">${TSCH_WD[f.di][1]} ${f.day.getMonth()+1}/${f.day.getDate()}</span>
+            <span class="tsch-rec-t">${minToHHMM(f.s)}–${minToHHMM(f.e)}</span>
+            <span class="tsch-rec-len">${len>=60?`${(len/60).toFixed(len%60?1:0)} 小時`:`${len} 分`}</span>
+            <span class="tsch-rec-r">${esc(roomTxt)}</span>
+          </div>`;
+        }).join(''));
+
+  return`<div class="tsch">
+    <div class="tsch-hd">
+      <span class="tsch-title">${esc(t.name)} 的課表</span>
+      <span class="tsch-range">${wkLbl}　${mon.getMonth()+1}/${mon.getDate()}（一）～${sun.getMonth()+1}/${sun.getDate()}（日）</span>
+      <span class="tsch-nav">
+        <button class="dbtn" onclick="tschWeek(-1)">‹ 上一週</button>
+        <button class="dbtn" onclick="tschWeek(0)">本週</button>
+        <button class="dbtn" onclick="tschWeek(1)">下一週 ›</button>
+      </span>
+    </div>
+    <div class="tsch-sum">
+      <span>這週 <b>${live.length}</b> 堂</span>
+      <span>共 <b>${(mins/60).toFixed(mins%60?1:0)}</b> 小時</span>
+      <span>教到 <b>${stu}</b> 位學生</span>
+      ${off?`<span class="tsch-sum-off">${off} 堂沒上（請假／調課）</span>`:''}
+    </div>
+    <div class="tsch-grid">${days.join('')}</div>
+    <div class="tsch-sec">
+      <div class="tsch-sec-hd">可排時段條件<span class="tsch-sec-sub">「可以排」是推薦的來源，「不能排」一律扣掉。一條都沒設＝系統不猜，也不會擋任何現有排課流程。</span></div>
+      ${ruleRows||'<div class="tsch-none">還沒設定。</div>'}
+      <div class="tsch-rule-add">
+        <button class="co-add-btn" onclick="taAvailAdd(${t.id},'ok')">＋ 可以排的時段</button>
+        <button class="co-add-btn" onclick="taAvailAdd(${t.id},'no')">＋ 不能排的時段</button>
+      </div>
+    </div>
+    <div class="tsch-sec">
+      <div class="tsch-sec-hd">這一週推薦排這裡<span class="tsch-sec-sub">＝可排時段 ∩ 營業時間 －「不能排」－ 他自己已經有的課；30 分鐘以上才列，附當下的空教室（跟排補課同一套教室規則）。</span></div>
+      ${recBody}
+    </div>
+  </div>`;
 }
 
 // ── 課程總覽整合：把系統課塞進週課表矩陣 ──

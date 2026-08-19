@@ -23,7 +23,7 @@ function getEnrollments(filter){
     (filter.periodId==null||en.periodId===filter.periodId)&&
     (filter.courseTitle==null||en.courseTitle===filter.courseTitle));
 }
-function saveEnrollments(list){driveData.enrollments=list;scheduleDriveSave();refreshCourseCards();}
+function saveEnrollments(list){driveData.enrollments=list;scheduleDriveSave('enrollments');refreshCourseCards();}
 
 // ── 修課起訖（2026-07-27 起真正生效）──
 // startDate＝第一堂、endDate＝最後一堂，**皆含當日**；null＝沒有那一端的邊界。
@@ -128,7 +128,7 @@ function makeEnrollment({studentId,courseTitle,periodId,price=null,startDate=nul
 
 // ── 價目表 ──
 function getCoursePrices(){return driveData.coursePrices||[];}
-function saveCoursePrices(list){driveData.coursePrices=list;scheduleDriveSave();}
+function saveCoursePrices(list){driveData.coursePrices=list;scheduleDriveSave('coursePrices');}
 function getCourseDefaultPrice(title){
   const row=getCoursePrices().find(c=>c.title===title);
   return row&&typeof row.price==='number'?row.price:null;
@@ -140,7 +140,7 @@ function effectivePrice(en){return en.price??getCourseDefaultPrice(en.courseTitl
 // 每門課一筆 {title, needsGrade}；未設定的課一律 fallback 成「只點名」(needsGrade=false)
 // 欄位刻意留可擴充（之後加 isMath 給高中數學作業清單，不必改結構）
 function getCourseSettings(){return driveData.courseSettings||[];}
-function saveCourseSettings(list){driveData.courseSettings=list;scheduleDriveSave();}
+function saveCourseSettings(list){driveData.courseSettings=list;scheduleDriveSave('courseSettings');}
 // 這門課要不要登記成績；查無設定 = 只點名
 // 比對前去前後空白：舊資料的 origTitle 可能帶尾端空白，不清會對不上
 function courseNeedsGrade(title){

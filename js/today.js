@@ -1,8 +1,9 @@
 // 今日課程：載入 + 渲染 + 教室時間軸 + hero 卡
 
-async function loadToday(){
+// silent=true：背景同步用（別台改了資料自己跟上），不顯示載入遮罩也不蓋住畫面
+async function loadToday(silent=false){
   if(!isSignedIn())return;
-  showL('讀取今日課程...');
+  if(!silent)showL('讀取今日課程...');
   try{
     const d=currentDate;
     const start=new Date(d.getFullYear(),d.getMonth(),d.getDate(),0,0,0);
@@ -17,7 +18,7 @@ async function loadToday(){
     if(currentPanel==='dayview')renderDayView(); // 日檢視共用 dayEvents，換日/更新後同步重畫
     setUSt('ok',document.getElementById('uname').textContent,fmtDT(new Date())+' 更新');
   }catch(err){showErr('courses','讀取失敗：'+(err.result?.error?.message||err.message));}
-  finally{hideL();}
+  finally{if(!silent)hideL();}
 }
 
 // renderTL 是 v2 移除後的 no-op，保留是因為 loadToday 還在呼叫
@@ -124,28 +125,6 @@ function updateTlNow(){
   document.querySelectorAll('[data-tlnow]').forEach(el=>el.style.left=pct+'%');
 }
 
-// ── 大教室家教桌：這天最擠的時候同時幾組（2026-08-19 老闆要求）──
-// 大教室不是「一堂課包場」，而是同時擺好幾桌家教＋一堂練習課，桌數上限隨同時段
-// 練習課人數浮動（15 人↑→4 桌、13~14→5 桌、其餘 6 桌）。規則本體在 makeup.js
-// getRoomAvail，排補課選教室用的就是它——這裡只是把同一份答案搬到今日摘要，
-// 不用點進排補課視窗才知道大教室今天塞得多滿。
-// 一對二也算一組（兩個人擠一桌還是佔一桌）；整堂請假／調課移走的不算。
-function bigRoomTutorPeak(evs){
-  const tut=(evs||[]).filter(e=>e.classroom==='大教室'&&(e.type==='one'||e.type==='pair')
-    &&!e.isFullAbsent&&!e.isRescheduled);
-  if(!tut.length)return null;
-  // 只在「有課開始」的那幾個時刻取樣：同時人數只會在課堂起點往上跳
-  let best=null;
-  tut.forEach(x=>{
-    const t=x.startDt;
-    const n=tut.filter(e=>e.startDt<=t&&e.endDt>t).length;
-    if(!best||n>best.n)best={n,at:t};
-  });
-  const av=typeof getRoomAvail==='function'
-    ?getRoomAvail(evs,'大教室',best.at,new Date(best.at.getTime()+60000)):null;
-  return{n:best.n,at:best.at,cap:av?av.max:null,pStudents:av?av.pStudents:0};
-}
-
 // ── Render Today List (V4 card grid + hero) ──
 function renderToday(){
   const c=document.getElementById('clist-today');
@@ -227,16 +206,6 @@ function renderToday(){
     const n=evs.filter(x=>x.calName===cal).length;
     if(n>0)sumHtml+=`<span style="color:${calInk(cal)};font-weight:500">${n} ${cal}</span>`;
   });
-  // 大教室家教桌（沒有家教就整顆不出現）
-  const peak=bigRoomTutorPeak(evs);
-  if(peak){
-    const full=peak.cap!=null&&peak.n>=peak.cap;
-    const tip=`大教室同時擺得下幾桌家教會隨同時段練習課人數變：15 人以上 4 桌、13~14 人 5 桌、其餘 6 桌。`
-      +`排補課選教室用的是同一份規則。`;
-    sumHtml+=`<span class="tsum-room${full?' full':''}" title="${esc(tip)}">🏫 大教室家教 最多同時 <b>${peak.n}</b>`
-      +`${peak.cap!=null?` / ${peak.cap} 桌`:' 組'}`
-      +`（${fmtT(peak.at)} 最擠${peak.pStudents?`・同時段練習課 ${peak.pStudents} 人`:''}${full?'・已滿':''}）</span>`;
-  }
   sum.innerHTML=sumHtml;
 
   // 成績課在上、只點名的課在下（區內維持時間排序）；只有一種時不出區標題
@@ -376,6 +345,7 @@ function heroHtml(e,isNow){
 // 整堂沒上的課要講「補課排哪天」。一堂可以排好幾場（不同人各排各的）→ 每場一行
 function getMkSt(e){
   if(!e.isFullAbsent&&!e.isRescheduled)return'';
+  if(mkNoMakeupNeeded(e))return'';   // 練習課不補課 → hero 上不講「未安排補課」
   const recs=getMakeupsFor(e.id);
   const lbl=e.isRescheduled?'調課':'補課';
   if(!recs.length)return`<div class="tcard-mk mk-un">未安排${lbl}</div>`;
@@ -615,6 +585,7 @@ function tcardHtml(e){
   // 排到一半（三人請假只排了一人）要看得出來，不然跟全排完長一樣
   const mkBadge=(()=>{
     if(!e.isFullAbsent&&!e.isRescheduled)return'';
+    if(mkNoMakeupNeeded(e))return'';   // 練習課不補課 → 不標「未安排」
     if(!getMakeupsFor(e.id).length)return`<span class="tc-badge tc-badge-un">未安排</span>`;
     const left=mkPendingCount(e);   // 「還差幾人」的唯一算法（老師請假沒有個別名單也算得對）
     return left?`<span class="tc-badge tc-badge-un">還有 ${left} 人未安排</span>`:`<span class="tc-badge tc-badge-arr">✓ 已安排</span>`;

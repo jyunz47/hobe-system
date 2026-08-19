@@ -63,7 +63,7 @@ function getStudentList(opts){
   if(opts.alumniOnly)return list.filter(s=>(s.status||'在學')!=='在學');
   return list;
 }
-function saveStudentList(list){driveData.studentList=list;scheduleDriveSave();}
+function saveStudentList(list){driveData.studentList=list;scheduleDriveSave('studentList');}
 
 // 建立新學生物件（含完整新欄位）
 // id 用單調遞增計數器：max(上次 id + 1, Date.now()*1000)
@@ -184,18 +184,20 @@ function getStudentStats(studentId,periodId){
     if(!byCourse[c]){
       const co=cid!=null?findCourseById(cid):null;
       byCourse[c]={total:0,owed:0,studentAbs:0,reschedules:0,teacherAbs:0,pairs:[],type:a.type,
+        isPractice:isPracticeEv(a),   // 練習課不收費 → 不算欠課、也不進多收費警示
         label:co?courseNameOn(co,new Date()):a.origTitle};
     }
     byCourse[c].total++;
     // 「不補課」（家教課前1hr內請假、確認不補）不算欠課。
     // 補完沒改看時數（2026-08-10 第 3 刀）：拆成兩場補足時，只看第一場上完沒會提前消掉整筆欠課
-    if(!isMakeupSkipped(a)&&!mkMadeUpBy(a,name,now))byCourse[c].owed++;
+    // 練習課不補課（2026-08-19）→ 請假照列在這門課底下，但不算一堂欠課
+    if(!mkNoMakeupNeeded(a)&&!isMakeupSkipped(a)&&!mkMadeUpBy(a,name,now))byCourse[c].owed++;
     if(a.absType==='學生請假')byCourse[c].studentAbs++;
     else if(a.absType==='調課')byCourse[c].reschedules++;
     else if(a.absType==='老師請假')byCourse[c].teacherAbs++;
     byCourse[c].pairs.push({absence:a,makeup:m});
   });
-  const owed=pairs.filter(p=>!isMakeupSkipped(p.absence)&&!mkMadeUpBy(p.absence,name,now)).length;
+  const owed=pairs.filter(p=>!mkNoMakeupNeeded(p.absence)&&!isMakeupSkipped(p.absence)&&!mkMadeUpBy(p.absence,name,now)).length;
   // 曠課次數（含純曠課事件與請假/曠課並存事件中該生被標曠課的）
   const noShow=makeupList.filter(e=>e.startDt>=period.start&&e.startDt<=period.end&&(e.noShowStudents||[]).includes(name)).length;
   // 加退費（半堂）：家教/一對二課前1hr內請假 → 補(已排)+半堂、不補−半堂、未決待確認
@@ -213,9 +215,11 @@ function getStudentStats(studentId,periodId){
 
 // 多收費警示：2026-08-04 起不再限團班，與標記請假時跳的提醒視窗同範圍
 //（原本只有團班會亮，家教／一對二變成「標記當下講了、事後查不到」）
+// 2026-08-19：練習課不列入——那門課不收費，請假再多也不會收過頭（標記當下的
+// 提醒視窗走 absence.js leaveThresholdWarnings，同一條規則、同一個理由）
 function hasThresholdWarning(stats,pid){
   const t=getThreshold(pid||currentPeriodId);
-  return Object.values(stats.byCourse).some(c=>c.studentAbs>=t);
+  return Object.values(stats.byCourse).some(c=>!c.isPractice&&c.studentAbs>=t);
 }
 
 // ── 學生編輯 + modal 狀態 ──
@@ -244,7 +248,7 @@ function openStudentModal(id){
   document.getElementById('stu-modal-grade').textContent=s.grade;
   const period=getCurrentPeriod();
   const threshold=getThreshold(currentPeriodId);
-  const warnCourses=Object.values(stats.byCourse).filter(c=>c.studentAbs>=threshold);
+  const warnCourses=Object.values(stats.byCourse).filter(c=>!c.isPractice&&c.studentAbs>=threshold);
   const hasReschedules=Object.values(stats.byCourse).some(c=>c.reschedules>0);
   const leaveCnt=stats.pairs.filter(p=>p.absence.absType==='學生請假').length;
   const reschedCnt=stats.pairs.filter(p=>p.absence.absType==='調課').length;
@@ -754,10 +758,59 @@ function switchStuTab(mode){
 }
 
 // ── 狀態變更 modal ──
+// 畢業／離開＝從某一天起不再上課（2026-08-19 老闆定，需求 #16：「不要讓已畢業或離開的
+// 學生的課還會長出課程卡來」）。改狀態時同時把本期還在的修課**從那天起結束**
+//（寫 enrollment.endDate，含當日），不是刪掉——刪掉會連過去的堂數與自訂單價一起消失，
+// 回頭看舊課堂名冊也會少人。課表那邊配一條「那天沒人在籍就不長課堂」（schedule.js），
+// 所以只剩他一個人的課（一對一）會整堂從課表消失，團班只是少一個人、照常上。
+// 暫停不走這條（他會回來，寫了結束日回來還要人工清）；復學也不自動加回來。
+var STATUS_ENDS_COURSES=['畢業','離開'];
+
+// 這次會被結束掉的修課：本期、還沒設結束日或結束日在那天之後
+function statusEndTargets(studentId,dateStr){
+  return getEnrollments({studentId,periodId:yearPeriodId()})
+    .filter(en=>!en.endDate||en.endDate>dateStr);
+}
+function statusEnLabel(en){
+  const co=en.courseId!=null?findCourseById(en.courseId):null;
+  return co?(courseNameOn(co,new Date())||'(未命名課程)'):(en.courseTitle||'(未命名課程)');
+}
+function statusEndDateVal(){
+  return document.getElementById('status-modal-enddate')?.value
+    ||statusModalCtx.endDate||toDateStr(new Date());
+}
+function statusEndDateChange(v){statusModalCtx.endDate=v;renderStatusEndBox();}
+
+function renderStatusEndBox(){
+  const box=document.getElementById('status-modal-end');
+  if(!box)return;
+  const hint=t=>`<div style="font-size:12px;color:var(--tx3);line-height:1.6">${t}</div>`;
+  const st=statusModalCtx.selectedStatus;
+  if(st==='暫停')return void(box.innerHTML=hint('暫停<b>不會動到修課</b>：他的課照常長在課表上。要讓課從課表上消失，用「離開」，或到課程裡設「從 X 起不上」。'));
+  if(st==='在學')return void(box.innerHTML=hint('復學<b>不會自動把課加回來</b>——之前設的修課結束日期留著。要恢復上課，到課程裡把他重新加進名單。'));
+  if(!STATUS_ENDS_COURSES.includes(st))return void(box.innerHTML='');
+  const d=statusEndDateVal();
+  const targets=statusEndTargets(statusModalCtx.studentId,d);
+  const owed=getStudentStats(statusModalCtx.studentId).owed;
+  const rows=targets.length
+    ?`<div style="font-size:12.5px;color:var(--tx2);line-height:1.8;margin-top:8px">
+        ${d} 之後這 <b>${targets.length}</b> 門課不再有他：
+        ${targets.map(en=>`<div>・${esc(statusEnLabel(en))}</div>`).join('')}
+      </div>`
+    :`<div style="font-size:12.5px;color:var(--tx3);margin-top:8px">本期沒有要結束的修課。</div>`;
+  box.innerHTML=`
+    <div style="font-size:12px;color:var(--tx3);margin-bottom:6px">最後一天上課（這天還算上課，隔天起不上）</div>
+    <input type="date" id="status-modal-enddate" value="${esc(d)}" onchange="statusEndDateChange(this.value)"
+      style="padding:7px 10px;border:1.5px solid var(--br);border-radius:var(--rs);font-family:inherit;font-size:13px;color:var(--tx)">
+    ${rows}
+    ${targets.length?hint('<div style="margin-top:8px">只剩他一個人的課會整堂從課表消失；團班只是少一個人，照常上。<b>過去的課堂、名冊、堂數都不動。</b></div>'):''}
+    ${owed>0?`<div style="font-size:12.5px;color:var(--dg);margin-top:8px;line-height:1.6">⚠ 他還有 <b>${owed}</b> 堂欠課（含還沒排的補課）。這裡<b>不會</b>自動處理——要補就先去待補課清單排完，不補就標「不補課」。</div>`:''}`;
+}
+
 function openStatusChangeModal(studentId){
   const s=getStudentList().find(x=>x.id===studentId);
   if(!s)return;
-  statusModalCtx={studentId,selectedStatus:null};
+  statusModalCtx={studentId,selectedStatus:null,endDate:toDateStr(new Date())};
   const current=s.status||'在學';
   const all=['在學','畢業','離開','暫停'];
   const opts=all.filter(o=>o!==current);
@@ -767,6 +820,7 @@ function openStatusChangeModal(studentId){
     const label=o==='在學'?'復學（在學）':o;
     return `<button class="status-opt-btn" data-status="${o}" onclick="selectStatusOpt('${o}')">${label}</button>`;
   }).join('');
+  renderStatusEndBox();
   document.getElementById('status-modal-wrap').classList.add('open');
 }
 function selectStatusOpt(status){
@@ -774,24 +828,48 @@ function selectStatusOpt(status){
   document.querySelectorAll('.status-opt-btn').forEach(b=>{
     b.classList.toggle('selected',b.dataset.status===status);
   });
+  renderStatusEndBox();
 }
 function closeStatusModal(){
   document.getElementById('status-modal-wrap').classList.remove('open');
-  statusModalCtx={studentId:null,selectedStatus:null};
+  statusModalCtx={studentId:null,selectedStatus:null,endDate:null};
 }
-function confirmStatusChange(){
+async function confirmStatusChange(){
   if(!statusModalCtx.selectedStatus)return toast('請先選一個狀態','inf');
   const list=getStudentList();
   const s=list.find(x=>x.id===statusModalCtx.studentId);
   if(!s)return;
-  s.status=statusModalCtx.selectedStatus;
+  const newStatus=statusModalCtx.selectedStatus;
+  const endStr=statusEndDateVal();
+  // 畢業／離開：先把本期還在的修課從那天起結束（含當日），再改狀態
+  let ended=[];
+  if(STATUS_ENDS_COURSES.includes(newStatus)){
+    if(!endStr)return toast('請選最後一天上課的日期','inf');
+    const targets=statusEndTargets(s.id,endStr);
+    if(targets.length){
+      ended=targets.map(statusEnLabel);
+      targets.forEach(en=>{en.endDate=endStr;});   // getEnrollments 回的是同一批物件
+      saveEnrollments(getEnrollments());
+    }
+  }
+  s.status=newStatus;
   s.statusChangedAt=new Date().toISOString();
   s.statusNote=document.getElementById('status-modal-note').value.trim();
   saveStudentList(list);
+  const labelMap={在學:'復學（在學）',畢業:'畢業',離開:'離開',暫停:'暫停'};
+  logAct('student','變更學生狀態',`${s.name}（${s.grade}）`,
+    `改為${labelMap[newStatus]}`+(ended.length?`，${endStr} 之後不再上：${ended.join('、')}`:''));
   closeStatusModal();
   renderStudents();
-  const labelMap={在學:'復學（在學）',畢業:'畢業',離開:'離開',暫停:'暫停'};
-  toast(`已將 ${s.name} 設為${labelMap[s.status]}`,'ok');
+  toast(`已將 ${s.name} 設為${labelMap[newStatus]}`+(ended.length?`，並結束 ${ended.length} 門課`:''),'ok');
+  // 課表要重新展開才看得到課消失（refreshCourseCards 只是用舊資料重畫）
+  if(ended.length){
+    await Promise.all([
+      typeof loadToday==='function'?loadToday(true):null,
+      typeof loadWeek==='function'?loadWeek():null,
+      typeof loadMakeup==='function'?loadMakeup(true):null,
+    ]);
+  }
 }
 
 // ── 徹底刪除學生（硬刪除，不可復原）──
@@ -849,7 +927,13 @@ async function batchPromoteGrade(){
     const n=eligibleGrade.filter(s=>s.grade===from).length;
     return n?`${from} → ${to}：<b>${n}</b> 位`:'';
   }).filter(Boolean).join('<br>');
-  const gradMsg=eligibleGraduate.length?`<br>高三 → 畢業（狀態變更）：<b>${eligibleGraduate.length}</b> 位`:'';
+  // 畢業＝課也跟著結束（同「變更狀態」那條規則，2026-08-19 需求 #16）：先算出會結束幾筆修課
+  const promoteEndDate=toDateStr(new Date());
+  const gradEnds=eligibleGraduate.flatMap(s=>statusEndTargets(s.id,promoteEndDate));
+  const gradMsg=eligibleGraduate.length
+    ?`<br>高三 → 畢業（狀態變更）：<b>${eligibleGraduate.length}</b> 位`
+      +(gradEnds.length?`<br>　└ 他們本期還在的 <b>${gradEnds.length}</b> 筆修課，會從 <b>${promoteEndDate}</b> 起結束（隔天起的課表不再長出這些課；過去的不動）`:'')
+    :'';
   const skipMsg=skipped.length?`<p>${skipped.length} 位跳過（大學已頂層、或舊資料未分年級的「國小」）。</p>`:'';
   const ok=await uiConfirm({title:'批次升年級',ok:'執行升年級',
     html:`<p>這次會做這些事：</p>
@@ -864,7 +948,20 @@ async function batchPromoteGrade(){
     s.statusChangedAt=now;
     if(!s.statusNote)s.statusNote='批次升年級時自動設為畢業';
   });
+  // 畢業的人：本期還在的修課一起結束（不是刪掉，過去的堂數與名冊照舊）
+  if(gradEnds.length){
+    gradEnds.forEach(en=>{en.endDate=promoteEndDate;});
+    saveEnrollments(getEnrollments());
+  }
   saveStudentList(list);
   renderStudents();
-  toast(`已升年級 ${eligibleGrade.length} 位、設畢業 ${eligibleGraduate.length} 位`,'ok');
+  toast(`已升年級 ${eligibleGrade.length} 位、設畢業 ${eligibleGraduate.length} 位`
+    +(gradEnds.length?`，並結束 ${gradEnds.length} 筆修課`:''),'ok');
+  if(gradEnds.length){
+    await Promise.all([
+      typeof loadToday==='function'?loadToday(true):null,
+      typeof loadWeek==='function'?loadWeek():null,
+      typeof loadMakeup==='function'?loadMakeup(true):null,
+    ]);
+  }
 }

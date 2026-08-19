@@ -603,7 +603,8 @@ function renderDvInspector(){
   if(ev.isNoShow)rows.push(row('曠課',esc(ev.noShowStudents.join('、'))));
   if(ev.notes)rows.push(row('備註',esc(ev.notes)));
   // 整堂沒上（請假／調課）就一定有補課或調課要排——排了沒排一眼看到
-  if(faded){
+  // （練習課不補課除外，2026-08-19：它的請假標完就結案，沒有場次要排）
+  if(faded&&!mkNoMakeupNeeded(ev)){
     const lbl=ev.isRescheduled?'調課':'補課';
     const recs=getMakeupsFor(ev.id);   // 一堂可以排好幾場（不同人各排各的）
     recs.forEach(rec=>{
@@ -1028,7 +1029,7 @@ function _dvMoveMakeup(p){
   rec.scheduledDate=p.s.toISOString();rec.scheduledEnd=p.en.toISOString();rec.room=p.room;
   driveData.makeupScheduled=list;
   rebuildMakeupMatchMap();
-  scheduleDriveSave();
+  scheduleDriveSave('makeupScheduled');
   logAct('makeup',`改了${(rec.absentStudents||[]).length?` ${rec.absentStudents.join('、')} 的`:''}${rec.calName||'補課'}時段`,
     `${fmtD(p.s)} ${_dvHM(p.s)}–${_dvHM(p.en)} ${p.room||''} ${rec.origTitle||''}`.trim(),
     `原本排在 ${fmtD(wasS)} ${fmtT(wasS)} ${wasRoom}`.trim());

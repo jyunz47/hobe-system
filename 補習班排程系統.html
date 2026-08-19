@@ -23,7 +23,7 @@ if(new URLSearchParams(location.search).get('app')==='dayview'){
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HOBE">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=77">
+<link rel="stylesheet" href="style.css?v=78">
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -149,7 +149,8 @@ if ('serviceWorker' in navigator) {
       <!-- A+B: 教室時間軸 + 進行中 -->
       <div class="tl-ab-box">
         <div class="tl-a">
-          <div class="tl-a-hd">教室時段</div>
+          <!-- 大教室家教尖峰（2026-08-19）：內容由 today.js renderBigRoomNote 填 -->
+          <div class="tl-a-hd">教室時段<span class="tl-a-note" id="tl-bigroom"></span></div>
           <div class="tl-a-body" id="tl-body">
             <div style="padding:16px;font-size:12px;color:var(--tx3)">載入中...</div>
           </div>
@@ -634,24 +635,24 @@ if ('serviceWorker' in navigator) {
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <!-- 應用程式分模組（順序：state → utils → 解析 → 各 panel → init 最後）-->
-<script src="js/state.js?v=17"></script>
+<script src="js/state.js?v=18"></script>
 <script src="js/utils.js?v=14"></script>
-<script src="js/schedule.js?v=9"></script>
-<script src="js/today.js?v=33"></script>
+<script src="js/schedule.js?v=11"></script>
+<script src="js/today.js?v=34"></script>
 <script src="js/week.js?v=21"></script>
-<script src="js/dayview.js?v=30"></script>
-<script src="js/absence.js?v=17"></script>
-<script src="js/makeup.js?v=20"></script>
-<script src="js/enrollment.js?v=14"></script>
-<script src="js/students.js?v=23"></script>
+<script src="js/dayview.js?v=31"></script>
+<script src="js/absence.js?v=19"></script>
+<script src="js/makeup.js?v=23"></script>
+<script src="js/enrollment.js?v=15"></script>
+<script src="js/students.js?v=26"></script>
 <script src="js/attendance.js?v=2"></script>
 <script src="js/grades.js?v=3"></script>
 <script src="js/settings.js?v=29"></script>
-<script src="js/courses.js?v=24"></script>
+<script src="js/courses.js?v=26"></script>
 <script src="js/activity.js?v=6"></script>
 <script src="js/remind.js?v=4"></script>
 <script src="js/search.js?v=5"></script>
-<script src="js/init.js?v=27"></script>
+<script src="js/init.js?v=28"></script>
 
 <div class="stu-modal-wrap" id="stu-modal-wrap">
   <div class="stu-modal-overlay" onclick="closeStudentModal()"></div>
@@ -678,6 +679,8 @@ if ('serviceWorker' in navigator) {
       <div id="status-modal-name" style="font-size:13.5px;color:var(--tx2);margin-bottom:14px"></div>
       <div style="font-size:12px;color:var(--tx3);margin-bottom:6px">新狀態</div>
       <div id="status-modal-opts" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px"></div>
+      <!-- 畢業／離開才出現：從哪天起不上，以及會結束哪幾門課（js/students.js renderStatusEndBox）-->
+      <div id="status-modal-end" style="margin-bottom:16px"></div>
       <div style="font-size:12px;color:var(--tx3);margin-bottom:6px">備註（選填，例如「國中畢業繼續高中」「家中因素暫停」）</div>
       <textarea id="status-modal-note" rows="3" style="width:100%;padding:8px 10px;border:1.5px solid var(--br);border-radius:var(--rs);font-family:inherit;font-size:13px;box-sizing:border-box;resize:vertical;color:var(--tx)"></textarea>
       <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
