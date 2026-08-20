@@ -27,6 +27,7 @@ var STAFF_NAMES={
   'william90525@gmail.com':'William',
   'hobemath@gmail.com':'HOBE',
   'derek74123@gmail.com':'Derek',
+  'a0910605275@gmail.com':'文文',
 };
 function actMe(){try{return firebase.auth().currentUser?.email||'';}catch(_){return'';}}
 function actName(email){const e=email||actMe();return STAFF_NAMES[e]||String(e||'').split('@')[0]||'某人';}
