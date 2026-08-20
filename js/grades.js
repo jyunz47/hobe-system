@@ -11,6 +11,12 @@ var gradesCurrentYpid=null;
 var gradesSaveTimer=null;
 var gradesPendingSave=false;
 var _lastGradeId=0;
+// 多裝置同步 第二刀（2026-08-20）：與 attendance.js 同一套（基準＋交易逐筆合併＋即時監聽）
+var gradesBase={};
+var gradesUnsub=null;
+var gradesWatchYpid=null;
+var gradesInFlight=false;
+var gradesFailStreak=0;
 
 function gradesDocRef(ypid){return db.collection('sharedData').doc('grades_'+ypid);}
 
@@ -29,8 +35,9 @@ function gradesRebuildIdx(bucket){
 async function loadGrades(){
   const ypid=yearPeriodId();
   gradesCurrentYpid=ypid;
-  if(gradesCache[ypid])return;
+  if(gradesCache[ypid]){watchGrades();return;}
   gradesCache[ypid]={records:[],idx:new Map()};
+  gradesBase[ypid]=[];
   try{
     if(!firebase.auth().currentUser)return;
     const snap=await gradesDocRef(ypid).get();
@@ -38,8 +45,41 @@ async function loadGrades(){
       const d=snap.data();
       gradesCache[ypid].records=Array.isArray(d.records)?d.records:[];
       gradesRebuildIdx(gradesCache[ypid]);
+      gradesBase[ypid]=syncClone(gradesCache[ypid].records);
     }
   }catch(e){console.error('loadGrades failed',e);}
+  watchGrades();
+}
+
+// ── 別台登了成績，這台就跟上 ──
+function watchGrades(){
+  const ypid=gradesCurrentYpid;
+  if(!ypid||!isSignedIn())return;
+  if(gradesUnsub&&gradesWatchYpid===ypid)return;
+  unwatchGrades();
+  gradesWatchYpid=ypid;
+  try{
+    gradesUnsub=gradesDocRef(ypid).onSnapshot(snap=>{
+      if(!snap.exists)return;
+      if(snap.metadata.hasPendingWrites)return;
+      onGradesRemote(ypid,snap.data());
+    },err=>{
+      console.error('grades onSnapshot failed',err);
+      gradesUnsub=null;gradesWatchYpid=null;
+    });
+  }catch(e){console.error('watchGrades failed',e);}
+}
+function unwatchGrades(){
+  if(gradesUnsub){try{gradesUnsub();}catch(_){}}
+  gradesUnsub=null;gradesWatchYpid=null;
+}
+function onGradesRemote(ypid,d){
+  const b=gradesCache[ypid];if(!b)return;
+  if(gradesPendingSave||gradesInFlight)return;   // 自己那一發交易會把兩邊合起來
+  const next=Array.isArray(d&&d.records)?d.records:[];
+  if(syncSame(next,b.records))return;
+  b.records=next;gradesRebuildIdx(b);gradesBase[ypid]=syncClone(next);
+  noteRemoteChange(['成績']);
 }
 
 function gradesBucket(){return gradesCache[gradesCurrentYpid]||{records:[],idx:new Map()};}
@@ -75,8 +115,25 @@ function scheduleGradesSave(){gradesPendingSave=true;clearTimeout(gradesSaveTime
 async function saveGrades(){
   const ypid=gradesCurrentYpid;const b=gradesCache[ypid];
   if(!b)return;
-  try{await gradesDocRef(ypid).set({records:b.records},{merge:true});gradesPendingSave=false;}
-  catch(e){console.error('saveGrades failed',e);}
+  gradesPendingSave=false;
+  gradesInFlight=true;
+  try{
+    const merged=await syncSaveRecords(gradesDocRef(ypid),fn=>db.runTransaction(fn),
+      gradesBase[ypid]||[],b.records,recIdKeyOf);
+    if(merged&&!gradesPendingSave){
+      const gained=!syncSame(merged,b.records);
+      b.records=merged;gradesRebuildIdx(b);gradesBase[ypid]=syncClone(merged);
+      if(gained)noteRemoteChange(['成績']);
+    }
+    gradesFailStreak=0;
+  }catch(e){
+    console.error('saveGrades failed',e);
+    gradesPendingSave=true;
+    gradesFailStreak++;
+    if(gradesFailStreak===1)toast('成績存到雲端失敗，改動只在這台裝置上（會自動重試）：'+(e?.message||e),'err',true);
+    clearTimeout(gradesSaveTimer);
+    gradesSaveTimer=setTimeout(saveGrades,syncRetryDelay(gradesFailStreak));
+  }finally{gradesInFlight=false;}
 }
 
 // ── 段考成績（exams）— sharedData/exams_<yearPeriodId> ──
@@ -87,6 +144,11 @@ var examsCurrentYpid=null;
 var examsSaveTimer=null;
 var examsPendingSave=false;
 var _lastExamId=0;
+var examsBase={};
+var examsUnsub=null;
+var examsWatchYpid=null;
+var examsInFlight=false;
+var examsFailStreak=0;
 
 function examsDocRef(ypid){return db.collection('sharedData').doc('exams_'+ypid);}
 
@@ -102,8 +164,9 @@ function examsRebuildIdx(bucket){
 async function loadExams(){
   const ypid=yearPeriodId();
   examsCurrentYpid=ypid;
-  if(examsCache[ypid])return;
+  if(examsCache[ypid]){watchExams();return;}
   examsCache[ypid]={records:[],idx:new Map()};
+  examsBase[ypid]=[];
   try{
     if(!firebase.auth().currentUser)return;
     const snap=await examsDocRef(ypid).get();
@@ -111,8 +174,40 @@ async function loadExams(){
       const d=snap.data();
       examsCache[ypid].records=Array.isArray(d.records)?d.records:[];
       examsRebuildIdx(examsCache[ypid]);
+      examsBase[ypid]=syncClone(examsCache[ypid].records);
     }
   }catch(e){console.error('loadExams failed',e);}
+  watchExams();
+}
+
+function watchExams(){
+  const ypid=examsCurrentYpid;
+  if(!ypid||!isSignedIn())return;
+  if(examsUnsub&&examsWatchYpid===ypid)return;
+  unwatchExams();
+  examsWatchYpid=ypid;
+  try{
+    examsUnsub=examsDocRef(ypid).onSnapshot(snap=>{
+      if(!snap.exists)return;
+      if(snap.metadata.hasPendingWrites)return;
+      onExamsRemote(ypid,snap.data());
+    },err=>{
+      console.error('exams onSnapshot failed',err);
+      examsUnsub=null;examsWatchYpid=null;
+    });
+  }catch(e){console.error('watchExams failed',e);}
+}
+function unwatchExams(){
+  if(examsUnsub){try{examsUnsub();}catch(_){}}
+  examsUnsub=null;examsWatchYpid=null;
+}
+function onExamsRemote(ypid,d){
+  const b=examsCache[ypid];if(!b)return;
+  if(examsPendingSave||examsInFlight)return;
+  const next=Array.isArray(d&&d.records)?d.records:[];
+  if(syncSame(next,b.records))return;
+  b.records=next;examsRebuildIdx(b);examsBase[ypid]=syncClone(next);
+  noteRemoteChange(['段考成績']);
 }
 
 function examsBucket(){return examsCache[examsCurrentYpid]||{records:[],idx:new Map()};}
@@ -145,6 +240,23 @@ function scheduleExamsSave(){examsPendingSave=true;clearTimeout(examsSaveTimer);
 async function saveExams(){
   const ypid=examsCurrentYpid;const b=examsCache[ypid];
   if(!b)return;
-  try{await examsDocRef(ypid).set({records:b.records},{merge:true});examsPendingSave=false;}
-  catch(e){console.error('saveExams failed',e);}
+  examsPendingSave=false;
+  examsInFlight=true;
+  try{
+    const merged=await syncSaveRecords(examsDocRef(ypid),fn=>db.runTransaction(fn),
+      examsBase[ypid]||[],b.records,recIdKeyOf);
+    if(merged&&!examsPendingSave){
+      const gained=!syncSame(merged,b.records);
+      b.records=merged;examsRebuildIdx(b);examsBase[ypid]=syncClone(merged);
+      if(gained)noteRemoteChange(['段考成績']);
+    }
+    examsFailStreak=0;
+  }catch(e){
+    console.error('saveExams failed',e);
+    examsPendingSave=true;
+    examsFailStreak++;
+    if(examsFailStreak===1)toast('段考成績存到雲端失敗，改動只在這台裝置上（會自動重試）：'+(e?.message||e),'err',true);
+    clearTimeout(examsSaveTimer);
+    examsSaveTimer=setTimeout(saveExams,syncRetryDelay(examsFailStreak));
+  }finally{examsInFlight=false;}
 }

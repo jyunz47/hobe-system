@@ -115,11 +115,20 @@ function setLoginErr(msg){
 function signOut(){
   // 還有沒寫上去的改動就先送（1.5 秒的 debounce 內按登出會剛好卡在這）；不等它回來
   if(drivePendingSave){clearTimeout(driveSaveTimer);saveToFirestore();}
+  if(attPendingSave){clearTimeout(attSaveTimer);saveAttendance();}
+  if(gradesPendingSave){clearTimeout(gradesSaveTimer);saveGrades();}
+  if(examsPendingSave){clearTimeout(examsSaveTimer);saveExams();}
   dayEvents=[];weekEvents=[];makeupList=[];
-  driveData=emptyDriveData();
-  driveDirty.clear();drivePendingSave=false;clearTimeout(driveSaveTimer);
+  driveData=emptyDriveData();driveBase=emptyDriveData();
+  driveDirty.clear();driveInFlight.clear();drivePendingSave=false;clearTimeout(driveSaveTimer);
+  driveFailStreak=0;attFailStreak=0;gradesFailStreak=0;examsFailStreak=0;
   unwatchMain();       // 先斷監聽再登出，免得換帳號還聽著舊連線
   unwatchActivity();
+  // 點名／成績／段考：斷監聽並清快取，換帳號才不會看到上一個帳號留下的資料
+  unwatchAttendance();unwatchGrades();unwatchExams();
+  attCache={};attBase={};attCurrentYpid=null;
+  gradesCache={};gradesBase={};gradesCurrentYpid=null;
+  examsCache={};examsBase={};examsCurrentYpid=null;
   actEvents=[];actTodos=[];actLoaded=false;actHasNew=false;actPruned=false;updateActivityBadge();
   firebase.auth().signOut();
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='none');
@@ -148,16 +157,19 @@ firebase.initializeApp(firebaseConfig);
 var db=firebase.firestore();
 var SHARED_DOC=db.collection('sharedData').doc('main');
 
-// 把雲端那份套進 driveData。**跳過 driveDirty 裡的欄位**——那幾欄本機有還沒寫上去的改動，
-// 被雲端的舊值蓋掉就等於使用者剛做的事憑空消失。回傳這次真的變動的欄位（沒變就不用重畫）。
+// 把雲端那份套進 driveData。**跳過 driveDirty／driveInFlight 裡的欄位**——那幾欄本機有還沒
+// 寫上去的改動，被雲端的舊值蓋掉就等於使用者剛做的事憑空消失；那幾欄改由存檔時的交易合併
+//（見 saveToFirestore）。回傳這次真的變動的欄位（沒變就不用重畫）。
+// 同時把 driveBase 對齊雲端：沒有本機改動的欄位，基準本來就該等於雲端那份。
 // ⚠️ DRIVE_KEYS 少一欄＝那欄永遠讀不到（歷史上 courses/teachers/absences 都各漏過一次，
 //    症狀是「新增課程按更新後消失」「請假標記被空陣列蓋掉」）。加新欄位記得同步 state.js。
 function applyRemoteMain(d){
   const changed=[];
   DRIVE_KEYS.forEach(k=>{
-    if(driveDirty.has(k))return;
+    if(driveDirty.has(k)||driveInFlight.has(k))return;
     const next=(d&&d[k])||[];
-    if(JSON.stringify(next)===JSON.stringify(driveData[k]||[]))return;
+    driveBase[k]=syncClone(next);
+    if(syncSame(next,driveData[k]))return;
     driveData[k]=next;changed.push(k);
   });
   return changed;
@@ -177,7 +189,7 @@ async function loadFromFirestore(){
     }
     const snap=await SHARED_DOC.get();
     if(snap.exists)applyRemoteMain(snap.data());
-    else driveData=emptyDriveData();
+    else{driveData=emptyDriveData();driveBase=emptyDriveData();}
   }catch(e){
     // ⚠️ 讀失敗時**保留本機既有資料**：以前這裡會先把 driveData 清空再讀，一旦讀失敗
     // 就整份留在空的狀態，下一個動作直接把空陣列寫回雲端＝把所有人的資料清光。
@@ -197,20 +209,49 @@ function scheduleDriveSave(...keys){
   driveSaveTimer=setTimeout(saveToFirestore,1500);
 }
 
+// 逐筆合併寫回（第二刀，2026-08-20）。以前是把整份陣列覆蓋上去，兩台在 1.5 秒內都動到
+// 同一欄就會後蓋前；現在在交易裡「讀雲端最新 → 只疊上我真的動過的那幾筆 → 寫回」。
 async function saveToFirestore(){
   if(!driveDirty.size){drivePendingSave=false;return;}
   const sending=[...driveDirty];
   driveDirty.clear();   // 先清：寫的這段時間又改到的欄位要留在集合裡、下一發再送
-  const payload={};
-  sending.forEach(k=>{payload[k]=driveData[k]||[];});
+  sending.forEach(k=>driveInFlight.add(k));
+  // 定格這一發要送的內容。交易可能被 Firestore 重跑，每次都拿同一份算 ops 才不會半新半舊
+  const localSnap={};sending.forEach(k=>{localSnap[k]=syncClone(driveData[k]);});
   try{
-    await SHARED_DOC.set(payload,{merge:true});
+    const res=await db.runTransaction(async tx=>{
+      const snap=await tx.get(SHARED_DOC);
+      const out=syncMergeMain(snap.exists?snap.data():{},sending,localSnap,driveBase);
+      tx.set(SHARED_DOC,out.payload,{merge:true});
+      return out;
+    });
+    // 合併結果＝雲端現在的樣子，本機跟著採用（這樣才看得到別台在同一欄加的東西），
+    // 基準也移到這裡。交易期間又被改到的欄位跳過：那筆新編輯還沒送出去，蓋掉就沒了，
+    // 留著舊基準讓下一發重算即可（重送已送過的筆是冪等的，不會出事）。
+    const gained=[];
+    sending.forEach(k=>{
+      if(driveDirty.has(k))return;
+      if(!syncSame(res.payload[k],localSnap[k]))gained.push(k);
+      driveData[k]=res.payload[k];
+      driveBase[k]=syncClone(res.payload[k]);
+    });
     drivePendingSave=driveDirty.size>0;
+    driveFailStreak=0;
+    // 合併帶回了別台的東西 → 畫面要跟上（自己寫出去的那一發 onSnapshot 不會再通知我們）
+    if(gained.length){
+      if(gained.includes('makeupScheduled'))rebuildMakeupMatchMap();
+      noteRemoteChange(gained.map(k=>DRIVE_LABEL[k]||k));
+    }
   }catch(e){
     console.error('saveToFirestore failed',e);
     sending.forEach(k=>driveDirty.add(k));   // 還回去，不然這批改動就這樣無聲消失
     drivePendingSave=true;
-    toast('存到雲端失敗，改動只在這台裝置上：'+(e?.message||e),'err',true);
+    driveFailStreak++;
+    if(driveFailStreak===1)toast('存到雲端失敗，改動只在這台裝置上（會自動重試）：'+(e?.message||e),'err',true);
+    clearTimeout(driveSaveTimer);
+    driveSaveTimer=setTimeout(saveToFirestore,syncRetryDelay(driveFailStreak));
+  }finally{
+    sending.forEach(k=>driveInFlight.delete(k));
   }
 }
 
@@ -251,22 +292,30 @@ async function onMainRemote(d){
   const changed=applyRemoteMain(d);
   if(!changed.length)return;
   if(changed.includes('makeupScheduled'))rebuildMakeupMatchMap();
+  await noteRemoteChange(changed.map(k=>DRIVE_LABEL[k]||k));
+}
+
+// 別台的更新已經進本機了：提示一行，畫面正開著表單就等關掉再重畫。
+// 課表那包（onMainRemote）、存檔合併帶回來的、點名／成績／段考（attendance.js、grades.js）
+// 全走這一支，訊息與延後重畫的規則才只有一份。
+async function noteRemoteChange(labels){
+  if(!labels||!labels.length||!isSignedIn())return;
+  const msg='別台更新了：'+labels.join('、');
   if(isEditingNow()){
-    // 正在編輯 → 資料已經進 driveData 了（安全的，dirty 欄位不會被動到），只是先不重畫。
+    // 正在編輯 → 資料已經進本機了（安全的，自己還沒存的改動不會被動到），只是先不重畫。
     // 用輪詢等它關掉：關閉的路徑太多，逐個掛 hook 遲早漏一個。
-    if(!mainRepaintPending){
-      mainRepaintPending=true;
-      toast('別台更新了：'+changed.map(k=>DRIVE_LABEL[k]||k).join('、')+'（關掉目前的視窗後會自動更新）','inf');
-      clearInterval(mainRepaintTimer);
-      mainRepaintTimer=setInterval(()=>{
-        if(isEditingNow())return;
-        clearInterval(mainRepaintTimer);mainRepaintTimer=null;
-        repaintFromRemote();
-      },1500);
-    }
+    if(mainRepaintPending)return;
+    mainRepaintPending=true;
+    toast(msg+'（關掉目前的視窗後會自動更新）','inf');
+    clearInterval(mainRepaintTimer);
+    mainRepaintTimer=setInterval(()=>{
+      if(isEditingNow())return;
+      clearInterval(mainRepaintTimer);mainRepaintTimer=null;
+      repaintFromRemote();
+    },1500);
     return;
   }
-  toast('別台更新了：'+changed.map(k=>DRIVE_LABEL[k]||k).join('、'),'inf');
+  toast(msg,'inf');
   await repaintFromRemote();
 }
 

@@ -26,10 +26,16 @@ var DRIVE_LABEL={studentList:'學生',makeupScheduled:'補課安排',enrollments
   coursePrices:'價目表',courseSettings:'課程設定',courses:'課程',teachers:'老師',absences:'請假'};
 function emptyDriveData(){const o={};DRIVE_KEYS.forEach(k=>o[k]=[]);return o;}
 var driveData=emptyDriveData();
+// 上次跟雲端對齊時的那份快照（多裝置同步 第二刀，2026-08-20）。
+// 「我這台真的動了哪幾筆」＝ driveData 對比 driveBase，存檔只送那幾筆（見 js/sync.js）。
+var driveBase=emptyDriveData();
 var driveSaveTimer=null;
 // 本機改過、還沒寫上雲端的欄位。身兼兩職：
 //   ① 存檔時只送這幾欄　② 別台的更新不准蓋這幾欄（自己的編輯優先，寫上去後才放行）
 var driveDirty=new Set();
+// 交易正在路上的欄位：合併結果還沒回來，別台的更新先不要套進來（回來時會一起帶到）
+var driveInFlight=new Set();
+var driveFailStreak=0;  // 連續存檔失敗次數：決定下次重試隔多久、以及要不要再跳一次提示
 var drivePendingSave=false; // 本機是否有尚未寫入 Firestore 的改動（refreshCurrent 重讀前用來決定要不要先 flush）
 var mainUnsub=null;         // sharedData/main 的 onSnapshot 取消訂閱函式（登出要叫）
 var mainRepaintPending=false; // 收到別台的更新、但畫面正開著表單 → 先記著，關掉再重畫

@@ -28,6 +28,9 @@
      必須排在 stub 前面：下面那塊的 var driveData = {...} 會把這裡的初值蓋掉，順序反了就沒 stub 資料。 -->
 <script src="../js/state.js"></script>
 
+<!-- 0a2. 逐筆合併的純函式（多裝置同步 第二刀）。不碰 DOM 也不碰 Firebase，直接載真身 -->
+<script src="../js/sync.js"></script>
+
 <!-- 0b. enrollment.js 依賴的全域 stub（測試固定在 2025 學年下學期） -->
 <script>
 var driveData = { studentList: [], makeupScheduled: [], enrollments: [], coursePrices: [] };
@@ -121,6 +124,7 @@ function toast() {}
 <script src="student-leaves.test.js"></script>
 <script src="search.test.js"></script>
 <script src="teacher-schedule.test.js"></script>
+<script src="sync-merge.test.js"></script>
 <!-- remind 放最後：它把 currentPeriodId 切成 summer 且不還原，排前面會影響後面的測試 -->
 <script src="remind.test.js"></script>
 

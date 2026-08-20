@@ -4,11 +4,34 @@
 // 用法：在 .test.js 檔案中呼叫 suite(...) 註冊，整份 HTML 載入完後自動執行所有測試
 
 const _suites = [];
+const _pending = [];          // atest 註冊的非同步測試：全部跑完才結算總數
 let _passed = 0, _failed = 0;
 let _currentSection = null;
 
 function suite(name, fn) {
   _suites.push({ name, fn });
+}
+
+// 非同步版的 test（給要 await 假 Firestore 交易的同步測試用）。
+// 跟 test 一樣就地把結果塞回自己那個 section，只是等 promise 回來才塞。
+function atest(name, fn) {
+  const section = _currentSection;
+  _pending.push(
+    Promise.resolve().then(fn).then(() => {
+      const div = document.createElement('div');
+      div.className = 'case pass';
+      div.textContent = '✓ ' + name;
+      section.appendChild(div);
+      _passed++;
+    }, e => {
+      const div = document.createElement('div');
+      div.className = 'case fail';
+      div.innerHTML = '✗ ' + escapeHtml(name) + '<pre>' + escapeHtml(e.message) + '</pre>';
+      section.appendChild(div);
+      _failed++;
+      console.error('[FAIL]', name, e);
+    })
+  );
 }
 
 function test(name, fn) {
@@ -67,7 +90,7 @@ function escapeHtml(s) {
 // ⚠ 這裡要等 DOMContentLoaded，不能用 setTimeout(0)：本檔是 <script>，後面還有好幾個
 // 測試檔要下載。冷快取時瀏覽器會在等網路的空檔把 timer 跑掉 → 那時只註冊了前兩個檔，
 // 畫面顯示「26/26 全綠」，其實有一半的測試根本沒跑（安靜地少測，最危險的那種）。
-function _runAllSuites() {
+async function _runAllSuites() {
   const root = document.getElementById('results');
   _suites.forEach(({ name, fn }) => {
     const section = document.createElement('section');
@@ -76,6 +99,8 @@ function _runAllSuites() {
     _currentSection = section;
     fn();
   });
+  // 等 atest 註冊的非同步測試全部回來，總數才算得準
+  if (_pending.length) await Promise.all(_pending);
   const total = _passed + _failed;
   const summary = document.createElement('div');
   summary.className = 'summary ' + (_failed === 0 ? 'all-pass' : 'has-fail');
