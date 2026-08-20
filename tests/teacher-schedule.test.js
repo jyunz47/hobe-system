@@ -154,16 +154,53 @@ suite('可排時段條件 → 推薦時段', ()=>{
 
 // 這塊是「畫面不能整個炸掉」的防線：七格 grid、兩個區塊的文案都要在。
 // 用相對於「今天」的那一週（課是每週重複的，所以哪一週跑都有課），不釘死日期。
-suite('老師課表畫面：七格都在、不丟例外', ()=>{
-  test('週一～週日七格＋課塊＋沒課的格子', ()=>{
+suite('老師課表畫面：七天 × 時間軸，不丟例外', ()=>{
+  test('週一～週日七欄＋課塊＋沒課的那幾天', ()=>{
     resetTsch();
     tschState={tid:1,offset:0};
     const html=teacherSchHtml(T_LEE());
-    TSCH_WD.forEach(([,lbl])=>assertTrue(html.includes(lbl),'要有 '+lbl+' 那格'));
+    TSCH_WD.forEach(([,lbl])=>assertTrue(html.includes(lbl),'要有 '+lbl+' 那欄'));
     assertTrue(html.includes('國二數學班'),'課塊要有課名');
     assertTrue(html.includes('小教室'),'課塊要有教室');
     assertTrue(html.includes('沒課'),'空的那幾天要寫沒課');
     tschState=null;
+  });
+
+  test('時間軸預設 15:00–21:30（老闆指定），刻度都畫出來', ()=>{
+    resetTsch();
+    tschState={tid:1,offset:0};
+    const html=teacherSchHtml(T_LEE());
+    ['15:00','16:00','17:00','18:00','19:00','20:00','21:00','21:30']
+      .forEach(t=>assertTrue(html.includes('>'+t+'<'),'刻度要有 '+t));
+    assertFalse(html.includes('>14:00<'),'預設不畫 15:00 以前');
+    assertFalse(html.includes('已延伸成'),'沒有課超出範圍時不該出現延伸說明');
+    tschState=null;
+  });
+
+  test('課塊照時間定位：19:00–20:30 在 15:00–21:30 軸上的位置與高度', ()=>{
+    resetTsch();
+    tschState={tid:1,offset:0};
+    const html=teacherSchHtml(T_LEE());
+    // 軸 390 分鐘；19:00 距軸首 240 分 → 61.54%，90 分 → 23.08%
+    assertTrue(html.includes('top:61.54%'),'19:00 要落在 61.54%');
+    assertTrue(html.includes('height:23.08%'),'90 分鐘要占 23.08%');
+    tschState=null;
+  });
+
+  test('有課落在 15:00 前 → 軸自動延伸，而且講明延伸過（課不能消失）', ()=>{
+    resetTsch();
+    const cs=getCourses().slice();
+    cs.push({id:9,name:'週六早上加強',type:'一對一',room:'108',status:'開課中',teacherIds:[1],
+      schedule:{mode:'weekly',slots:[{weekday:6,start:'09:00',end:'10:30'}],phases:[]}});
+    driveData.courses=cs;
+    driveData.enrollments=[...driveData.enrollments,{studentId:3,courseId:9,periodId:yearPeriodId('summer')}];
+    tschState={tid:1,offset:0};
+    const html=teacherSchHtml(T_LEE());
+    assertTrue(html.includes('週六早上加強'),'超出預設範圍的課要看得到');
+    assertTrue(html.includes('>09:00<'),'軸要長到 09:00');
+    assertTrue(html.includes('已延伸成 09:00–21:30'),'要講明軸被延伸了');
+    tschState=null;
+    resetTsch();
   });
 
   test('沒設條件時推薦區給的是指路、不是空白', ()=>{

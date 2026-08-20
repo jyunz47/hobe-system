@@ -330,6 +330,7 @@ async function coRemoveEnroll(enId){
       <p>這筆登記（含自訂單價）會整筆消失，<b>過去的堂數一起不見</b>，舊課堂的名單也會少他一人。</p>
       <div class="ask-note">只是「某天起不上」的話，改用名單上的 📅 設修課起訖——過去的堂數會留著。</div>`});
   if(!ok)return;
+  stampNameAutoBeforeRosterCut([en.courseId]);   // 刪之前先確定這門課的名字會不會滾（見 courses.js）
   saveEnrollments(getEnrollments().filter(e=>e.id!==enId));
   logAct('roster',`把 ${studentName(en.studentId)} 退出課程`,en.courseTitle||'','整筆登記移除（過去堂數一起消失）');
   toast(`已退課：${studentName(en.studentId)} — ${en.courseTitle}`,'ok');

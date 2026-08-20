@@ -897,7 +897,9 @@ function confirmDeleteStudent(){
   if(!s)return;
   const typed=document.getElementById('delete-modal-confirm').value.trim();
   if(typed!==s.name)return toast(`請輸入「${s.name}」以確認刪除`,'err');
-  const enrollCount=getEnrollments().filter(e=>e.studentId===s.id).length;
+  const mine=getEnrollments().filter(e=>e.studentId===s.id);
+  const enrollCount=mine.length;
+  stampNameAutoBeforeRosterCut(mine.map(e=>e.courseId));   // 刪之前先確定這幾門課的名字會不會滾
   saveStudentList(getStudentList().filter(x=>x.id!==s.id));
   saveEnrollments(getEnrollments().filter(e=>e.studentId!==s.id));
   logAct('student','徹底刪除學生',`${s.name}（${s.grade}）`,`連同 ${enrollCount} 筆修課登記，不可復原`);

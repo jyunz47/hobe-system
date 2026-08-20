@@ -41,15 +41,34 @@ function courseNameOn(co,day){
   return co.name||'';
 }
 // 這門課的名字能不能跟著名單滾？
-// 存檔時記旗標 `nameAuto`（課名欄留空＝交給自動命名）。舊課沒這個旗標 → 回推：
+// 存檔時記旗標 `nameAuto`（課名欄留空＝交給自動命名）。旗標沒說是 true 就 → 回推：
 // 現在的名字若等於自動命名算得出來的（全部登記或今天在籍的名單），就當它是自動的。
 // 判斷刻意寬鬆——老闆選了「舊課也滾」，寧可多滾也不要一門一門重存才生效。
 function courseNameIsAuto(co){
   if(!co)return false;
-  if(typeof co.nameAuto==='boolean')return co.nameAuto;
+  if(co.nameAuto===true)return true;
   const nm=(co.name||'').trim();
   if(!nm)return true;
+  // nameAuto===false 也走回推（2026-08-20）：2026-08-03～08-20 的表單會把自動算出的名字直接
+  // 填進課名欄，存檔時每一門課都被記成「手取的」（nameAuto:false）——旗標對那批資料等於沒有資訊。
+  // 名字正好等於自動命名算得出來的 → 當它是自動的；真正手取的名字（「週三晚班」）長得不一樣，照舊凍住。
   return nm===courseSuggestNameOn(co,null)||nm===courseSuggestNameOn(co,toDateStr(new Date()));
+}
+
+// 名單「整筆刪除」前先蓋章（2026-08-20）：上面的回推靠「名字＝自動算得出來的」，登記一刪，
+// 回推的依據就跟著消失（少一人，名字當然對不起來）→ 本來會滾的課名就此凍住，退班後還掛著舊名。
+// 所以在刪之前先問一次、把答案寫死進 nameAuto，退課／刪學生之後課名才滾得動。
+function stampNameAutoBeforeRosterCut(courseIds){
+  const ids=[...new Set((courseIds||[]).filter(id=>id!=null))];
+  if(!ids.length)return;
+  const list=getCourses().slice();
+  let hit=false;
+  ids.forEach(id=>{
+    const co=list.find(c=>c.id===id);
+    if(!co||co.nameAuto===true)return;
+    if(courseNameIsAuto(co)){co.nameAuto=true;hit=true;}
+  });
+  if(hit)saveCourses(list);
 }
 // 滾動判型（courseTypeByCount / courseTypeOn）住在 schedule.js，跟課堂展開器同一支。
 
@@ -316,9 +335,14 @@ function cfSubjInput(el){cfSubjectInput(el.value);const m=document.getElementByI
 function cfSubjBlur(){setTimeout(()=>{const m=document.getElementById('cf-subj-menu');if(m)m.hidden=true;},120);}
 function cfSubjPick(v){cfSubjectInput(v);cfSubjectChange();}
 function cfPinType(t){cfState.pinnedType=cfState.pinnedType===t?null:t;cfAfterTypeAffecting();}
+// 課名欄：留白＝交給自動命名（placeholder 顯示現在會算出來的名字），有打字＝手取、固定不動。
+// ⚠ 不要把自動算出的名字塞進 value：那樣存檔時分不出「他自己打的」還是「系統填的」，
+//   整門課會被記成手取的，退班後課名就不會跟著人數變了（2026-08-20 修）。
 function cfNameInput(v){
-  if(v.trim()===''){cfState.nameTouched=false;cfState.name=cfAutoName();return;} // 清空＝回到自動命名
-  cfState.name=v;cfState.nameTouched=true;
+  const typed=v.trim()!=='';
+  cfState.name=typed?v:'';
+  cfState.nameTouched=typed;
+  cfSyncAutoName();
 }
 function cfTeacherInput(v){cfState.teacherInput=v;}
 function cfAddTeacher(){const n=(cfState.teacherInput||'').trim();if(!n)return;if(!cfState.teachers.includes(n))cfState.teachers.push(n);cfState.teacherInput='';renderCourseForm();}
@@ -378,18 +402,23 @@ function cfAfterTypeAffecting(){
   if(!cfState.needsGradeTouched)cfState.needsGrade=(cfType()==='練習課');
   renderCourseForm();
 }
-// 沒手改過課名時，讓課名跟著欄位長
+// 課名欄下面那句提示：手取／自動兩種狀態講不同的話
+function cfNameHint(){
+  return cfState.nameTouched
+    ?'這是手取的名字，名單怎麼變都不會動。清空就交回自動命名。'
+    :'自動命名：期中有人退出／插班，課名自己跟著變（兩人的「○、○班」剩一人會變成「○家教」）。想固定就直接打上去。';
+}
+// 沒手打課名時，讓「自動會叫什麼」的預覽（placeholder）跟著名單／科目／星期長
 function cfSyncAutoName(){
-  if(cfState.nameTouched)return;
-  cfState.name=cfAutoName();
   const el=document.getElementById('cf-name');
-  if(el)el.value=cfState.name;
+  if(el&&!cfState.nameTouched)el.placeholder=cfAutoName()||'選學生、填科目後自動命名';
+  const h=document.getElementById('cf-name-hint');
+  if(h)h.textContent=cfNameHint();
 }
 
 // ── 表單渲染（載點二選一：新增頁 add-course-body / 編輯 modal cf-modal-body）──
 function renderCourseForm(){
   const st=cfState,t=cfType(),edit=st.editId!=null,onPage=st.target==='page';
-  if(!st.nameTouched)st.name=cfAutoName();
   if(!onPage)document.getElementById('cf-modal-title').textContent=edit?'✎ 編輯課程':'＋ 新增課程';
   const noFee=(t==='練習課'||t==='試聽');
 
@@ -580,9 +609,7 @@ function renderCourseForm(){
     ${st.pinnedType?'':'<div class="cm-hint">期中有人退出／插班，課堂的課型會自己跟著變（補課時長、課前 1hr 內請假的半堂規則都照著走）。老師費率單位不跟著變，固定看這裡的型。</div>'}
     <div class="cm-lbl" style="margin-top:12px">課名（留空＝自動命名，會跟著名單變；自己打＝固定不動）</div>
     <input class="cm-input" id="cf-name" name="search-coursename" autocomplete="off" value="${esc(st.name)}" placeholder="${esc(cfAutoName()||'選學生、填科目後自動命名')}" oninput="cfNameInput(this.value)">
-    <div class="cm-hint">${(st.name||'').trim()
-      ?'這是手取的名字，名單怎麼變都不會動。清空就交回自動命名。'
-      :'自動命名：期中有人退出／插班，課名自己跟著變（兩人的「○、○班」剩一人會變成「○家教」）。想固定就直接打上去。'}</div>
+    <div class="cm-hint" id="cf-name-hint">${cfNameHint()}</div>
     ${namePhaseBlocks}
     <button class="cf-add-slot" onclick="cfAddNamePhase()">＋ 換課名（某日起改叫別的）</button>
     ${st.namePhases.length?'<div class="cm-hint">指定某天起的名字，蓋過自動命名：那天之前的課堂顯示舊名，之後顯示新名。</div>':''}
@@ -670,7 +697,8 @@ function cfSubmit(){
   const rec={
     id:st.editId??Date.now(),
     // nameAuto：課名欄留空＝交給自動命名（＝之後課名跟著名單滾）；有手打＝這個名字固定不動
-    name,nameAuto:!(st.name||'').trim(),namePhases,type:t,typePinned:!!st.pinnedType,teacherIds,
+    // 看的是「有沒有手打過」而不是 st.name 有沒有值——name 存的是當下算出來的快照，永遠有值
+    name,nameAuto:!st.nameTouched,namePhases,type:t,typePinned:!!st.pinnedType,teacherIds,
     teacherRate:t==='練習課'?null:(String(st.teacherRate).trim()===''?null:Math.max(0,parseInt(st.teacherRate,10)||0)),
     schedule:{mode:st.mode,slots,phases},
     room:st.room||'',
@@ -958,30 +986,81 @@ function teacherSchHtml(t){
   const wkLbl=tschState.offset===0?'本週':tschState.offset===1?'下一週':tschState.offset===-1?'上一週'
     :(tschState.offset>0?`往後 ${tschState.offset} 週`:`往前 ${Math.abs(tschState.offset)} 週`);
 
-  // 七格：一天一格，格內按時間排
-  const days=[];
+  // ── 七天 × 時間軸（2026-08-19 老闆要求：側邊加時間軸，下午 3 點～晚上 9 點半）──
+  // 軸預設 15:00–21:30。那一週若有課落在範圍外（暑假平日 12:30 開門、週末 09:00 的課），
+  // 軸**自動往外長到裝得下**——寧可軸變長，也不要有課消失在畫面外（軸下面會註明延伸過）。
+  const AX_DEF_S=15*60,AX_DEF_E=21*60+30;
+  let axS=AX_DEF_S,axE=AX_DEF_E;
+  evs.forEach(e=>{
+    axS=Math.min(axS,Math.floor(_minOfDay(e.startDt)/60)*60);
+    axE=Math.max(axE,Math.ceil(_minOfDay(e.endDt)/60)*60);
+  });
+  const axTotal=Math.max(axE-axS,60);
+  const bodyH=Math.round(axTotal/60*54);          // 一小時 54px
+  const pctOf=m=>((m-axS)/axTotal*100).toFixed(2);
+  let hourLines='',hourLbls='';
+  for(let m=axS;m<=axE;m+=60){
+    if(m>axS)hourLines+=`<div class="tsch-hline" style="top:${pctOf(m)}%"></div>`;
+    hourLbls+=`<div class="tsch-hlbl" style="top:${pctOf(m)}%">${minToHHMM(m)}</div>`;
+  }
+  if(axE%60)hourLbls+=`<div class="tsch-hlbl" style="top:100%">${minToHHMM(axE)}</div>`;
+
+  // 現在時刻的紅線：顯示的這一週包含今天、而且現在落在軸的範圍內才畫
+  const nowMin=_minOfDay(new Date());
+  const todayDi=Math.round((today-mon)/86400000);
+  const showNow=todayDi>=0&&todayDi<=6&&nowMin>=axS&&nowMin<=axE;
+
+  const dayHdrs=[],cols=[];
   for(let di=0;di<7;di++){
     const d=new Date(mon);d.setDate(mon.getDate()+di);d.setHours(0,0,0,0);
     const de=new Date(d);de.setHours(23,59,59,999);
-    const list=evs.filter(e=>e.startDt>=d&&e.startDt<=de);
     const isToday=d.getTime()===today.getTime();
-    const blocks=list.map(e=>{
+    const list=evs.filter(e=>e.startDt>=d&&e.startDt<=de)
+      .map(e=>({e,s:_minOfDay(e.startDt),en:_minOfDay(e.endDt)}))
+      .sort((a,b)=>a.s-b.s||a.en-b.en);
+    // 同時段兩堂（補課／併班才會遇到）左右並排：先切重疊群組，群組內各排一 lane
+    let gi=-1,gEnd=-Infinity;const groups=[];
+    list.forEach(x=>{
+      if(x.s>=gEnd){gi++;groups[gi]=[];gEnd=x.en;}else{gEnd=Math.max(gEnd,x.en);}
+      groups[gi].push(x);
+    });
+    groups.forEach(g=>{
+      const laneEnd=[];
+      g.forEach(x=>{
+        let ln=laneEnd.findIndex(v=>v<=x.s);
+        if(ln<0)ln=laneEnd.length;
+        laneEnd[ln]=x.en;x.lane=ln;
+      });
+      g.forEach(x=>{x.lanes=laneEnd.length;});
+    });
+    const blocks=list.map(({e,s,en,lane,lanes})=>{
       const dead=e.isFullAbsent||e.isRescheduled;
       const tag=e.isRescheduled?'調課移走':e.isFullAbsent?(e.absType||'整堂沒上'):'';
       const n=(e.students||[]).length;
       const leave=!dead&&(e.absentStudents||[]).length?`・${e.absentStudents.length} 人請假`:'';
-      return`<div class="tsch-blk${dead?' tsch-dead':''}" style="border-left-color:${calColor(e.calName)}" title="${esc((e.origTitle||'')+' ／ '+(e.classroom||'未指定教室'))}">
+      const w=100/lanes;
+      const tip=`${fmtT(e.startDt)}–${fmtT(e.endDt)}　${e.origTitle||''}　${e.classroom||'未指定教室'}${n?`　${n} 人`:''}${tag?`　${tag}`:''}`;
+      return`<div class="tsch-blk${dead?' tsch-dead':''}" title="${esc(tip)}"
+        style="top:${pctOf(s)}%;height:${Math.max((en-s)/axTotal*100,3).toFixed(2)}%;left:${(lane*w).toFixed(2)}%;width:${w.toFixed(2)}%;border-left-color:${calColor(e.calName)}">
         <span class="tsch-t">${fmtT(e.startDt)}–${fmtT(e.endDt)}</span>
         <span class="tsch-n">${esc(e.origTitle||'(未命名)')}</span>
-        <span class="tsch-m">${esc(e.classroom||'未指定教室')}${n?`・${n} 人`:''}${leave}</span>
-        ${tag?`<span class="tsch-tag">${esc(tag)}</span>`:''}
+        <span class="tsch-m">${esc(e.classroom||'未指定教室')}${n?`・${n} 人`:''}${leave}${tag?`・${esc(tag)}`:''}</span>
       </div>`;
     }).join('');
-    days.push(`<div class="tsch-day${isToday?' tsch-today':''}">
-      <div class="tsch-dhd"><b>${TSCH_WD[di][1]}</b><span>${d.getMonth()+1}/${d.getDate()}${isToday?'・今天':''}</span></div>
-      ${blocks||'<div class="tsch-none">沒課</div>'}
-    </div>`);
+    dayHdrs.push(`<div class="tsch-dhd${isToday?' tsch-today':''}"><b>${TSCH_WD[di][1]}</b><span>${d.getMonth()+1}/${d.getDate()}</span>${
+      list.length?`<i>${list.length} 堂</i>`:'<i class="tsch-dhd-off">沒課</i>'}</div>`);
+    cols.push(`<div class="tsch-col${isToday?' tsch-col-today':''}">${blocks}${
+      showNow&&di===todayDi?`<div class="tsch-nowline" style="top:${pctOf(nowMin)}%"></div>`:''}</div>`);
   }
+  const axNote=(axS<AX_DEF_S||axE>AX_DEF_E)
+    ?`<div class="tsch-axnote">時間軸預設 15:00–21:30，這一週有課落在範圍外，已延伸成 ${minToHHMM(axS)}–${minToHHMM(axE)}</div>`
+    :'';
+  const gridHtml=`<div class="tsch-tl">
+    <div class="tsch-tl-corner"></div>
+    <div class="tsch-tl-hdr">${dayHdrs.join('')}</div>
+    <div class="tsch-tl-axis" style="height:${bodyH}px">${hourLbls}</div>
+    <div class="tsch-tl-tracks" style="height:${bodyH}px">${hourLines}${cols.join('')}</div>
+  </div>${axNote}`;
 
   // 可排時段條件（沒設過就先講這塊是幹嘛的）
   const rules=teacherAvail(t);
@@ -1033,7 +1112,7 @@ function teacherSchHtml(t){
       <span>教到 <b>${stu}</b> 位學生</span>
       ${off?`<span class="tsch-sum-off">${off} 堂沒上（請假／調課）</span>`:''}
     </div>
-    <div class="tsch-grid">${days.join('')}</div>
+    ${gridHtml}
     <div class="tsch-sec">
       <div class="tsch-sec-hd">可排時段條件<span class="tsch-sec-sub">「可以排」是推薦的來源，「不能排」一律扣掉。一條都沒設＝系統不猜，也不會擋任何現有排課流程。</span></div>
       ${ruleRows||'<div class="tsch-none">還沒設定。</div>'}

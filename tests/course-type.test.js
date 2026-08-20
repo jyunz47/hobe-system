@@ -191,4 +191,49 @@ suite('滾動命名：自動命名的課，課名跟著名單走', () => {
     assertFalse(courseNameIsAuto(co));
     assertEq(courseNameOn(co, '2025-08-20'), '週三晚班');
   });
+
+  // 2026-08-03～08-20 的表單把自動算出的名字直接填進課名欄，存檔時整批被記成 nameAuto:false。
+  // 旗標對那批資料等於沒有資訊 → 名字對得上自動命名就當它是自動的。
+  test('nameAuto:false 但名字＝自動算得出來的（表單舊 bug 的資料）→ 照樣滾', () => {
+    const co = setupAutoNamed({ nameAuto: false });
+    assertTrue(courseNameIsAuto(co));
+    assertEq(courseNameOn(co, '2025-08-20'), '承軒數學家教');
+  });
+});
+
+// ────────────────────────────────────────────────────────
+// 整筆退課（登記直接刪掉，不是設修課起訖）：刪完就沒有「兩人份的名字」可以回推了，
+// 所以刪之前先蓋章（courses.js stampNameAutoBeforeRosterCut）。
+suite('退課前蓋章：整筆退課後課名還滾得動', () => {
+
+  function setupTwo(over) {
+    ctResetDriveData([ctCourse(over || {})], [ctEnroll(1), ctEnroll(2)]);
+    return getCourses()[0];
+  }
+  function dropStudent2() {
+    stampNameAutoBeforeRosterCut([10]);
+    driveData.enrollments = driveData.enrollments.filter(en => en.studentId !== 2);
+  }
+
+  test('自動命名的課（沒旗標）：蓋章後退課，課名變「承軒數學家教」', () => {
+    setupTwo();
+    delete getCourses()[0].nameAuto;
+    dropStudent2();
+    assertTrue(getCourses()[0].nameAuto);
+    assertEq(courseNameOn(getCourses()[0], '2025-08-20'), '承軒數學家教');
+  });
+
+  test('沒蓋章的話會凍住（證明這一步有用）', () => {
+    setupTwo();
+    delete getCourses()[0].nameAuto;
+    driveData.enrollments = driveData.enrollments.filter(en => en.studentId !== 2);
+    assertEq(courseNameOn(getCourses()[0], '2025-08-20'), '承軒、子晴數學班');
+  });
+
+  test('手取名字的課：不蓋章，退課後仍叫原名', () => {
+    setupTwo({ nameAuto: false, name: '週三晚班' });
+    dropStudent2();
+    assertFalse(!!getCourses()[0].nameAuto);
+    assertEq(courseNameOn(getCourses()[0], '2025-08-20'), '週三晚班');
+  });
 });

@@ -1531,19 +1531,34 @@ body:has(#panel-login.active) .content{padding:0}
 .tsch-sum{display:flex;gap:var(--sp-6);flex-wrap:wrap;font-size:var(--fs-sm);color:var(--tx2);margin-bottom:var(--sp-5)}
 .tsch-sum b{font-family:'DM Mono',monospace;font-size:var(--fs-base);color:var(--tx)}
 .tsch-sum-off{color:var(--dg)}
-/* 七格：一天一欄，塞不下就兩欄／一欄（手機） */
-.tsch-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:var(--sp-3);align-items:start}
-.tsch-day{background:var(--sf);border:1px solid var(--br);border-radius:12px;padding:var(--sp-4);min-height:76px;display:flex;flex-direction:column;gap:var(--sp-3)}
-.tsch-day.tsch-today{border-color:var(--ac);box-shadow:0 0 0 2px var(--ac-gl)}
-.tsch-dhd{display:flex;align-items:baseline;justify-content:space-between;gap:var(--sp-2);font-size:var(--fs-2xs);color:var(--tx3)}
+/* 七天 × 時間軸：左邊 52px 是刻度欄（預設 15:00–21:30，有課超出才延伸），右邊七欄 */
+.tsch-tl{display:grid;grid-template-columns:52px 1fr;background:var(--sf);border:1px solid var(--br);border-radius:12px;overflow:hidden}
+.tsch-tl-corner{border-right:1px solid var(--br);border-bottom:1px solid var(--br)}
+.tsch-tl-hdr{display:flex;border-bottom:1px solid var(--br)}
+.tsch-dhd{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;gap:1px;padding:var(--sp-3) var(--sp-2);border-left:1px solid var(--br-l);font-size:var(--fs-2xs);color:var(--tx3)}
+.tsch-dhd:first-child{border-left:none}
 .tsch-dhd b{font-size:var(--fs-sm);font-weight:700;color:var(--tx)}
-.tsch-blk{border-left:3px solid var(--cal-general);background:var(--sf2);border-radius:8px;padding:var(--sp-3) var(--sp-4);display:flex;flex-direction:column;gap:1px}
-.tsch-blk .tsch-t{font-family:'DM Mono',monospace;font-size:var(--fs-2xs);color:var(--tx2)}
-.tsch-blk .tsch-n{font-size:var(--fs-xs);font-weight:600;color:var(--tx);line-height:1.3}
-.tsch-blk .tsch-m{font-size:var(--fs-2xs);color:var(--tx3);line-height:1.3}
-.tsch-tag{font-size:var(--fs-2xs);color:var(--dg);font-weight:600}
-.tsch-dead{opacity:.6}
+.tsch-dhd i{font-style:normal;font-size:var(--fs-2xs);color:var(--tx2)}
+.tsch-dhd i.tsch-dhd-off{color:var(--tx3);opacity:.7}
+.tsch-dhd.tsch-today{background:var(--al)}
+.tsch-dhd.tsch-today b{color:var(--ac)}
+/* 刻度欄：標籤掛在小時線的高度上，往上提半行對齊線 */
+.tsch-tl-axis{position:relative;border-right:1px solid var(--br)}
+.tsch-hlbl{position:absolute;right:var(--sp-4);transform:translateY(-50%);font-family:'DM Mono',monospace;font-size:var(--fs-2xs);color:var(--tx3);white-space:nowrap}
+.tsch-tl-tracks{position:relative;display:flex}
+.tsch-hline{position:absolute;left:0;right:0;height:1px;background:var(--br-l)}
+.tsch-col{position:relative;flex:1;min-width:0;border-left:1px solid var(--br-l)}
+.tsch-col:first-child{border-left:none}
+.tsch-col-today{background:var(--sf4)}
+.tsch-nowline{position:absolute;left:0;right:0;height:2px;background:var(--dg);z-index:3}
+/* 課塊：絕對定位在時間軸上，塞不下時靠 overflow 收掉尾巴（滑過去看完整內容） */
+.tsch-blk{position:absolute;overflow:hidden;border-left:3px solid var(--cal-general);background:var(--sf2);border-radius:6px;padding:var(--sp-2) var(--sp-3);display:flex;flex-direction:column;gap:0;box-shadow:0 1px 2px rgba(20,40,32,.06);z-index:2}
+.tsch-blk .tsch-t{font-family:'DM Mono',monospace;font-size:var(--fs-2xs);color:var(--tx2);line-height:1.25;white-space:nowrap}
+.tsch-blk .tsch-n{font-size:var(--fs-xs);font-weight:600;color:var(--tx);line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tsch-blk .tsch-m{font-size:var(--fs-2xs);color:var(--tx3);line-height:1.25}
+.tsch-dead{opacity:.55}
 .tsch-dead .tsch-n{text-decoration:line-through}
+.tsch-axnote{font-size:var(--fs-2xs);color:var(--tx3);margin-top:var(--sp-3)}
 .tsch-none{font-size:var(--fs-xs);color:var(--tx3);padding:var(--sp-2) 0;line-height:1.6}
 /* 條件與推薦兩區 */
 .tsch-sec{margin-top:var(--sp-6);padding-top:var(--sp-5);border-top:1px solid var(--br)}
@@ -1560,5 +1575,9 @@ body:has(#panel-login.active) .content{padding:0}
 .tsch-rec-t{font-family:'DM Mono',monospace;color:var(--tx)}
 .tsch-rec-len{color:var(--tx3)}
 .tsch-rec-r{margin-left:auto;font-size:var(--fs-xs);color:var(--tx3)}
-@media(max-width:1100px){.tsch-grid{grid-template-columns:repeat(4,1fr)}}
-@media(max-width:700px){.tsch-grid{grid-template-columns:repeat(2,1fr)}.tsch-rec-r{margin-left:0;flex:1 1 100%}}
+/* 窄螢幕：七欄擠不下就讓時間軸自己橫向捲，不把課塊壓成一條線 */
+@media(max-width:900px){
+  .tsch{overflow-x:auto}
+  .tsch-tl{min-width:720px}
+}
+@media(max-width:700px){.tsch-rec-r{margin-left:0;flex:1 1 100%}}
