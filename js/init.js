@@ -112,12 +112,24 @@ function setLoginErr(msg){
   el.textContent=msg||'';el.style.display=msg?'block':'none';
 }
 
-function signOut(){
-  // 還有沒寫上去的改動就先送（1.5 秒的 debounce 內按登出會剛好卡在這）；不等它回來
+// 還在 1.5 秒 debounce 裡（或正在等失敗重試）的改動立刻送出去。
+// ⚠️ 為什麼非有不可（2026-08-24 老闆踩到）：動態（sharedData/activity）是**按下去當場就寫**，
+// 真正的資料（sharedData/main 那包、點名／成績／段考）是**延遲 1.5 秒才寫**。中間把分頁關掉、
+// 切走 App、或存檔失敗還在等重試時收掉頁面，就會變成「動態說排好了調課，主頁卻還是舊時間」——
+// 動態成了意圖紀錄而不是事實紀錄，而且沒有任何地方會提示落差。
+// iPad Safari 尤其容易踩：切到別的 App 分頁就被凍結，且 beforeunload 在 iOS 不可靠 → 聽 pagehide。
+function flushPendingSaves(){
+  if(!isSignedIn())return;
   if(drivePendingSave){clearTimeout(driveSaveTimer);saveToFirestore();}
   if(attPendingSave){clearTimeout(attSaveTimer);saveAttendance();}
   if(gradesPendingSave){clearTimeout(gradesSaveTimer);saveGrades();}
   if(examsPendingSave){clearTimeout(examsSaveTimer);saveExams();}
+}
+window.addEventListener('pagehide',flushPendingSaves);
+document.addEventListener('visibilitychange',()=>{if(document.hidden)flushPendingSaves();});
+
+function signOut(){
+  flushPendingSaves();   // 沒寫上去的先送（1.5 秒 debounce 內按登出會剛好卡在這）；不等它回來
   dayEvents=[];weekEvents=[];makeupList=[];
   driveData=emptyDriveData();driveBase=emptyDriveData();
   driveDirty.clear();driveInFlight.clear();drivePendingSave=false;clearTimeout(driveSaveTimer);
