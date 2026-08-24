@@ -31,6 +31,11 @@ var STAFF_NAMES={
 };
 function actMe(){try{return firebase.auth().currentUser?.email||'';}catch(_){return'';}}
 function actName(email){const e=email||actMe();return STAFF_NAMES[e]||String(e||'').split('@')[0]||'某人';}
+// 顯示署名一律拿信箱**現查**，紀錄裡抄的名字只當備胎（給沒存 by 的舊資料）。
+// 每筆動態／待辦／提醒／進度在寫入當下就抄了一份顯示名，改 STAFF_NAMES 不會回溯——
+// 2026-08-24 老闆踩到：對照表補上「文文」之後，他同一天稍早記的動態還掛著 a0910605275。
+// 現查的話整條歷史一起換過來，同一個人不會在同一頁上有兩個名字。
+function actWho(by,snapName){return by?actName(by):(String(snapName||'').trim()||'某人');}
 // db 在 init.js 才建起來（載入順序最後），所以不能在檔案頂層取 doc，包成函式延後求值
 function actDoc(){return db.collection('sharedData').doc('activity');}
 function actNewId(){return Date.now()+'-'+Math.random().toString(36).slice(2,7);}
@@ -317,7 +322,7 @@ function actProgHtml(t){
   const hidden=all.length-show.length;
   const items=show.map(p=>`
     <div class="act-prog-item">
-      <div class="act-prog-meta">${fmtDT(new Date(p.at))} <b>${esc(p.byName)}</b></div>
+      <div class="act-prog-meta">${fmtDT(new Date(p.at))} <b>${esc(actWho(p.by,p.byName))}</b></div>
       <div class="act-prog-text">${esc(p.text)}</div>
     </div>`).join('');
   return`<div class="act-prog">
@@ -333,11 +338,11 @@ function actTodoRow(t){
   const mine=t.claimedBy&&t.claimedBy===me;
   const claim=t.done?''
     :t.claimedBy
-      ?`<button class="act-claim ${mine?'mine':'taken'}" onclick="actTodoClaim('${esc(t.id)}')" title="${mine?'再按一次＝放掉，讓別人接手':'已有人認領，按了會改掛你'}">${esc(t.claimedName||'有人')} 處理中</button>`
+      ?`<button class="act-claim ${mine?'mine':'taken'}" onclick="actTodoClaim('${esc(t.id)}')" title="${mine?'再按一次＝放掉，讓別人接手':'已有人認領，按了會改掛你'}">${esc(actWho(t.claimedBy,t.claimedName||'有人'))} 處理中</button>`
       :`<button class="act-claim" onclick="actTodoClaim('${esc(t.id)}')">我來處理</button>`;
   const meta=t.done
-    ?`${esc(t.byName)} 寫於 ${fmtD(new Date(t.createdAt))} · <b>${esc(t.doneName||'')}</b> 於 ${fmtD(new Date(t.doneAt||t.createdAt))} 完成`
-    :`${esc(t.byName)} 寫於 ${fmtD(new Date(t.createdAt))}`;
+    ?`${esc(actWho(t.by,t.byName))} 寫於 ${fmtD(new Date(t.createdAt))} · <b>${esc(actWho(t.doneBy,t.doneName))}</b> 於 ${fmtD(new Date(t.doneAt||t.createdAt))} 完成`
+    :`${esc(actWho(t.by,t.byName))} 寫於 ${fmtD(new Date(t.createdAt))}`;
   const acts=t.done?'':`
     <button class="act-prog-btn" onclick="actProgOpen('${esc(t.id)}')">${actState.progFor===t.id?'收起':'＋ 加進度'}</button>
     ${claim}
@@ -366,7 +371,7 @@ function actRowHtml(e){
   <div class="act-row k-${esc(e.kind)}">
     <span class="act-dot"></span>
     <div class="act-row-body">
-      <div class="act-row-line"><b>${esc(e.byName)}</b> ${esc(e.text)}</div>
+      <div class="act-row-line"><b>${esc(actWho(e.by,e.byName))}</b> ${esc(e.text)}</div>
       ${e.target||e.detail?`<div class="act-row-sub">${esc(e.target)}${e.target&&e.detail?' · ':''}${e.detail?`<span class="act-row-detail">${esc(e.detail)}</span>`:''}</div>`:''}
     </div>
     <div class="act-row-time">${fmtT(d)}</div>

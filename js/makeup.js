@@ -98,7 +98,7 @@ async function mkNoteDel(id){
   const n=mkNotes.find(x=>x.id===id);if(!n)return;
   const ok=await uiConfirm({title:'刪掉這則進度？',ok:'刪掉',danger:true,
     html:`<p class="ask-big">${esc(n.text)}</p>
-      <div class="ask-note">${esc(n.byName||'某人')} 寫於 ${fmtDT(new Date(n.at))}。刪掉之後救不回來。</div>`});
+      <div class="ask-note">${esc(actWho(n.by,n.byName))} 寫於 ${fmtDT(new Date(n.at))}。刪掉之後救不回來。</div>`});
   if(!ok)return;
   mkNoteRemove(id);
 }
@@ -118,7 +118,7 @@ function mkNotesHtml(e,editable,where){
   const hidden=all.length-show.length;
   const items=show.map(p=>`
     <div class="mk-note-item">
-      <span class="mk-note-meta">${fmtDT(new Date(p.at))} <b class="mk-note-who">${esc(p.byName||'某人')}</b></span>
+      <span class="mk-note-meta">${fmtDT(new Date(p.at))} <b class="mk-note-who">${esc(actWho(p.by,p.byName))}</b></span>
       <span class="mk-note-text">${esc(p.text)}</span>
       <button class="mk-note-del" onclick="mkNoteDel('${esc(p.id)}')" title="刪掉這則">✕</button>
     </div>`).join('');

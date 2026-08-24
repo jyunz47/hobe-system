@@ -166,7 +166,7 @@ function rmdItemsFor(off){
   const ds=toDateStr(rmdDateOf(off));
   const notes=rmdList.filter(r=>r.date===ds).map(r=>({
     mins:rmdMins(r.time),time:r.time||'',cls:'note',tag:'提醒',
-    text:r.text||'',sub:`${r.byName||''} 記的`,rec:r}));
+    text:r.text||'',sub:`${actWho(r.by,r.byName)} 記的`,rec:r}));
   return [...notes,...rmdAutoItems(rmdDateOf(off))].sort((a,b)=>a.mins-b.mins);
 }
 
