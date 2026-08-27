@@ -35,6 +35,19 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--tx);
 .btns{padding:var(--sp-3) var(--sp-5);font-size:var(--fs-sm)}
 .btnd{background:var(--dl);color:var(--dg);border-color:var(--dg-br)}.btnd:hover{background:var(--dl2)}
 .btn.btn-danger{background:var(--dg);color:#fff;border-color:var(--dg);font-weight:500}.btn.btn-danger:hover{background:var(--dg-d);border-color:var(--dg-d)}
+/* 未存指示燈（第三刀）：本機待送佇列還有東西時才出現，按下去立刻重送一次。
+   刻意做成暖橙淺底＋大圓角的軟籤，不是紅色警報——它多半是「正在送、還沒回來」的短暫狀態，
+   不該每次存檔都嚇人一跳；真的卡住不動時它會一直待在那裡，這才是它存在的理由。 */
+.unsaved-chip{display:inline-flex;align-items:center;gap:var(--sp-3);cursor:pointer;
+  padding:var(--sp-3) var(--sp-5);border-radius:999px;font-size:var(--fs-sm);
+  font-family:'Noto Sans TC',sans-serif;font-weight:500;
+  background:var(--wl);color:var(--wn);border:1px solid var(--wn-br);transition:all .12s}
+.unsaved-chip:hover{background:var(--wl2,var(--wl));border-color:var(--wn)}
+.unsaved-chip:active{transform:scale(.98)}
+.unsaved-chip::before{content:'';width:7px;height:7px;border-radius:50%;background:currentColor;
+  animation:unsavedPulse 1.6s ease-in-out infinite}
+@keyframes unsavedPulse{0%,100%{opacity:.35}50%{opacity:1}}
+@media(prefers-reduced-motion:reduce){.unsaved-chip::before{animation:none;opacity:.8}}
 .content{padding:var(--sp-7) var(--sp-8);flex:1}
 .panel{display:none}.panel.active{display:block}
 

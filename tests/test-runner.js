@@ -14,10 +14,16 @@ function suite(name, fn) {
 
 // 非同步版的 test（給要 await 假 Firestore 交易的同步測試用）。
 // 跟 test 一樣就地把結果塞回自己那個 section，只是等 promise 回來才塞。
+//
+// ⚠️ **一條一條跑，不並行**（2026-08-24 踩到）：以前是註冊當下就 Promise.resolve().then(fn)，
+// 所有 atest 會同時起跑並互相交錯。只要有測試動到共用的全域（待送佇列測試要換 SYNC_QUEUE_LS、
+// 還要清 localStorage），別條測試就會在它做到一半時把那個全域改掉，症狀是「單獨跑會過、
+// 一起跑就紅」這種最難查的假失敗。串起來慢一點點，但每條測試看到的世界是自己的。
+let _chain = Promise.resolve();
 function atest(name, fn) {
   const section = _currentSection;
   _pending.push(
-    Promise.resolve().then(fn).then(() => {
+    (_chain = _chain.then(fn).then(() => {
       const div = document.createElement('div');
       div.className = 'case pass';
       div.textContent = '✓ ' + name;
@@ -30,7 +36,7 @@ function atest(name, fn) {
       section.appendChild(div);
       _failed++;
       console.error('[FAIL]', name, e);
-    })
+    }))
   );
 }
 

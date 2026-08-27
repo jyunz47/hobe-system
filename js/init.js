@@ -128,6 +128,62 @@ function flushPendingSaves(){
 window.addEventListener('pagehide',flushPendingSaves);
 document.addEventListener('visibilitychange',()=>{if(document.hidden)flushPendingSaves();});
 
+function currentUid(){try{return firebase.auth().currentUser?.uid||null;}catch(_){return null;}}
+
+// ── 未存指示燈（第三刀）──
+// 以前存檔失敗只跳一次 toast 就永遠沉默，使用者沒有任何方法知道自己的改動還在這台裝置上。
+// 現在只要本機待送佇列裡有東西**卡著沒送成**，頂欄就一直掛著一顆籤，按下去立刻重送。
+// ⚠️ 為什麼要等 3 秒才亮：每一發存檔都是「先排進佇列 → 發交易 → 回來才清」，正常情況
+//    兩三百毫秒就走完。不設門檻的話，老闆每按一下都會看到指示燈閃一次，很快就學會無視它，
+//    那它在真的出事時就叫不動人了。年輕的批次不算，但會排一次回頭檢查讓它自己浮出來。
+var SYNC_CHIP_DELAY=3000;
+var _chipTimer=null;
+function updateUnsavedChip(){
+  const el=document.getElementById('unsaved-chip');if(!el)return;
+  clearTimeout(_chipTimer);_chipTimer=null;
+  if(!isSignedIn()){el.style.display='none';return;}
+  const list=syncQueueFor(currentUid());
+  const cut=Date.now()-SYNC_CHIP_DELAY;
+  const stale=list.filter(b=>(b.ts||0)<=cut);
+  el.style.display=stale.length?'inline-flex':'none';
+  if(stale.length)el.textContent=stale.length+' 筆還沒存上雲端';
+  if(list.length>stale.length)_chipTimer=setTimeout(updateUnsavedChip,SYNC_CHIP_DELAY);
+}
+
+// 按指示燈：立刻重送一次，不等重試的 5／15／60 秒
+async function retryPendingNow(){
+  if(!isSignedIn())return;
+  showL('重送中…');
+  try{
+    flushPendingSaves();          // 還卡在 1.5 秒 debounce 裡的先發出去
+    await syncReplayPending();    // 佇列裡沒清掉的補送
+    hideL();
+    const n=syncQueueCount(currentUid());
+    toast(n?`還有 ${n} 筆沒送成功，稍後會自動再試`:'都存上去了','ok');
+  }catch(e){hideL();toast('重送失敗：'+(e?.message||e),'err');}
+  updateUnsavedChip();
+}
+
+// 上次沒送出去的批次，開頁時補送一次。
+// 冪等：ops 是照鑰匙 upsert／delete，重送兩次跟一次結果一樣——所以「上次到底送出去沒有」
+// 這個問句根本不用回答，一律再送一次就對了。送不成的留在佇列裡，下次再試。
+async function syncReplayPending(){
+  const uid=currentUid();if(!uid)return 0;
+  const list=syncQueueFor(uid);
+  if(!list.length)return 0;
+  const refFor=(kind,docId)=>kind==='main'?SHARED_DOC:db.collection('sharedData').doc(docId);
+  let done=0;
+  for(const b of list){
+    try{
+      await syncReplayBatch(b,refFor,fn=>db.runTransaction(fn));
+      syncQueueDrop(b.id);done++;
+    }catch(e){console.error('[sync] 補送失敗，留在佇列裡下次再試',b.id,e);}
+  }
+  if(done)toast(`補回了上次沒存上去的 ${done} 批改動`,'ok');
+  updateUnsavedChip();
+  return done;
+}
+
 function signOut(){
   flushPendingSaves();   // 沒寫上去的先送（1.5 秒 debounce 內按登出會剛好卡在這）；不等它回來
   dayEvents=[];weekEvents=[];makeupList=[];
@@ -144,6 +200,7 @@ function signOut(){
   actEvents=[];actTodos=[];actLoaded=false;actHasNew=false;actPruned=false;updateActivityBadge();
   firebase.auth().signOut();
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='none');
+  updateUnsavedChip();   // 登出後藏起來（佇列本身不清：那些改動還是要送上去，下次登入補）
   setUSt('','未登入','請輸入帳號密碼登入');
   showPanel('login');
 }
@@ -154,6 +211,9 @@ async function onSignedIn(){
   ['btn-signout','btn-refresh'].forEach(id=>document.getElementById(id).style.display='inline-block');
   setUSt('ok',u?.email||'已登入','已登入');
   if(u?.email)localStorage.setItem('ghint',u.email);
+  // ⚠️ 順序很重要：先把上次沒送成的補上雲端，再讀——反過來讀到的會是缺那批的舊資料，
+  // 補送完又要再讀一次。補送失敗不擋登入（那批留在佇列裡，指示燈會講）。
+  await syncReplayPending();
   await loadFromFirestore();
   showPanel('courses');
   watchMain();      // 掛上課表那包的即時監聽：別台一改自己就跟上（2026-08-19）
@@ -230,13 +290,20 @@ async function saveToFirestore(){
   sending.forEach(k=>driveInFlight.add(k));
   // 定格這一發要送的內容。交易可能被 Firestore 重跑，每次都拿同一份算 ops 才不會半新半舊
   const localSnap={};sending.forEach(k=>{localSnap[k]=syncClone(driveData[k]);});
+  // 先算 ops、先排進本機待送佇列，**再**發交易（第三刀）：中途頁面消失，下次開頁補得回來
+  const ops=syncMainOps(sending,localSnap,driveBase);
+  const batch=syncMainHasOps(ops)
+    ? syncQueuePush({id:syncNewBatchId(),ts:Date.now(),uid:currentUid(),kind:'main',ops})
+    : null;
+  updateUnsavedChip();
   try{
     const res=await db.runTransaction(async tx=>{
       const snap=await tx.get(SHARED_DOC);
-      const out=syncMergeMain(snap.exists?snap.data():{},sending,localSnap,driveBase);
+      const out=applyMainOps(snap.exists?snap.data():{},ops);
       tx.set(SHARED_DOC,out.payload,{merge:true});
       return out;
     });
+    if(batch)syncQueueSettle(batch.id,'main',null,sending);   // 確定落地了才清保險
     // 合併結果＝雲端現在的樣子，本機跟著採用（這樣才看得到別台在同一欄加的東西），
     // 基準也移到這裡。交易期間又被改到的欄位跳過：那筆新編輯還沒送出去，蓋掉就沒了，
     // 留著舊基準讓下一發重算即可（重送已送過的筆是冪等的，不會出事）。
@@ -264,6 +331,7 @@ async function saveToFirestore(){
     driveSaveTimer=setTimeout(saveToFirestore,syncRetryDelay(driveFailStreak));
   }finally{
     sending.forEach(k=>driveInFlight.delete(k));
+    updateUnsavedChip();
   }
 }
 

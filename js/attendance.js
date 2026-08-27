@@ -124,7 +124,8 @@ async function saveAttendance(){
   attInFlight=true;
   try{
     const merged=await syncSaveRecords(attDocRef(ypid),fn=>db.runTransaction(fn),
-      attBase[ypid]||[],b.records,attKeyOf);
+      attBase[ypid]||[],b.records,attKeyOf,
+      {docId:'attendance_'+ypid,keyKind:'att',uid:currentUid()});   // 本機待送佇列（第三刀）
     if(merged&&!attPendingSave){
       const gained=!syncSame(merged,b.records);
       b.records=merged;attRebuildIdx(b);attBase[ypid]=syncClone(merged);
@@ -138,5 +139,5 @@ async function saveAttendance(){
     if(attFailStreak===1)toast('點名存到雲端失敗，改動只在這台裝置上（會自動重試）：'+(e?.message||e),'err',true);
     clearTimeout(attSaveTimer);
     attSaveTimer=setTimeout(saveAttendance,syncRetryDelay(attFailStreak));
-  }finally{attInFlight=false;}
+  }finally{attInFlight=false;updateUnsavedChip();}
 }

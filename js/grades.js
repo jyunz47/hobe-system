@@ -119,7 +119,8 @@ async function saveGrades(){
   gradesInFlight=true;
   try{
     const merged=await syncSaveRecords(gradesDocRef(ypid),fn=>db.runTransaction(fn),
-      gradesBase[ypid]||[],b.records,recIdKeyOf);
+      gradesBase[ypid]||[],b.records,recIdKeyOf,
+      {docId:'grades_'+ypid,keyKind:'rec',uid:currentUid()});   // 本機待送佇列（第三刀）
     if(merged&&!gradesPendingSave){
       const gained=!syncSame(merged,b.records);
       b.records=merged;gradesRebuildIdx(b);gradesBase[ypid]=syncClone(merged);
@@ -133,7 +134,7 @@ async function saveGrades(){
     if(gradesFailStreak===1)toast('成績存到雲端失敗，改動只在這台裝置上（會自動重試）：'+(e?.message||e),'err',true);
     clearTimeout(gradesSaveTimer);
     gradesSaveTimer=setTimeout(saveGrades,syncRetryDelay(gradesFailStreak));
-  }finally{gradesInFlight=false;}
+  }finally{gradesInFlight=false;updateUnsavedChip();}
 }
 
 // ── 段考成績（exams）— sharedData/exams_<yearPeriodId> ──
@@ -244,7 +245,8 @@ async function saveExams(){
   examsInFlight=true;
   try{
     const merged=await syncSaveRecords(examsDocRef(ypid),fn=>db.runTransaction(fn),
-      examsBase[ypid]||[],b.records,recIdKeyOf);
+      examsBase[ypid]||[],b.records,recIdKeyOf,
+      {docId:'exams_'+ypid,keyKind:'rec',uid:currentUid()});   // 本機待送佇列（第三刀）
     if(merged&&!examsPendingSave){
       const gained=!syncSame(merged,b.records);
       b.records=merged;examsRebuildIdx(b);examsBase[ypid]=syncClone(merged);
@@ -258,5 +260,5 @@ async function saveExams(){
     if(examsFailStreak===1)toast('段考成績存到雲端失敗，改動只在這台裝置上（會自動重試）：'+(e?.message||e),'err',true);
     clearTimeout(examsSaveTimer);
     examsSaveTimer=setTimeout(saveExams,syncRetryDelay(examsFailStreak));
-  }finally{examsInFlight=false;}
+  }finally{examsInFlight=false;updateUnsavedChip();}
 }

@@ -23,7 +23,7 @@ if(new URLSearchParams(location.search).get('app')==='dayview'){
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HOBE">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=79">
+<link rel="stylesheet" href="style.css?v=80">
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -90,6 +90,9 @@ if ('serviceWorker' in navigator) {
       <div class="gs-drop" id="gs-drop"></div>
     </div>
     <div class="tba">
+      <!-- 未存指示燈（第三刀）：本機待送佇列還有東西時才出現。以前存檔失敗只跳一次 toast
+           就永遠沉默，使用者不會知道自己的改動還沒上雲端（2026-08-24 老闆丟一筆調課） -->
+      <button class="unsaved-chip" id="unsaved-chip" style="display:none" onclick="retryPendingNow()"></button>
       <button class="btn btns" id="btn-refresh" style="display:none" onclick="refreshCurrent()">↻ 更新</button>
       <button class="btn btns" id="btn-signout" style="display:none" onclick="signOut()">登出</button>
     </div>
@@ -636,7 +639,7 @@ if ('serviceWorker' in navigator) {
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
 <!-- 應用程式分模組（順序：state → utils → 解析 → 各 panel → init 最後）-->
 <script src="js/state.js?v=19"></script>
-<script src="js/sync.js?v=1"></script>
+<script src="js/sync.js?v=2"></script>
 <script src="js/utils.js?v=14"></script>
 <script src="js/schedule.js?v=11"></script>
 <script src="js/today.js?v=34"></script>
@@ -646,14 +649,14 @@ if ('serviceWorker' in navigator) {
 <script src="js/makeup.js?v=24"></script>
 <script src="js/enrollment.js?v=15"></script>
 <script src="js/students.js?v=26"></script>
-<script src="js/attendance.js?v=3"></script>
-<script src="js/grades.js?v=4"></script>
+<script src="js/attendance.js?v=4"></script>
+<script src="js/grades.js?v=5"></script>
 <script src="js/settings.js?v=29"></script>
 <script src="js/courses.js?v=27"></script>
 <script src="js/activity.js?v=8"></script>
 <script src="js/remind.js?v=5"></script>
 <script src="js/search.js?v=5"></script>
-<script src="js/init.js?v=30"></script>
+<script src="js/init.js?v=31"></script>
 
 <div class="stu-modal-wrap" id="stu-modal-wrap">
   <div class="stu-modal-overlay" onclick="closeStudentModal()"></div>
