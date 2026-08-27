@@ -48,6 +48,30 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--tx);
   animation:unsavedPulse 1.6s ease-in-out infinite}
 @keyframes unsavedPulse{0%,100%{opacity:.35}50%{opacity:1}}
 @media(prefers-reduced-motion:reduce){.unsaved-chip::before{animation:none;opacity:.8}}
+/* ── 復原軟籤（2026-08-27，js/undo.js）──
+   會刪東西的動作做完後浮在畫面下方，12 秒內按得到。
+   深墨底＝跟側欄同一組配色（--nav-*），在任何頁面上都是明確的「這是系統在跟你講話」，
+   又不會跟暖米色的內容區搶注意力。手機版要讓開底部導覽列。 */
+.undo-bar{position:fixed;left:50%;bottom:var(--sp-7);transform:translateX(-50%) translateY(8px);
+  z-index:200;display:none;align-items:center;gap:var(--sp-5);
+  padding:var(--sp-4) var(--sp-4) var(--sp-4) var(--sp-6);border-radius:999px;
+  background:var(--nav-sf);color:var(--nav-tx);font-size:var(--fs-md);
+  box-shadow:0 8px 28px rgba(31,28,25,.28);
+  max-width:calc(100vw - var(--sp-8));opacity:0;
+  transition:opacity .16s ease,transform .16s ease}
+.undo-bar.open{display:flex;opacity:1;transform:translateX(-50%) translateY(0)}
+.undo-bar-txt{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.undo-bar-btn{border:none;background:var(--ac);color:#fff;border-radius:999px;
+  padding:var(--sp-3) var(--sp-6);font-size:var(--fs-md);font-weight:600;cursor:pointer;
+  font-family:'Noto Sans TC',sans-serif;flex-shrink:0;transition:background .12s}
+.undo-bar-btn:hover{background:var(--am)}
+.undo-bar-x{border:none;background:transparent;color:var(--nav-tx3);cursor:pointer;
+  font-size:var(--fs-sm);padding:var(--sp-2) var(--sp-3);border-radius:50%;
+  flex-shrink:0;font-family:'Noto Sans TC',sans-serif;transition:color .12s}
+.undo-bar-x:hover{color:var(--nav-tx)}
+@media(max-width:768px){.undo-bar{bottom:calc(78px + env(safe-area-inset-bottom))}}
+@media(prefers-reduced-motion:reduce){.undo-bar{transition:none}}
+
 .content{padding:var(--sp-7) var(--sp-8);flex:1}
 .panel{display:none}.panel.active{display:block}
 
@@ -69,6 +93,178 @@ body{font-family:'Noto Sans TC',sans-serif;background:var(--bg);color:var(--tx);
 .dbtn:hover{background:var(--sf2)}
 input[type=date]{padding:var(--sp-3) var(--sp-5);border-radius:var(--rs);border:1px solid var(--br);background:var(--sf);color:var(--tx);font-family:'Noto Sans TC',sans-serif;font-size:var(--fs-md);outline:none}
 input[type=date]:focus{border-color:var(--ac)}
+
+/* ── 共用日期月曆（2026-08-27，js/datepicker.js）──
+   取代原生 <input type="date">：那個在 iPad Safari 是滾輪式的，老闆嫌難點。
+   長相照老闆 2026-08-24 的原話（「直角、框框好硬、有點死、有壓迫」）：日期格是圓的、
+   面板大圓角、靠陰影浮起來而不是靠框線。
+   ⚠️ position:fixed —— 全系統共用同一顆，開的時候由 JS 貼到錨點旁邊（見 dpPlace）。
+      放在 body 底下才不會被表單的 overflow:hidden 切掉。 */
+.dp-btn.on{background:var(--al);border-color:var(--ac-br);color:var(--ac-dk)}
+.dp-pop{position:fixed;top:0;left:0;z-index:400;width:280px;max-width:calc(100vw - var(--sp-8));
+  background:var(--sf);border-radius:var(--r);border:1px solid var(--br);
+  box-shadow:0 12px 32px rgba(31,28,25,.14),0 2px 8px rgba(31,28,25,.06);
+  padding:var(--sp-5);display:none}
+.dp-pop.open{display:block;animation:dpIn .14s ease}
+/* 表單裡的日期欄位：唯讀、點了跳月曆。右邊留位置給小日曆圖示 */
+.dp-input{padding:var(--sp-3) var(--sp-5);border-radius:var(--rs);border:1px solid var(--br);
+  background:var(--sf);color:var(--tx);font-family:'Noto Sans TC',sans-serif;font-size:var(--fs-md);
+  outline:none;cursor:pointer;padding-right:26px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237A7368' stroke-width='2' stroke-linecap='round'%3E%3Crect x='3' y='5' width='18' height='16' rx='3'/%3E%3Cpath d='M8 3v4M16 3v4M3 11h18'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center}
+.dp-input:hover{border-color:var(--brs);background-color:var(--sf2)}
+.dp-input:focus{border-color:var(--ac)}
+.dp-input::placeholder{color:var(--tx3)}
+
+/* ── 開學準備區（2026-08-27，js/newterm.js）──
+   期別翻頁前 28 天內出現，一門課一列：定開學後的時段與名單。平常整段不存在。
+   用資訊色（金棕）當底：這是「該做一件事」不是「出事了」。 */
+.nt-wrap{background:var(--il);border:1px solid var(--in-br);border-radius:var(--r);
+  padding:var(--sp-6);margin-bottom:var(--sp-6)}
+/* 收起來時只剩標題那一行（還剩幾門、什麼時候開學）；標題列整條可點 */
+.nt-wrap.shut{padding:var(--sp-5) var(--sp-6)}
+.nt-top{display:flex;align-items:center;gap:var(--sp-4);margin-bottom:var(--sp-3);cursor:pointer}
+.nt-wrap.shut .nt-top{margin-bottom:0}
+.nt-title{font-size:var(--fs-lg);font-weight:700;color:var(--in)}
+.nt-count{margin-left:auto;font-size:var(--fs-sm);color:var(--tx2)}
+.nt-count b{font-family:'DM Mono',monospace;color:var(--in)}
+.nt-top .nt-arrow{margin-left:0;color:var(--in);opacity:.7}
+.nt-note{font-size:var(--fs-md);color:var(--tx2);line-height:1.75;margin-bottom:var(--sp-5)}
+.nt-list{display:flex;flex-direction:column;gap:var(--sp-3)}
+/* 一門課一列，點了開置中視窗（2026-08-27 老闆要求，跟課程視窗同一個手感）。
+   原本是就地展開，那會把下面的列表整個往下推、每開一門都要重新找位置。 */
+.nt-row{display:flex;align-items:center;gap:var(--sp-4);padding:var(--sp-4) var(--sp-5);
+  background:var(--sf);border-radius:12px;cursor:pointer;transition:background .12s,opacity .12s}
+.nt-row:hover{background:var(--sf2)}
+.nt-row.done{opacity:.62}
+.nt-row.done:hover{opacity:1}
+.nt-name{font-weight:600;color:var(--tx);font-size:var(--fs-base);flex-shrink:0}
+.nt-cur{font-size:var(--fs-sm);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nt-arrow{margin-left:auto;color:var(--tx3);font-size:var(--fs-lg);flex-shrink:0}
+.nt-chip{font-size:var(--fs-2xs);padding:2px var(--sp-3);border-radius:999px;flex-shrink:0;
+  background:var(--wl);color:var(--wn);white-space:nowrap}
+.nt-chip.on{background:var(--al);color:var(--ac-dk)}
+/* 視窗內容（.stu-modal-body 已經有 padding，這裡只管內部節奏） */
+.nt-modal-in .nt-sec:first-child{margin-top:0}
+.nt-sec{display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;
+  font-size:var(--fs-sm);font-weight:600;color:var(--tx);margin:var(--sp-6) 0 var(--sp-3)}
+.nt-sec-sub{font-weight:400;color:var(--tx3);font-size:var(--fs-xs)}
+.nt-mini{border:none;background:var(--sf2);color:var(--tx2);border-radius:999px;
+  padding:2px var(--sp-4);font-size:var(--fs-2xs);cursor:pointer;font-family:'Noto Sans TC',sans-serif}
+.nt-mini:hover{background:var(--sf3);color:var(--tx)}
+.nt-slot{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-3);flex-wrap:wrap}
+.nt-slot select{padding:var(--sp-3) var(--sp-4);border-radius:var(--rs);border:1px solid var(--br);
+  background:var(--sf);color:var(--tx);font-family:'Noto Sans TC',sans-serif;font-size:var(--fs-md);cursor:pointer}
+.nt-dash{color:var(--tx3)}
+.nt-add{border:none;background:transparent;color:var(--ac-dk);font-size:var(--fs-sm);
+  cursor:pointer;padding:var(--sp-2) 0;font-family:'Noto Sans TC',sans-serif}
+.nt-add:hover{text-decoration:underline}
+.nt-warn{background:var(--wl);color:var(--wn);border-radius:10px;padding:var(--sp-3) var(--sp-4);
+  font-size:var(--fs-sm);line-height:1.6;margin-top:var(--sp-3)}
+.nt-modal-in .nt-note{font-size:var(--fs-sm);margin:0 0 var(--sp-3)}
+.nt-stus{display:flex;flex-wrap:wrap;gap:var(--sp-2)}
+.nt-stu{display:inline-flex;align-items:center;gap:var(--sp-2);padding:var(--sp-2) var(--sp-4);
+  background:var(--sf2);border-radius:999px;font-size:var(--fs-sm);cursor:pointer;
+  color:var(--tx3);transition:all .12s}
+.nt-stu.on{background:var(--al);color:var(--ac-dk);font-weight:500}
+.nt-stu.warn{background:var(--wl);color:var(--wn)}
+.nt-stu-warn{font-size:var(--fs-2xs);opacity:.8}
+.nt-acts{display:flex;justify-content:flex-end;margin-top:var(--sp-5)}
+
+/* ── 期別交接卡（2026-08-27，js/settings.js coCarryHtml）──
+   每年 9/1、3/1、7/1 期別翻頁時，課程管理頁最上面長出這張；平常整段不存在。
+   用資訊色（金棕）而不是警告紅：這是「該做一件事」不是「出事了」。 */
+.co-carry{background:var(--il);border:1px solid var(--in-br);border-radius:var(--r);
+  padding:var(--sp-6);margin-bottom:var(--sp-6)}
+.co-carry-hd{font-size:var(--fs-lg);font-weight:700;color:var(--in);margin-bottom:var(--sp-4)}
+.co-carry-note{font-size:var(--fs-md);color:var(--tx2);line-height:1.75;margin-bottom:var(--sp-5)}
+.co-carry-acts{display:flex;align-items:center;gap:var(--sp-4);flex-wrap:wrap;margin-bottom:var(--sp-5)}
+.co-carry-n{font-size:var(--fs-sm);color:var(--tx2);margin-left:auto}
+.co-carry-n b{font-family:'DM Mono',monospace;color:var(--tx)}
+.co-carry-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:var(--sp-2);
+  max-height:340px;overflow-y:auto}
+.co-carry-row{display:flex;align-items:center;gap:var(--sp-3);padding:var(--sp-3) var(--sp-4);
+  background:var(--sf);border-radius:10px;font-size:var(--fs-sm);cursor:pointer;
+  transition:background .12s}
+.co-carry-row:hover{background:var(--sf2)}
+.co-carry-row.warn{background:var(--wl)}
+.co-carry-row.warn:hover{background:var(--wl2)}
+.co-carry-who{font-weight:600;color:var(--tx);flex-shrink:0}
+.co-carry-course{color:var(--tx2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.co-carry-warn{margin-left:auto;font-size:var(--fs-2xs);color:var(--wn);flex-shrink:0}
+
+/* ── 共用時間面板（2026-08-27，js/timepicker.js）──
+   面板外觀跟月曆同一套（同樣的圓角、陰影、選中的強調色），但**內容邏輯不同**：
+   日期需要「月曆」這個空間概念，時間不需要——所以這裡是把營業時間直接列出來，
+   點一下就選完，不做「先選時再選分」。（第一版做成兩段式，老闆說「這樣選很怪」。）
+   4 欄是為了 iPad：格子夠大、手指點得準。 */
+.tp-pop{position:fixed;top:0;left:0;z-index:400;width:280px;max-width:calc(100vw - var(--sp-8));
+  background:var(--sf);border-radius:var(--r);border:1px solid var(--br);
+  box-shadow:0 12px 32px rgba(31,28,25,.14),0 2px 8px rgba(31,28,25,.06);
+  padding:var(--sp-5);display:none}
+.tp-pop.open{display:block;animation:dpIn .14s ease}
+.tp-hd{display:flex;align-items:baseline;gap:var(--sp-4);margin-bottom:var(--sp-4)}
+.tp-hd-lbl{font-size:var(--fs-sm);color:var(--tx3)}
+.tp-cur{margin-left:auto;font-family:'DM Mono',monospace;font-size:var(--fs-lg);font-weight:600;color:var(--tx)}
+.tp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--sp-2);
+  max-height:min(46vh,320px);overflow-y:auto}
+.tp-cell{border:none;background:var(--sf2);color:var(--tx);border-radius:10px;
+  padding:var(--sp-4) 0;font-family:'DM Mono',monospace;font-size:var(--fs-md);
+  cursor:pointer;transition:background .12s,color .12s}
+.tp-cell:hover{background:var(--sf3)}
+/* 那一天的營業時段淡淡標出來當引導（課多半排在這裡面） */
+.tp-cell.biz{background:var(--al);color:var(--ac-dk)}
+.tp-cell.biz:hover{background:var(--ac-gl)}
+.tp-cell.sel{background:var(--ac);color:#fff;font-weight:600}
+.tp-cell.sel:hover{background:var(--am)}
+.tp-ft{display:flex;align-items:center;gap:var(--sp-4);margin-top:var(--sp-5);
+  padding-top:var(--sp-4);border-top:1px solid var(--br-l)}
+.tp-fine{flex:1;text-align:left;border:none;background:transparent;color:var(--ac-dk);
+  padding:var(--sp-2) 0;font-size:var(--fs-sm);cursor:pointer;
+  font-family:'Noto Sans TC',sans-serif;transition:color .12s}
+.tp-fine:hover{color:var(--am);text-decoration:underline}
+.tp-clear{border:none;background:var(--sf2);color:var(--tx2);border-radius:var(--rs);
+  padding:var(--sp-3) var(--sp-5);font-size:var(--fs-sm);cursor:pointer;flex-shrink:0;
+  font-family:'Noto Sans TC',sans-serif;transition:background .12s}
+.tp-clear:hover{background:var(--sf3);color:var(--tx)}
+/* 表單裡的時間欄位：唯讀、點了跳面板。右邊留位置給時鐘圖示 */
+.tp-input{padding:var(--sp-3) var(--sp-5);border-radius:var(--rs);border:1px solid var(--br);
+  background:var(--sf);color:var(--tx);font-family:'Noto Sans TC',sans-serif;font-size:var(--fs-md);
+  outline:none;cursor:pointer;padding-right:26px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%237A7368' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='12' cy='12' r='9'/%3E%3Cpath d='M12 7v5l3 2'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 8px center}
+.tp-input:hover{border-color:var(--brs);background-color:var(--sf2)}
+.tp-input:focus{border-color:var(--ac)}
+.tp-input::placeholder{color:var(--tx3)}
+@keyframes dpIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.dp-hd{display:flex;align-items:center;gap:var(--sp-3);margin-bottom:var(--sp-4)}
+.dp-mon{flex:1;text-align:center;font-size:var(--fs-md);font-weight:700;color:var(--tx)}
+.dp-nav{width:30px;height:30px;flex-shrink:0;border:none;background:transparent;color:var(--tx2);
+  border-radius:50%;cursor:pointer;font-size:var(--fs-lg);line-height:1;font-family:inherit;transition:background .12s}
+.dp-nav:hover{background:var(--sf2)}
+.dp-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:var(--sp-1);text-align:center}
+.dp-dow{font-size:var(--fs-2xs);color:var(--tx3);padding:var(--sp-2) 0;font-weight:500}
+/* 一格一天：圓形、點擊區整格。小點掛在數字底下，不擠壓數字位置（絕對定位） */
+.dp-day{position:relative;aspect-ratio:1;border:none;background:transparent;color:var(--tx);
+  border-radius:50%;cursor:pointer;font-family:inherit;font-size:var(--fs-md);
+  display:flex;align-items:center;justify-content:center;padding:0;transition:background .12s}
+.dp-day:hover{background:var(--sf2)}
+.dp-day.mute{color:var(--tx3);opacity:.55}
+/* 選中那天＝淺綠底；今天＝實心綠。兩者可以同時成立（今天贏底色、選中留一圈外環） */
+.dp-day.sel{background:var(--al);color:var(--ac-dk);font-weight:700}
+.dp-day.today{background:var(--ac);color:#fff;font-weight:700}
+.dp-day.today.mute{opacity:1}
+.dp-day.sel.today{box-shadow:0 0 0 2px var(--sf),0 0 0 4px var(--ac-br)}
+.dp-dot{position:absolute;bottom:4px;left:50%;transform:translateX(-50%);
+  width:4px;height:4px;border-radius:50%;background:var(--ac)}
+.dp-day.today .dp-dot{background:#fff}
+.dp-day.sel .dp-dot{background:var(--ac-dk)}
+.dp-ft{display:flex;align-items:center;gap:var(--sp-4);margin-top:var(--sp-5);padding-top:var(--sp-4);border-top:1px solid var(--br-l)}
+.dp-legend{flex:1;display:flex;align-items:center;gap:var(--sp-3);position:relative;font-size:var(--fs-2xs);color:var(--tx3)}
+.dp-legend .dp-dot{position:static;transform:none}
+.dp-today{border:none;background:var(--sf2);color:var(--tx);border-radius:var(--rs);
+  padding:var(--sp-3) var(--sp-5);font-size:var(--fs-sm);cursor:pointer;font-family:inherit;transition:background .12s}
+.dp-today:hover{background:var(--sf3)}
 
 /* Legend */
 .legend{display:flex;gap:var(--sp-6);margin-bottom:var(--sp-5);flex-wrap:wrap}
@@ -181,12 +377,12 @@ input[type=date]:focus{border-color:var(--ac)}
 .sp-body{padding:var(--sp-7);display:flex;flex-direction:column;gap:var(--sp-8)}
 .sp-lbl{font-size:var(--fs-xs);font-weight:700;color:var(--tx3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:var(--sp-5)}
 .sp-chips{display:flex;flex-wrap:wrap;gap:var(--sp-4);align-items:center}
-.sp-date-custom{display:inline-flex;flex-direction:column;align-items:center;padding:var(--sp-4) var(--sp-5);border-radius:14px;border:1.5px dashed var(--br);transition:all .15s;background:var(--sf);min-width:56px;user-select:none;gap:var(--sp-2)}
-.sp-date-custom:hover{border-color:var(--ac);background:var(--al)}
-.sp-date-custom.sp-sel{background:var(--ac);border-color:var(--ac)}
-.sp-date-custom select{border:none;background:transparent;color:var(--tx2);font-size:var(--fs-sm);font-family:'Noto Sans TC',sans-serif;cursor:pointer;outline:none;-webkit-appearance:none;appearance:none;text-align:center}
-.sp-date-custom.sp-sel select{color:rgba(255,255,255,.9)}
 .sp-date{display:inline-flex;flex-direction:column;align-items:center;padding:var(--sp-4) var(--sp-6);border-radius:14px;border:1.5px solid var(--br);cursor:pointer;transition:all .15s;background:var(--sf);min-width:56px;user-select:none;gap:var(--sp-1)}
+/* 自選日期（2026-08-27 從月／日下拉換成共用月曆）：跟旁邊 14 顆日期卡同一個長相，
+   只有邊框改虛線＝「這顆要自己挑，不是現成的建議」。定義排在 .sp-date 之後才蓋得過去。 */
+.sp-date-custom{border-style:dashed}
+.sp-date-custom .sp-date-num{font-size:var(--fs-lg)}
+.sp-date-custom .sp-date-cal{line-height:1.25}
 .sp-date:hover{border-color:var(--ac);background:var(--al)}
 .sp-date.sp-sel{background:var(--ac);border-color:var(--ac)}
 .sp-date-tag{font-size:var(--fs-2xs);font-weight:700;letter-spacing:.05em;color:var(--tx3);height:13px;line-height:13px}

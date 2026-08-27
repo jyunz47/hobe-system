@@ -91,6 +91,20 @@ function attBucket(){return attCache[attCurrentYpid]||{records:[],idx:new Map()}
 // 某堂某生的點名紀錄（無則 undefined）
 function getAtt(eventId,studentId){return attBucket().idx.get(eventId)?.get(studentId);}
 
+// ── 復原用的資料位置（js/undo.js）──
+// 點名不在 driveData 裡（一學年上萬筆會撐爆單文件），資料在 attCache[ypid].records，
+// 所以自己給一份「讀／寫／認筆／存」的介面。⚠️ 寫回去要順便重建索引，否則畫面讀 idx 會看到舊的。
+function attUndoSlot(){
+  const ypid=attCurrentYpid;
+  return{
+    name:'點名',
+    read:()=>{const b=attCache[ypid];return b?b.records:[];},
+    write:list=>{const b=attCache[ypid];if(!b)return;b.records=list;attRebuildIdx(b);},
+    keyOf:attKeyOf,
+    save:()=>scheduleAttSave(),
+  };
+}
+
 // 標記出席（upsert）。status 一律 '到'（有來＝出席＝算一堂）；
 // lateMin>0 表示遲到 N 分（仍算出席）。沒來＝曠課，不在此記，走 Calendar 流程。
 function markAtt(eventId,date,studentId,status,lateMin=0){

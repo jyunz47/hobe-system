@@ -588,7 +588,6 @@ async function unmarkMakeupSkip(id){
 async function gotoMakeupEvent(id, ts){
   currentDate=new Date(ts);
   setDateDisplay(currentDate);
-  document.getElementById('date-picker').value=toDateStr(currentDate);
   showPanel('courses');
   document.getElementById('nav-courses').classList.add('active');
   document.getElementById('nav-makeup').classList.remove('active');
@@ -854,37 +853,23 @@ function buildSpDateSection(){
   sumEl.className='sp-date-sum'+(open.length||joinDays?'':' sp-date-sum-none');
   sumEl.innerHTML=parts.length?`接下來 14 天：${parts.join('　・　')}`
     :'接下來 14 天都沒有整段空檔——可用上面的「自訂時段」自己指定，系統只警告不擋';
+  // ── 自選日期＝跳出這 14 天 ──
+  // 2026-08-27 從「月／日兩個下拉」換成跟課程主頁同一顆月曆（老闆要求長相一致）。
+  // 順帶讓「年份寫死今年、12 月選 1 月會跳到今年 1 月＝過去的日期」那個 bug 徹底消失：
+  // 月曆自己帶年月導覽，年份是選出來的，不是從月份猜的。
   const custom=document.createElement('div');
   const isCustomSel=slotPicker.date&&!quickDates.has(slotPicker.date);
-  custom.className='sp-date-custom'+(isCustomSel?' sp-sel':'');
-  const year=today.getFullYear();
-  const selM=isCustomSel?parseInt(slotPicker.date.split('-')[1]):0;
-  const selD=isCustomSel?parseInt(slotPicker.date.split('-')[2]):0;
-  let mOpts='<option value="">月</option>';
-  for(let i=1;i<=12;i++)mOpts+=`<option value="${i}"${selM===i?' selected':''}>${i}月</option>`;
-  function daysInMonth(m,y){return new Date(y,m,0).getDate();}
-  const maxD=selM?daysInMonth(selM,year):31;
-  let dOpts='<option value="">日</option>';
-  for(let i=1;i<=maxD;i++)dOpts+=`<option value="${i}"${selD===i?' selected':''}>${i}日</option>`;
-  custom.innerHTML=`<div style="font-size:10px;color:var(--tx3)">自選日期</div><div style="display:flex;gap:2px"><select id="sp-cm">${mOpts}</select><select id="sp-cd">${dOpts}</select></div>`;
-  function trySelectCustom(){
-    const m=custom.querySelector('#sp-cm').value;
-    const d=custom.querySelector('#sp-cd').value;
-    if(!m||!d)return;
-    const ds=`${year}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    selectSpDate(ds);
-  }
-  custom.querySelector('#sp-cm').onchange=function(){
-    const m=parseInt(this.value);
-    const dSel=custom.querySelector('#sp-cd');
-    const curD=parseInt(dSel.value)||0;
-    const max=m?daysInMonth(m,year):31;
-    let opts='<option value="">日</option>';
-    for(let i=1;i<=max;i++)opts+=`<option value="${i}"${curD===i?' selected':''}>${i}日</option>`;
-    dSel.innerHTML=opts;
-    trySelectCustom();
+  custom.className='sp-date sp-date-custom'+(isCustomSel?' sp-sel':'');
+  const cd=isCustomSel?dpParse(slotPicker.date):null;
+  custom.title='挑這 14 天以外的日期';
+  custom.innerHTML=`<div class="sp-date-tag">自選</div>`
+    +(cd?`<div class="sp-date-num">${cd.getMonth()+1}/${cd.getDate()}</div><div class="sp-date-wd">週${WD[cd.getDay()]}</div>`
+        :`<div class="sp-date-num sp-date-cal">📅</div><div class="sp-date-wd">挑一天</div>`);
+  custom.onclick=function(){
+    dpOpenAt(this,{dots:false,
+      get:()=>slotPicker.date||toDateStr(new Date()),
+      pick:ds=>selectSpDate(ds)});
   };
-  custom.querySelector('#sp-cd').onchange=trySelectCustom;
   chips.appendChild(custom);
   return sec;
 }
@@ -1528,8 +1513,8 @@ function buildSpCustomSection(){
       <div class="sp-c-rowhd"><span class="sp-c-no">第 ${i+1} 場</span><span class="sp-c-sum" id="sp-c-sum-${i}"></span>
         ${rows.length>1?`<button class="sp-c-del" onclick="spDelRow(${i})" title="刪掉這一場">✕</button>`:''}</div>
       <div class="sp-custom-row">
-        <label>日期<input type="date" id="sp-c-date-${i}" value="${esc(r.date||'')}"></label>
-        <label>開始<input type="time" id="sp-c-time-${i}" value="${minToHHMM(r.h*60+r.mi)}"></label>
+        <label>日期<input type="text" readonly class="dp-input" id="sp-c-date-${i}" placeholder="選日期" value="${esc(r.date||'')}"></label>
+        <label>開始<input type="text" readonly class="tp-input" id="sp-c-time-${i}" value="${minToHHMM(r.h*60+r.mi)}"></label>
         <label>時長（分鐘）<input type="number" id="sp-c-dur-${i}" min="5" step="5" value="${r.dur}"></label>
         <label>教室<select id="sp-c-room-${i}">${roomOpts(r)}</select></label>
       </div>
@@ -1540,7 +1525,11 @@ function buildSpCustomSection(){
     <div id="sp-c-out"></div>`;
   rows.forEach((_,i)=>['sp-c-date','sp-c-time','sp-c-dur','sp-c-room'].forEach(id=>{
     const el=sec.querySelector('#'+id+'-'+i);
-    if(el){el.oninput=()=>spCustomEdit(i);el.onchange=()=>spCustomEdit(i);}
+    if(!el)return;
+    el.oninput=()=>spCustomEdit(i);el.onchange=()=>spCustomEdit(i);
+    // 日期／時間那兩格是唯讀的，點了跳共用面板；選完會發 change 回到上面那行
+    if(id==='sp-c-date')el.onclick=()=>dpForInput(el);
+    if(id==='sp-c-time')el.onclick=()=>tpForInput(el);
   }));
   setTimeout(spCustomRefresh,0);   // 抬頭與各列的提示要等節點進 DOM 才抓得到
   return sec;
@@ -1904,34 +1893,61 @@ function rebuildMakeupMatchMap(){
 }
 
 // 取消單一場補課（recId＝那場自己的 id，不是請假課堂的 id）
+// ⚠️ 這顆鈕（待補課卡的「取消安排」）沒有二次確認，2026-08-27 老闆手滑按到一次、
+//    一場排好的補課當場消失。所以做完之後掛一條「復原」軟籤（js/undo.js）。
 async function deleteMakeupScheduled(recId){
   const prev=findMakeupRec(recId);   // 刪掉之前先抄，動態才講得出取消的是哪一場
+  const u=undoBegin(['makeupScheduled']);
   driveData.makeupScheduled=getMakeupScheduledLS().map(normalizeMakeupRec).filter(x=>x.id!==recId);
   rebuildMakeupMatchMap();
   scheduleDriveSave('makeupScheduled');
+  let act=null;
   if(prev){
     const s=new Date(prev.scheduledDate);
-    logAct('makeup',`取消${(prev.absentStudents||[]).length?` ${prev.absentStudents.join('、')} 的`:''}${prev.calName||'補課'}`,
+    act=logAct('makeup',`取消${(prev.absentStudents||[]).length?` ${prev.absentStudents.join('、')} 的`:''}${prev.calName||'補課'}`,
       `${fmtD(s)} ${fmtT(s)} ${prev.room||''} ${prev.origTitle||''}`.trim(),'回到待安排清單');
   }
   await Promise.all([loadToday(),loadWeek()]); // 場次從主頁課表移除
   renderMakeup();updateMakeupBadge();
+  undoOffer(u,{label:mkCancelLabel(prev,1),act,redraw:mkRedrawAfterUndo});
+}
+
+// 復原後要重畫的東西（補課相關的動作共用）：對照表要重建，主頁課表要把場次長回來
+async function mkRedrawAfterUndo(){
+  rebuildMakeupMatchMap();
+  await Promise.all([loadToday(),loadWeek()]);
+  renderMakeup();updateMakeupBadge();
+  if(typeof renderDayView==='function'&&currentPanel==='dayview')renderDayView();
+}
+
+// 軟籤上那句話：講得出取消掉的是誰的哪一場，才知道值不值得按復原
+function mkCancelLabel(prev,n){
+  if(!prev)return n>1?`取消了 ${n} 場補課安排`:'取消了補課安排';
+  const who=(prev.absentStudents||[]).join('、');
+  const s=new Date(prev.scheduledDate);
+  const when=isNaN(s)?'':`${fmtD(s)} ${fmtT(s)} `;
+  const more=n>1?`等 ${n} 場`:'';
+  return`取消了 ${when}${who?who+' 的':''}${prev.calName||'補課'}${more}`;
 }
 
 // 取消這堂請假／調課排出去的**所有**場次（取消調課用：整堂移走的那場一定要跟著撤）
 async function deleteMakeupsForOcc(occId){
   const recs=getMakeupsFor(occId);
   if(!recs.length)return;
+  const u=undoBegin(['makeupScheduled']);
   driveData.makeupScheduled=getMakeupScheduledLS().map(normalizeMakeupRec).filter(x=>x.originalId!==occId);
   rebuildMakeupMatchMap();
   scheduleDriveSave('makeupScheduled');
+  // 一次撤好幾場時動態會記好幾筆，復原要把它們全撤掉，所以收成陣列（見 undoOffer 的 act）
+  const acts=[];
   recs.forEach(prev=>{
     const s=new Date(prev.scheduledDate);
-    logAct('makeup',`取消${(prev.absentStudents||[]).length?` ${prev.absentStudents.join('、')} 的`:''}${prev.calName||'補課'}`,
-      `${fmtD(s)} ${fmtT(s)} ${prev.room||''} ${prev.origTitle||''}`.trim(),'回到待安排清單');
+    acts.push(logAct('makeup',`取消${(prev.absentStudents||[]).length?` ${prev.absentStudents.join('、')} 的`:''}${prev.calName||'補課'}`,
+      `${fmtD(s)} ${fmtT(s)} ${prev.room||''} ${prev.origTitle||''}`.trim(),'回到待安排清單'));
   });
   await Promise.all([loadToday(),loadWeek()]);
   renderMakeup();updateMakeupBadge();
+  undoOffer(u,{label:mkCancelLabel(recs[0],recs.length),act:acts,redraw:mkRedrawAfterUndo});
 }
 
 // 取消請假後同步已排的補課（absence.js doCancel 呼叫）：

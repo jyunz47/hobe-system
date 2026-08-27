@@ -62,11 +62,23 @@ function isSignedIn() { return true; }
 var _actCalls = [];
 function logAct(kind, text, target, detail) { _actCalls.push({ kind, text, target, detail }); }
 function actEvLabel(ev) { return ev && ev.origTitle || ''; }
+// 顯示署名。真身（activity.js）會拿信箱去查 STAFF_NAMES 對照表，這裡照同一條規則收斂：
+// 有信箱就用信箱前綴、沒有就退回紀錄裡抄的名字。少了這兩支，待補課留言串的測試會噴
+// 「actWho is not defined」（2026-08-27 修：那 4 條紅就是這樣來的）。
+function actName(email) { return String(email || '').split('@')[0] || '某人'; }
+function actWho(by, snapName) { return by ? actName(by) : (String(snapName || '').trim() || '某人'); }
 function getMakeupScheduledLS() { return driveData.makeupScheduled || []; }
 </script>
 
 <!-- 1. 被測程式（utils.js 提供 toDateStr/fmtT，dayview.js 的拖曳寫入需要）-->
+<!-- undo.js 要排在 makeup.js 前面：deleteMakeupScheduled 等寫入函式會呼叫 undoBegin/undoOffer。
+     它只碰 driveData 與 #undo-bar（測試頁沒有那顆 DOM → undoOffer 自己就退出了），不影響任何斷言。 -->
+<script src="../js/undo.js"></script>
 <script src="../js/utils.js"></script>
+<!-- 共用月曆／時間面板：makeup.js 的日期列會用 dpParse／dpOpenAt，
+     courses.js 與 makeup.js 的時段欄位會用 tpForInput -->
+<script src="../js/datepicker.js"></script>
+<script src="../js/timepicker.js"></script>
 <script src="../js/enrollment.js"></script>
 <script src="../js/schedule.js"></script>
 <script src="../js/dayview.js"></script>
@@ -74,6 +86,10 @@ function getMakeupScheduledLS() { return driveData.makeupScheduled || []; }
 <script src="../js/absence.js"></script>
 <script src="../js/makeup.js"></script>
 <script src="../js/students.js"></script>
+<!-- settings.js＝課程管理頁（期別交接卡 coCarry* 在裡面）。頂層只有宣告、不碰 DOM，
+     它的 studentName 與上面那顆 stub 行為等價（都是查 driveData.studentList），覆蓋掉沒差 -->
+<script src="../js/settings.js"></script>
+<script src="../js/newterm.js"></script>
 <script src="../js/search.js"></script>
 <script src="../js/remind.js"></script>
 
@@ -126,6 +142,9 @@ function toast() {}
 <script src="teacher-schedule.test.js"></script>
 <script src="sync-merge.test.js"></script>
 <script src="sync-queue.test.js"></script>
+<script src="undo.test.js"></script>
+<script src="period-carry.test.js"></script>
+<script src="newterm.test.js"></script>
 <!-- remind 放最後：它把 currentPeriodId 切成 summer 且不還原，排前面會影響後面的測試 -->
 <script src="remind.test.js"></script>
 

@@ -44,9 +44,11 @@ function actNewId(){return Date.now()+'-'+Math.random().toString(36).slice(2,7);
 // kind：absence（請假曠課）/ makeup（補課調課）/ roster（名單加退）/ course（課程異動）/ student（學生檔）
 // text＝主句、target＝對象（哪堂課／哪個學生）、detail＝補充說明
 // 記錄失敗一律只 console 警告，絕不打斷主流程——動態少記一行，總比請假標不成好。
+// 回傳寫出去的那一筆（沒記成則回 null）——復原時要拿它去 arrayRemove，見 actRemoveEvent。
+// 既有呼叫端都不理回傳值，加這個不影響任何一處。
 function logAct(kind,text,target,detail){
   const email=actMe();
-  if(!email)return;
+  if(!email)return null;
   const rec={id:actNewId(),ts:new Date().toISOString(),by:email,byName:actName(email),
     kind:kind||'other',text:String(text||''),target:String(target||''),detail:String(detail||'')};
   actEvents.push(rec);
@@ -54,6 +56,23 @@ function logAct(kind,text,target,detail){
     actDoc().set({events:firebase.firestore.FieldValue.arrayUnion(rec)},{merge:true})
       .catch(e=>console.warn('logAct failed',e));
   }catch(e){console.warn('logAct failed',e);}
+  if(currentPanel==='activity')renderActivity();
+  return rec;
+}
+
+// ── 撤掉一筆已經寫出去的動態（js/undo.js 復原時呼叫）──
+// ⚠️ arrayRemove 是「整筆完全相同才刪得掉」，所以傳進來的必須是 logAct 當初回傳的那一筆
+//    本尊，不能是重新拼出來、欄位順序或內容差一點的複製品。
+// 刻意用 arrayRemove 而不是整份覆寫，理由跟過期清理那段一樣：覆寫會把別人同一秒
+// arrayUnion 進來的事件洗掉。
+function actRemoveEvent(rec){
+  if(!rec||!rec.id)return;
+  const i=actEvents.findIndex(e=>e&&e.id===rec.id);
+  if(i>=0)actEvents.splice(i,1);
+  try{
+    actDoc().update({events:firebase.firestore.FieldValue.arrayRemove(rec)})
+      .catch(e=>console.warn('[undo] 動態撤不掉（資料已還原，只是動態上那行還在）',e));
+  }catch(e){console.warn('[undo] 動態撤不掉',e);}
   if(currentPanel==='activity')renderActivity();
 }
 

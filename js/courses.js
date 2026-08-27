@@ -503,7 +503,7 @@ function renderCourseForm(){
     <div class="cf-phase">
       <div class="cf-phase-hd">
         <span class="cf-phase-lbl">從</span>
-        <input type="date" class="cf-phase-date" value="${esc(ph.from)}" onchange="cfPhaseFromSet(${pi},this.value)">
+        <input type="text" readonly class="dp-input cf-phase-date" placeholder="選日期" value="${esc(ph.from)}" onclick="dpForInput(this)" onchange="cfPhaseFromSet(${pi},this.value)">
         <span class="cf-phase-lbl">起改為</span>
         <span class="cf-phase-presets">${CF_TERM_STARTS.map(([lbl,mo,dd])=>`<button type="button" class="cf-term-btn" onclick="cfPhaseFromPreset(${pi},${mo},${dd})">${lbl}</button>`).join('')}</span>
         <button class="co-stu-x cf-phase-x" title="移除此段" onclick="cfDelPhase(${pi})">✕</button>
@@ -511,9 +511,9 @@ function renderCourseForm(){
       ${ph.slots.map((sl,si)=>`
       <div class="cf-slot">
         ${wdSel(sl,`cfPhaseSlotSet(${pi},${si},'weekday',parseInt(this.value,10))`)}
-        <input type="time" value="${esc(sl.start)}" onchange="cfPhaseSlotSet(${pi},${si},'start',this.value)">
+        <input type="text" readonly class="tp-input" placeholder="開始" value="${esc(sl.start)}" onclick="tpForInput(this)" onchange="cfPhaseSlotSet(${pi},${si},'start',this.value)">
         <span class="cf-slot-dash">–</span>
-        <input type="time" value="${esc(sl.end)}" onchange="cfPhaseSlotSet(${pi},${si},'end',this.value)">
+        <input type="text" readonly class="tp-input" placeholder="結束" value="${esc(sl.end)}" onclick="tpForInput(this)" onchange="cfPhaseSlotSet(${pi},${si},'end',this.value)">
         <button class="co-stu-x" title="移除時段" onclick="cfPhaseDelSlot(${pi},${si})">✕</button>
       </div>`).join('')}
       <button class="cf-add-slot" onclick="cfPhaseAddSlot(${pi})">＋ 加時段</button>
@@ -527,10 +527,10 @@ function renderCourseForm(){
       <div class="cf-slot">
         ${st.mode==='weekly'
           ? wdSel(sl,`cfSlotSet(${i},'weekday',parseInt(this.value,10))`)
-          :`<input type="date" value="${esc(sl.date)}" onchange="cfSlotSet(${i},'date',this.value)">`}
-        <input type="time" value="${esc(sl.start)}" onchange="cfSlotSet(${i},'start',this.value)">
+          :`<input type="text" readonly class="dp-input" placeholder="選日期" value="${esc(sl.date)}" onclick="dpForInput(this)" onchange="cfSlotSet(${i},'date',this.value)">`}
+        <input type="text" readonly class="tp-input" placeholder="開始" value="${esc(sl.start)}" onclick="tpForInput(this)" onchange="cfSlotSet(${i},'start',this.value)">
         <span class="cf-slot-dash">–</span>
-        <input type="time" value="${esc(sl.end)}" onchange="cfSlotSet(${i},'end',this.value)">
+        <input type="text" readonly class="tp-input" placeholder="結束" value="${esc(sl.end)}" onclick="tpForInput(this)" onchange="cfSlotSet(${i},'end',this.value)">
         <button class="co-stu-x" title="移除時段" onclick="cfDelSlot(${i})">✕</button>
       </div>`).join('')}
       <button class="cf-add-slot" onclick="cfAddSlot()">＋ 加時段</button>
@@ -553,10 +553,10 @@ function renderCourseForm(){
     ?`<div class="cm-hint">練習課輔導老師薪資走打卡制，不在系統內設費率。</div>`
     :`<div class="cm-lbl" style="margin-top:12px">老師費率（薪資表用，可先空著）</div>
       <div class="cm-price-row"><input type="number" class="cm-input cm-price" min="0" inputmode="numeric" placeholder="未定" value="${st.teacherRate===''?'':esc(String(st.teacherRate))}" oninput="cfRateInput(this.value)"><span class="cm-unit">${cfRateUnit(t)}</span></div>`;
-  const teacherSec=`<div class="cm-sec"><div class="cm-lbl">老師${t==='練習課'?'（預設輔導老師，當堂可換）':''}${st.teachers.length>1?`<span class="cm-count">${st.teachers.length}</span>`:''}</div>
+  const teacherSec=`<div class="cm-sec"><div class="cm-lbl">老師${t==='練習課'?'（預設輔導老師，可留空、當堂可換）':''}${st.teachers.length>1?`<span class="cm-count">${st.teachers.length}</span>`:''}</div>
     ${tChips?`<div class="cf-chips">${tChips}</div>`:''}
     <div class="co-add">
-      <input class="co-add-sel" name="search-teacher" autocomplete="off" list="cf-teachers-dl" placeholder="輸入老師姓名…" value="${esc(st.teacherInput)}" oninput="cfTeacherInput(this.value)" onkeydown="if(enterSubmit(event)){cfAddTeacher()}">
+      <input class="co-add-sel" name="search-teacher" autocomplete="off" list="cf-teachers-dl" placeholder="${t==='練習課'?'輸入老師姓名…（可不填）':'輸入老師姓名…'}" value="${esc(st.teacherInput)}" oninput="cfTeacherInput(this.value)" onkeydown="if(enterSubmit(event)){cfAddTeacher()}">
       <datalist id="cf-teachers-dl">${tDl}</datalist>
       <button class="co-add-btn" onclick="cfAddTeacher()">＋ 加入</button>
     </div>
@@ -593,7 +593,7 @@ function renderCourseForm(){
     <div class="cf-phase">
       <div class="cf-phase-hd">
         <span class="cf-phase-lbl">從</span>
-        <input type="date" class="cf-phase-date" value="${esc(np.from)}" onchange="cfNamePhaseSet(${ni},'from',this.value)">
+        <input type="text" readonly class="dp-input cf-phase-date" placeholder="選日期" value="${esc(np.from)}" onclick="dpForInput(this)" onchange="cfNamePhaseSet(${ni},'from',this.value)">
         <span class="cf-phase-lbl">起改叫</span>
         <span class="cf-phase-presets">${CF_TERM_STARTS.map(([lbl,mo,dd])=>`<button type="button" class="cf-term-btn" onclick="cfNamePhasePreset(${ni},${mo},${dd})">${lbl}</button>`).join('')}</span>
         <button class="co-stu-x cf-phase-x" title="移除此段" onclick="cfDelNamePhase(${ni})">✕</button>
@@ -655,10 +655,11 @@ function logCourseEditAct(old,rec){
 function cfSubmit(){
   const st=cfState,t=cfType();
   // 老師（可多位）：收 chips ＋ 尚未按加入的輸入框文字；至少一位
+  // 例外：練習課的輔導老師常常是當天才排（薪資也走打卡制、不靠這裡），所以准許留空（2026-08-27 老闆要求）
   const tnames=st.teachers.map(s=>s.trim()).filter(Boolean);
   const pendingT=(st.teacherInput||'').trim();
   if(pendingT&&!tnames.includes(pendingT))tnames.push(pendingT);
-  if(!tnames.length)return toast('請至少加入一位老師','err');
+  if(!tnames.length&&t!=='練習課')return toast('請至少加入一位老師','err');
   const name=(st.name||'').trim()||cfAutoName().trim();
   if(!name)return toast('課名不能是空的（選學生或填科目讓系統命名，或直接輸入）','err');
   // 時段：只收完整的
@@ -754,17 +755,27 @@ async function deleteCourse(id){
     html:`<p class="ask-big">${esc(courseNameOn(co,new Date()))}</p>
       <div class="ask-list">${times.split('、').map(s=>`・${esc(s)}`).join('<br>')}</div>
       <p>會一併移除 <b>${ens.length}</b> 筆修課登記，學生本人不會被刪。</p>
-      <div class="ask-note ask-warn">刪掉之後救不回來。</div>`});
+      <div class="ask-note ask-warn">刪完有 12 秒可以按「復原」，過了就救不回來。</div>`});
   if(!ok)return;
+  const name=courseNameOn(co,new Date());
+  // 這是連鎖刪除，三個欄位都會動 → 快照要全收，少收一欄復原就會留下半套資料
+  const undoTok=undoBegin(['absences','courses','enrollments']);
   // 連動清掉本課的系統請假紀錄（不留孤兒；待補課清單重建時查無課程也會跳過）
   if(getAbsences().some(a=>a.courseId===id))saveAbsences(getAbsences().filter(a=>a.courseId!==id));
   saveCourses(getCourses().filter(c=>c.id!==id));
   if(ens.length)saveEnrollments(getEnrollments().filter(en=>en.courseId!==id));
-  logAct('course','刪除課程',courseNameOn(co,new Date()),`${times}${ens.length?`・一併移除 ${ens.length} 筆修課登記`:''}`);
-  toast(`已刪除「${courseNameOn(co,new Date())}」`,'ok');
+  const undoAct=logAct('course','刪除課程',name,`${times}${ens.length?`・一併移除 ${ens.length} 筆修課登記`:''}`);
+  toast(`已刪除「${name}」`,'ok');
   closeCourseForm();
   closeCourseModal();
   renderSettings();
+  undoOffer(undoTok,{label:`刪除了課程「${name}」`,act:undoAct,redraw:async()=>{
+    if(typeof rebuildMakeupMatchMap==='function')rebuildMakeupMatchMap();
+    await Promise.all([loadToday(),loadWeek()]);
+    renderSettings();
+    if(typeof renderMakeup==='function')renderMakeup();
+    if(typeof renderStudents==='function')renderStudents();
+  }});
 }
 
 // ── 新增頁（左側「新增課程/學生」獨立頁，進頁直接填、不開 modal）──
@@ -1068,9 +1079,9 @@ function teacherSchHtml(t){
     <select class="tsch-sel" onchange="taAvailSet(${t.id},${r.id},'weekday',this.value)">
       ${TSCH_WD.map(([v,l])=>`<option value="${v}"${Number(r.weekday)===v?' selected':''}>${l}</option>`).join('')}
     </select>
-    <input class="tsch-time-in" type="time" value="${esc(r.start)}" onchange="taAvailSet(${t.id},${r.id},'start',this.value)">
+    <input class="tsch-time-in tp-input" type="text" readonly placeholder="開始" value="${esc(r.start)}" onclick="tpForInput(this)" onchange="taAvailSet(${t.id},${r.id},'start',this.value)">
     <span class="tsch-dash">–</span>
-    <input class="tsch-time-in" type="time" value="${esc(r.end)}" onchange="taAvailSet(${t.id},${r.id},'end',this.value)">
+    <input class="tsch-time-in tp-input" type="text" readonly placeholder="結束" value="${esc(r.end)}" onclick="tpForInput(this)" onchange="taAvailSet(${t.id},${r.id},'end',this.value)">
     <select class="tsch-sel" onchange="taAvailSet(${t.id},${r.id},'kind',this.value)">
       <option value="ok"${r.kind!=='no'?' selected':''}>可以排</option>
       <option value="no"${r.kind==='no'?' selected':''}>不能排</option>
@@ -1217,13 +1228,13 @@ function sysDateEditorHtml(ens){
     <div class="co-dates-hd">${esc(studentName(en.studentId))} 的修課起訖</div>
     <div class="co-dates-row">
       <span class="cf-phase-lbl">從</span>
-      <input type="date" class="cf-phase-date" value="${esc(st.joinFrom)}" onchange="sysDateSet('joinFrom',this.value)">
+      <input type="text" readonly class="dp-input cf-phase-date" placeholder="選日期" value="${esc(st.joinFrom)}" onclick="dpForInput(this)" onchange="sysDateSet('joinFrom',this.value)">
       <span class="cf-phase-lbl">起加入</span>
       <span class="cf-phase-presets">${presets('joinFrom')}</span>
     </div>
     <div class="co-dates-row">
       <span class="cf-phase-lbl">從</span>
-      <input type="date" class="cf-phase-date" value="${esc(st.leaveFrom)}" onchange="sysDateSet('leaveFrom',this.value)">
+      <input type="text" readonly class="dp-input cf-phase-date" placeholder="選日期" value="${esc(st.leaveFrom)}" onclick="dpForInput(this)" onchange="sysDateSet('leaveFrom',this.value)">
       <span class="cf-phase-lbl">起不上</span>
       <span class="cf-phase-presets">${presets('leaveFrom')}</span>
     </div>

@@ -105,7 +105,6 @@ function openDayViewWindow(){_dvOpenWin('?app=dayview','hobe-dayview');}
 function dvNav(d){
   currentDate=d;
   if(typeof setDateDisplay==='function')setDateDisplay(currentDate);
-  const dp=document.getElementById('date-picker');if(dp)dp.value=toDateStr(currentDate);
   if(isSignedIn())Promise.all([loadToday(),loadWeek()]);
   else renderDayView();
 }

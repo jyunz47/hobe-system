@@ -169,9 +169,12 @@ window.addEventListener('keydown',e=>{
 });
 
 // ── 日期切換 ──
-function changeDay(d){currentDate=new Date(currentDate.getTime()+d*864e5);setDateDisplay(currentDate);document.getElementById('date-picker').value=toDateStr(currentDate);if(isSignedIn())Promise.all([loadToday(),loadWeek()]);}
-function goToday(){currentDate=new Date();setDateDisplay(currentDate);document.getElementById('date-picker').value=toDateStr(currentDate);if(isSignedIn())Promise.all([loadToday(),loadWeek()]);}
+function changeDay(d){currentDate=new Date(currentDate.getTime()+d*864e5);setDateDisplay(currentDate);if(isSignedIn())Promise.all([loadToday(),loadWeek()]);}
+function goToday(){currentDate=new Date();setDateDisplay(currentDate);if(isSignedIn())Promise.all([loadToday(),loadWeek()]);}
 function pickDate(val){if(!val)return;const[y,m,d]=val.split('-').map(Number);currentDate=new Date(y,m-1,d);setDateDisplay(currentDate);if(isSignedIn())Promise.all([loadToday(),loadWeek()]);}
+// 所有換日期的路徑都會經過這裡（前後一天／今天／小月曆／搜尋跳轉／桌面日曆／待補課卡）。
+// 2026-08-27 起日期選擇器的同步也收進來——以前是每個呼叫點自己補一行寫 <input type="date">，
+// 六個地方各寫一次、漏一個就出現「標題換了、選擇器還停在舊日期」。
 function setDateDisplay(d){
   const W=['日','一','二','三','四','五','六'];
   const today=new Date();today.setHours(0,0,0,0);
@@ -179,4 +182,5 @@ function setDateDisplay(d){
   const diff=Math.round((cd-today)/864e5);
   const lbl=diff===0?'  今天':diff===1?'  明天':diff===-1?'  昨天':'';
   document.getElementById('date-title').textContent=`${d.getFullYear()}年${d.getMonth()+1}月${d.getDate()}日（${W[d.getDay()]}）${lbl}`;
+  if(typeof dpSync==='function')dpSync(d);
 }

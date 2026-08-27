@@ -109,8 +109,134 @@ function clashHtml(){
   </div>`;
 }
 
+// ══════════════════════════════════════════════════════════════
+// 期別交接：把上一期的修課登記帶到這一期（2026-08-27）
+// ══════════════════════════════════════════════════════════════
+// 【在解什麼】
+// 修課登記綁在「學年-期別」上（yearPeriodId）。每年 9/1、3/1、7/1 期別自動翻頁時，
+// 全系統撈名單的二十幾處會改用新的期別 id 去查——**舊登記一筆都對不上，每堂課的名單
+// 當場變空**。課還在、學生檔也還在，但點名沒人可點、統計全空。
+// 系統本來就沒有任何交接機制（老闆 2026-07-04 在 7/1 那次被嚇到過一次）。
+//
+// 【做法】
+// 期別剛翻頁（這一期 0 筆、上一期有）時，課程管理頁最上面長出一張卡：列出上一期的
+// 每一筆「誰上哪門課」，勾選要帶過來的（預設全勾），按一下在新期別建立對應的登記。
+// **舊那期一筆都不動**，純新增——做錯了把新的刪掉就回到原狀。
+//
+// ⚠️ 單價直接沿用（2026-08-27 老闆指示：「價格照理說不會變」）。要調價等做學費／薪資
+//    那一刀時再一起處理，記在 todos。
+// ⚠️ 期中加退（startDate/endDate）**不帶過來**：那是上一期的期中變動，新的一期從頭開始。
+
+var _coCarryPick=null;   // Set of 上一期 enrollment id；null＝還沒初始化（預設全勾）
+
+// 這一期還沒有登記、上一期有 → 回傳交接需要的資料；否則 null（卡片不出現）
+function coCarryInfo(){
+  const cur=yearPeriodId();
+  const prev=typeof prevYearPeriodId==='function'?prevYearPeriodId(cur):null;
+  if(!prev)return null;
+  if(getEnrollments({periodId:cur}).length)return null;      // 這一期已經有人了＝不用交接
+  const rows=getEnrollments({periodId:prev});
+  if(!rows.length)return null;
+  return{cur,prev,rows};
+}
+
+function coCarryHtml(){
+  const info=coCarryInfo();
+  if(!info)return'';
+  const {cur,prev,rows}=info;
+  if(_coCarryPick===null)_coCarryPick=new Set(rows.map(en=>en.id));
+  // 課已結束、學生已離校的那幾筆標出來——多半不該帶過去，但由老闆決定
+  const items=rows.map(en=>{
+    const co=en.courseId!=null&&typeof findCourseById==='function'?findCourseById(en.courseId):null;
+    const stu=(getStudentList()||[]).find(s=>s.id===en.studentId);
+    const title=co?courseNameOn(co,new Date()):(en.courseTitle||'(未命名)');
+    const warn=[];
+    if(en.courseId!=null&&!co)warn.push('課程已刪除');
+    else if(co&&co.status&&co.status!=='開課中')warn.push('課程'+co.status);
+    if(!stu)warn.push('查無學生');
+    else if(stu.status&&stu.status!=='在學')warn.push('學生'+stu.status);
+    const on=_coCarryPick.has(en.id);
+    return`<label class="co-carry-row${warn.length?' warn':''}">
+      <input type="checkbox" ${on?'checked':''} onchange="coCarryToggle(${en.id})">
+      <span class="co-carry-who">${esc(stu?stu.name:'#'+en.studentId)}</span>
+      <span class="co-carry-course">${esc(title)}</span>
+      ${warn.length?`<span class="co-carry-warn">${esc(warn.join('・'))}</span>`:''}
+    </label>`;
+  }).join('');
+  const n=_coCarryPick.size;
+  return`<div class="co-carry">
+    <div class="co-carry-hd">📚 新的一期開始了：把上一期的名單帶過來</div>
+    <div class="co-carry-note">現在是 <b>${esc(yearPeriodLabel(cur))}</b>，這一期<b>還沒有任何修課登記</b>——所以每堂課的名單現在是空的。
+      上一期（${esc(yearPeriodLabel(prev))}）有 <b>${rows.length}</b> 筆，勾選要帶過來的。
+      <b>上一期的資料一筆都不會動</b>，這裡只做新增，帶錯了把新的退掉就好。單價照舊沿用。</div>
+    <div class="co-carry-acts">
+      <button class="btn btns" onclick="coCarryAll(true)">全選</button>
+      <button class="btn btns" onclick="coCarryAll(false)">全不選</button>
+      <span class="co-carry-n">已選 <b>${n}</b> / ${rows.length}</span>
+      <button class="btn btns btnp" ${n?'':'disabled'} onclick="coCarryRun()">帶到${esc(yearPeriodLabel(cur))}</button>
+    </div>
+    <div class="co-carry-list">${items}</div>
+  </div>`;
+}
+
+function coCarryToggle(id){
+  if(!_coCarryPick)return;
+  if(_coCarryPick.has(id))_coCarryPick.delete(id);else _coCarryPick.add(id);
+  renderSettings();
+}
+function coCarryAll(on){
+  const info=coCarryInfo();
+  if(!info)return;
+  _coCarryPick=on?new Set(info.rows.map(en=>en.id)):new Set();
+  renderSettings();
+}
+
+async function coCarryRun(){
+  const info=coCarryInfo();
+  if(!info||!_coCarryPick||!_coCarryPick.size)return;
+  const picked=info.rows.filter(en=>_coCarryPick.has(en.id));
+  const ok=await uiConfirm({title:'帶到新的一期',ok:'確認帶過來',
+    html:`<p class="ask-big">${picked.length} 筆修課登記</p>
+      <p>從 <b>${esc(yearPeriodLabel(info.prev))}</b> 複製到 <b>${esc(yearPeriodLabel(info.cur))}</b>。</p>
+      <div class="ask-note">上一期的資料一筆都不會動，這裡只做新增。單價沿用上一期。</div>`});
+  if(!ok)return;
+  const undoTok=typeof undoBegin==='function'?undoBegin(['enrollments']):null;
+  const add=picked.map(en=>makeEnrollment({
+    studentId:en.studentId,courseTitle:en.courseTitle,periodId:info.cur,
+    price:en.price,courseId:en.courseId,practiceSubject:en.practiceSubject||'',
+    note:en.note||'',
+    // startDate/endDate 刻意不帶：那是上一期的期中加退，新的一期從頭開始
+  }));
+  saveEnrollments([...getEnrollments(),...add]);
+  const act=typeof logAct==='function'
+    ? logAct('roster','帶入上一期的修課登記',yearPeriodLabel(info.cur),
+        `${add.length} 筆・來源 ${yearPeriodLabel(info.prev)}`)
+    : null;
+  _coCarryPick=null;
+  toast(`已帶入 ${add.length} 筆修課登記`,'ok');
+  if(isSignedIn())await Promise.all([loadToday(),loadWeek()]);
+  renderSettings();
+  if(typeof renderStudents==='function')renderStudents();
+  if(typeof undoOffer==='function')undoOffer(undoTok,{
+    label:`帶入了 ${add.length} 筆修課登記`,act,
+    redraw:async()=>{
+      if(isSignedIn())await Promise.all([loadToday(),loadWeek()]);
+      renderSettings();
+      if(typeof renderStudents==='function')renderStudents();
+    }});
+}
+
 function renderSettings(){
   _coCardCtx.clear();
+  // 開學準備／期別交接：自成一個區塊（#term-prep），**不併進課程總覽**——那兩件事是
+  // 「這一陣子要辦完的作業」，跟總覽這種常駐清單性質不同（2026-08-27 老闆要求分開）。
+  // 開學準備涵蓋了交接卡能做的事，所以兩者只顯示一個——交接卡退居最後一道保險
+  //（例：超過 28 天前就翻頁、卻一直沒人處理）。
+  const prep=document.getElementById('term-prep');
+  if(prep){
+    const nt=typeof ntHtml==='function'?ntHtml():'';
+    prep.innerHTML=nt||coCarryHtml();
+  }
   const list=buildCourseOverview();
   const body=document.getElementById('co-list');
   if(!list.length){

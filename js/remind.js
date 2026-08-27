@@ -113,6 +113,22 @@ function rmdAutoItems(day){
     mins:dt.getHours()*60+dt.getMinutes(),time:fmtT(dt),cls,tag,
     text:text||'',sub:sub||'',evId:evId||null,copyTag:!!copyTag});
 
+  // 先展開那天的課堂（②要用），順便挑出「同一天內的調課」。
+  // ⚠️ 2026-08-27 老闆回報：一堂課只是同天延後上課，卡片上會冒出**兩則**——一則說原本那堂
+  //    不上、一則說幾點上。那是因為下面①②各有各的日期過濾，同天調課會兩邊都通過。
+  //    跨天調課不會有這問題（原本那天列「今天不上」、調去那天列「幾點上」，各自一則），
+  //    所以**只有同一天的才併**，併進①那則、講清楚「原本幾點」。
+  let evs=[];
+  try{evs=expandCoursesForRange(start,end);}catch(e){console.warn('rmdAutoItems courses failed',e);}
+  const sameDayResched=new Map();   // 補課紀錄 id → 原本那堂課（只收新舊時段都在今天的）
+  evs.forEach(e=>{
+    if(!e.isRescheduled)return;
+    const rec=getMakeupsFor(e.id)[0];
+    if(!rec)return;
+    const to=new Date(rec.scheduledDate);
+    if(to>=start&&to<=end)sameDayResched.set(rec.id,e);
+  });
+
   // ① 補課／調課場次。刻意直接讀紀錄而不是走 expandMakeupForRange——
   //    併班補課（kind:'join'）不會長成自己的一堂課，只有紀錄裡有，走展開器會漏掉。
   try{
@@ -122,19 +138,22 @@ function rmdAutoItems(day){
       const isR=rec.calName==='調課';
       const join=isJoinRec(rec);
       const who=(rec.absentStudents||[]).join('、');
+      const origEv=sameDayResched.get(rec.id);   // 同天調課：這一則要自己講完整件事
+      const place=[rec.room||'',rmdRecTeacher(rec)].filter(Boolean).join('・');
+      const sub=join?`跟著「${rec.hostTitle||'另一堂課'}」一起上`
+        :origEv?[`原本 ${fmtT(origEv.startDt)}`,place].filter(Boolean).join('・')
+        :place;
       push(s,isR?'resched':'makeup',(join?'併班':'')+(isR?'調課':'補課'),
-        `${who?who+'　':''}${rec.origTitle||''}`,
-        join?`跟著「${rec.hostTitle||'另一堂課'}」一起上`
-            :[rec.room||'',rmdRecTeacher(rec)].filter(Boolean).join('・'),null,true);
+        `${who?who+'　':''}${rec.origTitle||''}`,sub,origEv?origEv.id:null,true);
     });
   }catch(e){console.warn('rmdAutoItems makeup failed',e);}
 
   // ② 那天的課堂裡「跟平常不一樣的」。一般課程不進來
-  let evs=[];
-  try{evs=expandCoursesForRange(start,end);}catch(e){console.warn('rmdAutoItems courses failed',e);}
   evs.forEach(e=>{
     if(e.isRescheduled){
       const rec=getMakeupsFor(e.id)[0];
+      // 同天調課：①那則已經把「幾點上・原本幾點」講完了，不再列一則「今天不上」
+      if(rec&&sameDayResched.has(rec.id))return;
       const to=rec?new Date(rec.scheduledDate):null;
       push(e.startDt,'resched','調課',`${e.origTitle} 今天不上`,
         to?`已改到 ${fmtD(to)} ${fmtT(to)}`:'還沒安排新時段',e.id);
@@ -282,7 +301,8 @@ function renderRemind(){
     </div>
     ${rmdAdding?`
     <div class="rmd-add">
-      <input type="time" class="rmd-add-time" value="${esc(rmdDraft.time)}" oninput="rmdDraftSet('time',this.value)" title="幾點（可以不填）">
+      <input type="text" readonly data-tp-clear class="rmd-add-time tp-input" placeholder="幾點" value="${esc(rmdDraft.time)}"
+        onclick="tpForInput(this)" oninput="rmdDraftSet('time',this.value)" title="幾點（可以不填，不填＝整天）">
       <input id="rmd-inp" class="rmd-add-inp" value="${esc(rmdDraft.text)}" placeholder="例：15:00 面試 王小明媽媽／記得回電給陳爸爸"
         oninput="rmdDraftSet('text',this.value)" onkeydown="if(enterSubmit(event))rmdAdd()">
       <button class="rmd-add-go" onclick="rmdAdd()">記到${rmdDay?'明天':'今天'}</button>

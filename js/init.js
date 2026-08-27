@@ -44,7 +44,6 @@ window.addEventListener('load',()=>{
   applyWinMode();
   initAuth();
   setDateDisplay(currentDate);
-  document.getElementById('date-picker').value=toDateStr(currentDate);
 });
 
 // ── PWA 獨立視窗模式：popup 開不起來，登入改走整頁 redirect ──

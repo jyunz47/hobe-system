@@ -243,9 +243,10 @@ function sysApplyAbsence(ev,state){
 
 // 標記請假／曠課 → 記一筆動態（js/activity.js）。時機三段照面板的字，同事才對得起來
 var ABS_TIMING_LBL={A:'課前 1 小時以上',B:'課前 1 小時內',C:'已開始'};
+// 回傳記下的那幾筆動態（復原時要一起撤掉，見 js/undo.js）
 function logAbsenceAct(ev,state){
-  if(typeof logAct!=='function')return;
-  if(state.type==='teacher'){logAct('absence','標記 老師請假',actEvLabel(ev),'整堂不上');return;}
+  if(typeof logAct!=='function')return[];
+  if(state.type==='teacher')return[logAct('absence','標記 老師請假',actEvLabel(ev),'整堂不上')];
   // 一批人可能各自不同時機 → 同時機的併成一則，不同的各記一則（動態才看得出誰是曠課）
   const byT=new Map();
   absTargets(ev,state).forEach(n=>{
@@ -253,11 +254,13 @@ function logAbsenceAct(ev,state){
     if(!byT.has(t))byT.set(t,[]);
     byT.get(t).push(n);
   });
+  const acts=[];
   byT.forEach((who,t)=>{
     const noShow=t==='C';
-    logAct('absence',`標記 ${who.join('、')} ${noShow?'曠課':'請假'}`,actEvLabel(ev),
-      noShow?'曠課：不排補課、不計欠課':(ABS_TIMING_LBL[t]||''));
+    acts.push(logAct('absence',`標記 ${who.join('、')} ${noShow?'曠課':'請假'}`,actEvLabel(ev),
+      noShow?'曠課：不排補課、不計欠課':(ABS_TIMING_LBL[t]||'')));
   });
+  return acts;
 }
 
 // ── 請假次數提醒 ──
@@ -334,6 +337,8 @@ async function confirmAbs(id,sfx){
   // Close panels
   const panel=document.getElementById('absp-'+id);if(panel)panel.classList.remove('open');
   const panelW=document.getElementById('absp-w-'+id);if(panelW)panelW.classList.remove('open');
+  // 復原快照要收兩欄：標成曠課會連帶撤掉已排的補課（下面那段），復原時得一起回來
+  const undoTok=undoBegin(['absences','makeupScheduled']);
   sysApplyAbsence(ev,state);
   // 從請假改標成曠課的人：原本排好的補課要跟著撤（曠課不排補課）
   if(state.type!=='teacher'){
@@ -344,13 +349,21 @@ async function confirmAbs(id,sfx){
   const needMk=state.type==='teacher'?[]:absTargets(ev,state).filter(n=>absTimingOf(state,n)!=='C');
   // 練習課不補課（2026-08-19）→ 標完就結案，不再問「要現在排補課嗎」
   const offer=(state.type==='teacher'||needMk.length>0)&&!mkNoMakeupNeeded(ev);
-  logAbsenceAct(ev,state);
+  const undoActs=logAbsenceAct(ev,state);
   toast('已標記：'+newTitle,'ok');
   await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
   if(selectedWeekEvent===id) closeWeekModal();
   // 標記完直接問要不要排補課（2026-08-13）——以前只丟 toast，要自己換頁去待補課清單找回這筆。
   // 重新讀完才問：選時段要拿新的請假狀態算空檔
   if(offer&&typeof offerArrangeNow==='function')await offerArrangeNow(id,'makeup');
+  // 復原軟籤掛在最後（排補課那一段走完才掛）：中間若順手排了補課，那場也在快照的涵蓋範圍內，
+  // 按復原會連請假帶補課一起撤回去——標錯人的時候要的正是這個，不會留下沒來由的補課場次
+  undoOffer(undoTok,{label:'標記了：'+newTitle,act:undoActs,redraw:async()=>{
+    await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
+    if(typeof renderMakeup==='function')renderMakeup();
+    if(typeof updateMakeupBadge==='function')updateMakeupBadge();
+    if(typeof renderDayView==='function'&&currentPanel==='dayview')renderDayView();
+  }});
 }
 
 // ── 取消請假流程 ──
@@ -412,6 +425,8 @@ async function doCancel(id,ev,cancelStudents,preConfirmed){
       html:`要取消 <b>${esc(whoTxt)}</b> 嗎？<div class="ask-sub">${esc(actEvLabel(ev))}</div>${warn}`,
       ok:'確認取消請假',danger:true}))return;
   }
+  // 取消請假會連帶動到補課（下面 syncMakeupOnLeaveCancel 會撤場次或縮名單）→ 快照收兩欄
+  const undoTok=undoBegin(['absences','makeupScheduled']);
   let list=getAbsences().slice();
   const rec=list.find(a=>a.occId===id);
   if(rec){
@@ -423,11 +438,19 @@ async function doCancel(id,ev,cancelStudents,preConfirmed){
     saveAbsences(list);
   }
   syncMakeupOnLeaveCancel(id); // 已排的補課跟著撤掉／名單縮小
-  if(undone.length)logAct('absence',`取消 ${undone.join('、')} 的請假`,actEvLabel(ev),'');
+  const undoAct=undone.length?logAct('absence',`取消 ${undone.join('、')} 的請假`,actEvLabel(ev),''):null;
   toast('已取消請假','ok');
   await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
   closeWeekModal();
   refreshMakeupPanel();
+  undoOffer(undoTok,{label:`取消了 ${undone.join('、')||'這堂'} 的請假`,act:undoAct,redraw:absRedrawAfterUndo});
+}
+
+// 復原後要重畫的東西（請假／曠課相關共用）
+async function absRedrawAfterUndo(){
+  await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
+  refreshMakeupPanel();
+  if(typeof renderDayView==='function'&&currentPanel==='dayview')renderDayView();
 }
 
 // 從待補課清單按取消請假／取消曠課時，清單自己要重畫（loadMakeup(true) 是靜默的、不重畫）
@@ -457,6 +480,7 @@ async function doCancelNoShow(id,ev,cancelStudents,preConfirmed){
       html:`要取消 <b>${esc(undone.join('、'))} 的曠課</b> 嗎？<div class="ask-sub">${esc(actEvLabel(ev))}</div>`,
       ok:'確認取消曠課',danger:true}))return;
   }
+  const undoTok=undoBegin(['absences']);
   let list=getAbsences().slice();
   const rec=list.find(a=>a.occId===id);
   if(rec){
@@ -465,9 +489,10 @@ async function doCancelNoShow(id,ev,cancelStudents,preConfirmed){
     if(!rec.teacherAbsent&&!(rec.leave||[]).length&&!(rec.noShow||[]).length&&!rec.resched)list=list.filter(a=>a!==rec);
     saveAbsences(list);
   }
-  if(undone.length)logAct('absence',`取消 ${undone.join('、')} 的曠課`,actEvLabel(ev),'');
+  const undoAct=undone.length?logAct('absence',`取消 ${undone.join('、')} 的曠課`,actEvLabel(ev),''):null;
   toast('已取消曠課','ok');
   await Promise.all([loadToday(),loadWeek(),loadMakeup(true)]);
   closeWeekModal();
   refreshMakeupPanel();
+  undoOffer(undoTok,{label:`取消了 ${undone.join('、')||'這堂'} 的曠課`,act:undoAct,redraw:absRedrawAfterUndo});
 }

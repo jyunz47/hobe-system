@@ -284,9 +284,15 @@ function grAdd(eventId,studentId){
   refreshGradePanel(e);
   document.getElementById(`gr-lab-${eventId}-${studentId}`)?.focus(); // 連續登記下一筆
 }
+// 刪一筆成績沒有二次確認（連續登記時要順手），所以掛復原軟籤（js/undo.js）
 function grRemove(eventId,gradeId){
-  removeGrade(gradeId);
+  const u=undoBegin([gradesUndoSlot()]);
+  const gone=removeGrade(gradeId);
   const e=findEventById(eventId);if(e)refreshGradePanel(e);
+  const who=gone?(typeof studentName==='function'?studentName(gone.studentId):'')||'':'';
+  const what=gone?`${gone.label||'未命名'}${gone.score!=null?` ${gone.score} 分`:''}`:'';
+  undoOffer(u,{label:gone?`刪掉了 ${who?who+' 的':''}成績「${what}」`:'刪掉了一筆成績',
+    redraw:()=>{const ev=findEventById(eventId);if(ev)refreshGradePanel(ev);}});
 }
 
 // 多堂同時進行 → 右欄改「摘要列」：一堂一行（色條＋課名＋剩幾分＋教室/老師＋細進度條）。
@@ -456,16 +462,23 @@ function refreshAttPanel(e){const p=document.getElementById('attp-'+e.id);if(p)p
 function refreshAttUI(e){refreshAttPanel(e);const b=document.getElementById('attbadge-'+e.id);if(b)b.outerHTML=attBadgeHtml(e);}
 
 // 全部到：把所有可點學生標「準時到」（排除請假/曠課/無 id）
+// ⚠️ 這顆一按就改一整班，按錯要一個一個點回來 → 掛復原軟籤（js/undo.js）。
+//    單人的「到」不掛：那本來就是 toggle，再按一次就還原了，掛軟籤只會吵。
 function markAllHere(eventId){
   const e=findEventById(eventId);if(!e)return;
+  const u=undoBegin([attUndoSlot()]);
   const absSet=new Set(e.absentStudents||[]);
   const noShowSet=new Set(e.noShowStudents||[]);
+  let n=0;
   eventRosterWithId(e).forEach(r=>{
     if(r.studentId==null||absSet.has(r.name)||noShowSet.has(r.name))return;
     markAtt(e.id,e.startDt.toISOString(),r.studentId,'到',0);
+    n++;
   });
   attLatePick=null;
   refreshAttUI(e);
+  undoOffer(u,{label:`把 ${e.origTitle||e.title||'這堂課'} 的 ${n} 位都記成到`,
+    redraw:()=>{const ev=findEventById(eventId);if(ev)refreshAttUI(ev);}});
 }
 function toggleAttPanel(id){
   const p=document.getElementById('attp-'+id);if(!p)return;

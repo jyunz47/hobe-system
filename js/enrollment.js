@@ -14,6 +14,34 @@ function yearPeriodLabel(ypid){
   return`${m[1]} ${labels[m[2]]||m[2]}`;
 }
 
+// ── 上一期是哪一期（2026-08-27）──
+// 一個學年的順序是 上學期 → 寒假 → 下學期 → 暑假，暑假的下一期跨到新學年的上學期。
+// 所以「上學期」的上一期是**去年的暑假**（例：2026-sem1 ← 2025-summer）。
+// 期別交接（把上一期的修課登記帶過來）要用它算來源。
+var PERIOD_SEQ=['sem1','winter','sem2','summer'];
+function prevYearPeriodId(ypid){
+  const m=String(ypid||'').match(/^(\d{4})-(\w+)$/);
+  if(!m)return null;
+  const y=+m[1],i=PERIOD_SEQ.indexOf(m[2]);
+  if(i<0)return null;
+  return i===0?(y-1)+'-summer':y+'-'+PERIOD_SEQ[i-1];
+}
+// 下一期（暑假的下一期跨到新學年的上學期）。開學準備要用它算「要準備哪一期」
+function nextYearPeriodId(ypid){
+  const m=String(ypid||'').match(/^(\d{4})-(\w+)$/);
+  if(!m)return null;
+  const y=+m[1],i=PERIOD_SEQ.indexOf(m[2]);
+  if(i<0)return null;
+  return i===PERIOD_SEQ.length-1?(y+1)+'-sem1':y+'-'+PERIOD_SEQ[i+1];
+}
+// 那一期是哪天開始（'YYYY-MM-DD'）。換時段的分段要從這天起生效
+function yearPeriodStart(ypid){
+  const m=String(ypid||'').match(/^(\d{4})-(\w+)$/);
+  if(!m)return null;
+  const p=getPeriods(+m[1]).find(x=>x.id===m[2]);
+  return p?toDateStr(p.start):null;
+}
+
 // ── enrollment 取得 / 建立 / 儲存 ──
 function getEnrollments(filter){
   const all=driveData.enrollments||[];

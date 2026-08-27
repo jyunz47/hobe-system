@@ -175,28 +175,43 @@ suite('併班補課一律算補滿（第 2 刀語意不變）', () => {
 });
 
 // ────────────────────────────────────────────────────────
+// ⚠️ 這一組的「上完了沒」是拿時間比出來的，所以**一律傳固定的今天**（CU_NOW），
+//    不要讓它讀真實時鐘。2026-08-27 踩過：原本第一條用 8/25 當「還沒到的那場」，
+//    寫測試那天（8/10）成立，8/25 一過就變成「兩場都上完」→ 測試紅掉，
+//    而且看起來很像欠課少算的產品 bug。時間相關的測試要自己帶時鐘。
+const CU_NOW = new Date(2026, 7, 12);   // 2026-08-12，落在暑假期別內
+
 suite('欠課消帳也看時數（學生統計）', () => {
 
   test('拆兩場、只上完第一場 → 欠課還在', () => {
     resetCustom();
-    arrangeMins(tutorEv(), ['小天'], '2026-07-20', '18:00', 60);   // 已過去＝上完
-    arrangeMins(tutorEv(), ['小天'], '2026-08-25', '18:00', 60);   // 還沒到
-    assertFalse(mkMadeUpBy(tutorEv(), '小天', new Date(2026, 7, 12)), '只補了一半就被當成補完了');
-    assertEq(getStudentStats(6, 'summer').owed, 1);
+    arrangeMins(tutorEv(), ['小天'], '2026-07-20', '18:00', 60);   // CU_NOW 之前＝上完
+    arrangeMins(tutorEv(), ['小天'], '2026-08-25', '18:00', 60);   // CU_NOW 之後＝還沒到
+    assertFalse(mkMadeUpBy(tutorEv(), '小天', CU_NOW), '只補了一半就被當成補完了');
+    assertEq(getStudentStats(6, 'summer', CU_NOW).owed, 1);
   });
 
   test('兩場都上完 → 欠課消掉', () => {
     resetCustom();
     arrangeMins(tutorEv(), ['小天'], '2026-07-20', '18:00', 60);
     arrangeMins(tutorEv(), ['小天'], '2026-07-21', '18:00', 60);
-    assertTrue(mkMadeUpBy(tutorEv(), '小天', new Date(2026, 7, 12)), '兩場都上完了該消欠課');
-    assertEq(getStudentStats(6, 'summer').owed, 0);
+    assertTrue(mkMadeUpBy(tutorEv(), '小天', CU_NOW), '兩場都上完了該消欠課');
+    assertEq(getStudentStats(6, 'summer', CU_NOW).owed, 0);
   });
 
   test('一次補滿一場、已上完 → 欠課消掉（舊資料形狀照樣認）', () => {
     resetCustom();
     arrangeMins(tutorEv(), ['小天'], '2026-07-20', '18:00', 120);
-    assertEq(getStudentStats(6, 'summer').owed, 0);
+    assertEq(getStudentStats(6, 'summer', CU_NOW).owed, 0);
+  });
+
+  test('對照組：不帶時鐘就會隨真實時間漂移（這正是 8/27 紅掉的原因）', () => {
+    resetCustom();
+    arrangeMins(tutorEv(), ['小天'], '2026-07-20', '18:00', 60);
+    arrangeMins(tutorEv(), ['小天'], '2026-08-25', '18:00', 60);
+    // 8/25 這場「到了沒」完全取決於執行測試的當下，所以只驗「帶了時鐘就答得準」
+    assertEq(getStudentStats(6, 'summer', new Date(2026, 7, 12)).owed, 1, '8/12 時第二場還沒到');
+    assertEq(getStudentStats(6, 'summer', new Date(2026, 7, 26)).owed, 0, '8/26 時兩場都上完了');
   });
 });
 

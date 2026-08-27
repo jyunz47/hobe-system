@@ -118,6 +118,38 @@ suite('今日重點：該進來的不能漏', () => {
     assertEq(fri[0].time, '19:00');
   });
 
+  // 2026-08-27 老闆回報：一堂課只是同天延後，卡片上冒出兩則（一則說不上、一則說幾點上）
+  test('同一天延後上課 → 併成一則，講「原本幾點」', () => {
+    resetRmd();
+    driveData.absences = [{
+      id: 3, occId: 'sys:8:2026-08-13:0', courseId: 8, date: new Date(2026, 7, 13, 19, 0).toISOString(),
+      resched: true, teacherAbsent: false, leave: [], noShow: [], makeupSkip: [],
+    }];
+    makeupList = sysAbsenceEvents();
+    // 同一天，19:00 延到 20:00
+    saveMakeupScheduled(makeupList.find(e => e.id === 'sys:8:2026-08-13:0'),
+      new Date(2026, 7, 13, 20, 0), new Date(2026, 7, 13, 21, 30), '108', null, '調課');
+    const items = rmdItemsOn(2026, 7, 13);
+    assertEq(items.length, 1, '同一天只該有一則');
+    assertEq(items[0].tag, '調課');
+    assertEq(items[0].time, '20:00', '時間要用新的那個（那才是真的要上課的時刻）');
+    assertTrue(items[0].sub.indexOf('原本 19:00') >= 0, '要講原本幾點：' + items[0].sub);
+    assertFalse(items[0].text.indexOf('今天不上') >= 0, '併起來之後不該再說「今天不上」：' + items[0].text);
+  });
+
+  test('同天調課那一則仍點得回原本那堂課（evId 要留著）', () => {
+    resetRmd();
+    driveData.absences = [{
+      id: 4, occId: 'sys:8:2026-08-13:0', courseId: 8, date: new Date(2026, 7, 13, 19, 0).toISOString(),
+      resched: true, teacherAbsent: false, leave: [], noShow: [], makeupSkip: [],
+    }];
+    makeupList = sysAbsenceEvents();
+    saveMakeupScheduled(makeupList.find(e => e.id === 'sys:8:2026-08-13:0'),
+      new Date(2026, 7, 13, 20, 0), new Date(2026, 7, 13, 21, 30), '108', null, '調課');
+    const items = rmdItemsOn(2026, 7, 13);
+    assertEq(items[0].evId, 'sys:8:2026-08-13:0', '要接得回原課堂');
+  });
+
   test('課照上、只有一個人請假 → 只講誰沒來，不重複列這堂課', () => {
     resetRmd();
     driveData.absences = [{

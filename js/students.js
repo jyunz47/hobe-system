@@ -155,7 +155,10 @@ function asSubmit(){
 // ── 統計與警示 ──
 // getThreshold（多收費門檻）已搬到 state.js 的學期 helpers（請假面板也要用）
 
-function getStudentStats(studentId,periodId){
+// now＝把「現在幾點」當參數收進來（2026-08-27）。產品端不用傳，預設就是此刻；
+// 測試要驗「這場補課還沒到」時得指定一個固定時刻，否則測試會隨真實時間過期
+//（`拆兩場、只上完第一場 → 欠課還在` 就是這樣紅掉的：寫測試時 8/25 還沒到，8/27 就過了）。
+function getStudentStats(studentId,periodId,now){
   // 2026-06-01 改 by id：先用 id 找到學生，內部仍用 name 比對 Calendar 備註
   // （Calendar 備註只有名字字串，沒有 id，要等階段 3 enrollment 才能徹底 id 化）
   const stu=getStudentList().find(x=>x.id===studentId);
@@ -169,7 +172,7 @@ function getStudentStats(studentId,periodId){
     if(e.absType==='老師請假')return e.students?.includes(name);
     return false;
   });
-  const now=new Date();
+  now=now||new Date();
   // 補課場次要認「名單含這位學生的那場」：一堂三人請假可以分三場排，
   // 拿整堂的第一場當每個人的答案會把還沒排的人也算成已補（欠課少算）
   const pairs=absences.map(e=>({absence:e,makeup:makeupForStudent(e,name)}));
@@ -800,8 +803,8 @@ function renderStatusEndBox(){
     :`<div style="font-size:12.5px;color:var(--tx3);margin-top:8px">本期沒有要結束的修課。</div>`;
   box.innerHTML=`
     <div style="font-size:12px;color:var(--tx3);margin-bottom:6px">最後一天上課（這天還算上課，隔天起不上）</div>
-    <input type="date" id="status-modal-enddate" value="${esc(d)}" onchange="statusEndDateChange(this.value)"
-      style="padding:7px 10px;border:1.5px solid var(--br);border-radius:var(--rs);font-family:inherit;font-size:13px;color:var(--tx)">
+    <input type="text" readonly class="dp-input" id="status-modal-enddate" placeholder="選日期" value="${esc(d)}"
+      onclick="dpForInput(this)" onchange="statusEndDateChange(this.value)">
     ${rows}
     ${targets.length?hint('<div style="margin-top:8px">只剩他一個人的課會整堂從課表消失；團班只是少一個人，照常上。<b>過去的課堂、名冊、堂數都不動。</b></div>'):''}
     ${owed>0?`<div style="font-size:12.5px;color:var(--dg);margin-top:8px;line-height:1.6">⚠ 他還有 <b>${owed}</b> 堂欠課（含還沒排的補課）。這裡<b>不會</b>自動處理——要補就先去待補課清單排完，不補就標「不補課」。</div>`:''}`;
@@ -883,7 +886,7 @@ function openDeleteModal(studentId){
   deleteModalCtx={studentId};
   const enrollCount=getEnrollments().filter(e=>e.studentId===studentId).length;
   document.getElementById('delete-modal-info').innerHTML=
-    `即將永久刪除 <b>${esc(s.name)}（${esc(s.grade)}）</b>，連同其 <b>${enrollCount}</b> 筆修課登記（所有學期）。<br>此動作<b>不可復原</b>，也不會進歷屆。`;
+    `即將永久刪除 <b>${esc(s.name)}（${esc(s.grade)}）</b>，連同其 <b>${enrollCount}</b> 筆修課登記（所有學期）。<br>不會進歷屆。刪完有 <b>12 秒</b>可以按「復原」，過了就救不回來。`;
   document.getElementById('delete-modal-confirm').value='';
   document.getElementById('delete-modal-wrap').classList.add('open');
   requestAnimationFrame(()=>document.getElementById('delete-modal-confirm')?.focus());
@@ -899,14 +902,22 @@ function confirmDeleteStudent(){
   if(typed!==s.name)return toast(`請輸入「${s.name}」以確認刪除`,'err');
   const mine=getEnrollments().filter(e=>e.studentId===s.id);
   const enrollCount=mine.length;
+  // 收三欄：學生本人、修課登記，還有 courses——stampNameAutoBeforeRosterCut 會把
+  // 受影響課程的名字釘成分段（滾動命名的課少一個人就會改名），復原時那個也要退回去
+  const undoTok=undoBegin(['studentList','enrollments','courses']);
   stampNameAutoBeforeRosterCut(mine.map(e=>e.courseId));   // 刪之前先確定這幾門課的名字會不會滾
   saveStudentList(getStudentList().filter(x=>x.id!==s.id));
   saveEnrollments(getEnrollments().filter(e=>e.studentId!==s.id));
-  logAct('student','徹底刪除學生',`${s.name}（${s.grade}）`,`連同 ${enrollCount} 筆修課登記，不可復原`);
+  const undoAct=logAct('student','徹底刪除學生',`${s.name}（${s.grade}）`,`連同 ${enrollCount} 筆修課登記`);
   closeDeleteModal();
   stuEditId=null;_editEnrollments=[];
   renderStudents();
   toast(`已徹底刪除 ${s.name}（${s.grade}）`,'ok');
+  undoOffer(undoTok,{label:`徹底刪除了 ${s.name}（${s.grade}）`,act:undoAct,redraw:async()=>{
+    await Promise.all([loadToday(),loadWeek()]);
+    renderStudents();
+    if(typeof renderSettings==='function')renderSettings();
+  }});
 }
 
 // ── 升年級批次 ──

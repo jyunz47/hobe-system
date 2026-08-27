@@ -23,7 +23,7 @@ if(new URLSearchParams(location.search).get('app')==='dayview'){
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="HOBE">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&family=DM+Mono:wght@400;500&family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css?v=80">
+<link rel="stylesheet" href="style.css?v=90">
 <script>
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));
@@ -174,7 +174,9 @@ if ('serviceWorker' in navigator) {
               <button class="dbtn" onclick="changeDay(-1)">‹ 前一天</button>
               <button class="dbtn" onclick="goToday()">今天</button>
               <button class="dbtn" onclick="changeDay(1)">後一天 ›</button>
-              <input type="date" id="date-picker" onchange="pickDate(this.value)">
+              <!-- 日期選擇器（2026-08-27 從原生 <input type="date"> 換成自己畫的月曆，js/datepicker.js）
+                   月曆本體是全系統共用的單例，掛在 body 底下 -->
+              <button class="dbtn dp-btn" id="dp-btn" onclick="dpToggle()" aria-haspopup="dialog" aria-expanded="false" title="挑一天（有課的日期會標一顆點）">📅 選日期</button>
             </div>
           </div>
           <div class="today-panel-body">
@@ -586,6 +588,9 @@ if ('serviceWorker' in navigator) {
 
     <!-- Settings -->
     <div id="panel-settings" class="panel" style="display:none">
+      <!-- 開學準備／期別交接（js/newterm.js、js/settings.js coCarryHtml）：
+           自成一個區塊、可收合，期別翻頁前後才有東西，平常整塊是空的 -->
+      <div id="term-prep"></div>
       <div class="set-card">
         <div class="sec-hd">課程總覽<span class="sec-hd-line"></span><button class="btn btns btnp" style="flex-shrink:0" onclick="goAddCourse()" title="到「新增課程/學生」頁建課">＋ 新增課程</button></div>
         <p class="set-card-sub">系統目前認得的每一門課：類型、老師、單價、是否需登記成績。點一門課開啟視窗：調整單價、加退學生（練習課名單唯讀）。標「系統」的是系統自有課程，點開可編輯與刪除。批次調價也可到「學生管理 → 價目表」。</p>
@@ -633,6 +638,34 @@ if ('serviceWorker' in navigator) {
 
 <div class="lo" id="lo"><div class="spin"></div><div class="lo-txt" id="lo-txt">載入中...</div></div>
 <div class="toast" id="toast"></div>
+<!-- 共用日期月曆（2026-08-27，js/datepicker.js）：全系統只有這一顆，誰要用就貼到自己旁邊 -->
+<div class="dp-pop" id="dp-pop" role="dialog" aria-label="選擇日期">
+  <div class="dp-hd">
+    <button class="dp-nav" onclick="dpShiftMonth(-1)" aria-label="上個月">‹</button>
+    <span class="dp-mon" id="dp-mon"></span>
+    <button class="dp-nav" onclick="dpShiftMonth(1)" aria-label="下個月">›</button>
+  </div>
+  <div class="dp-grid" id="dp-grid"></div>
+  <div class="dp-ft">
+    <span class="dp-legend" id="dp-legend"><span class="dp-dot"></span>有課</span>
+    <button class="dp-today" onclick="dpPick(dpTodayStr())">回到今天</button>
+  </div>
+</div>
+<!-- 共用時間面板（2026-08-27，js/timepicker.js）：營業時間直接列出來，點一下就選完 -->
+<div class="tp-pop" id="tp-pop" role="dialog" aria-label="選擇時間">
+  <div class="tp-hd"><span class="tp-hd-lbl">時間</span><span class="tp-cur" id="tp-cur">未指定</span></div>
+  <div class="tp-grid" id="tp-grid"></div>
+  <div class="tp-ft">
+    <button class="tp-fine" id="tp-fine" onclick="tpToggleFine()">更細的時間（每 15 分）</button>
+    <button class="tp-clear" id="tp-clear" onclick="tpClear()">不指定時間</button>
+  </div>
+</div>
+<!-- 復原「剛才那一下」（2026-08-27，js/undo.js）：做完會刪東西的動作後掛 12 秒 -->
+<div class="undo-bar" id="undo-bar" role="status" aria-live="polite">
+  <span class="undo-bar-txt" id="undo-bar-txt"></span>
+  <button class="undo-bar-btn" onclick="undoRun()">復原</button>
+  <button class="undo-bar-x" onclick="undoDismiss()" aria-label="關掉">✕</button>
+</div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
@@ -640,23 +673,27 @@ if ('serviceWorker' in navigator) {
 <!-- 應用程式分模組（順序：state → utils → 解析 → 各 panel → init 最後）-->
 <script src="js/state.js?v=19"></script>
 <script src="js/sync.js?v=2"></script>
-<script src="js/utils.js?v=14"></script>
+<script src="js/undo.js?v=2"></script>
+<script src="js/utils.js?v=15"></script>
 <script src="js/schedule.js?v=11"></script>
-<script src="js/today.js?v=34"></script>
+<script src="js/datepicker.js?v=3"></script>
+<script src="js/timepicker.js?v=2"></script>
+<script src="js/today.js?v=35"></script>
 <script src="js/week.js?v=21"></script>
-<script src="js/dayview.js?v=31"></script>
-<script src="js/absence.js?v=19"></script>
-<script src="js/makeup.js?v=24"></script>
-<script src="js/enrollment.js?v=15"></script>
-<script src="js/students.js?v=26"></script>
-<script src="js/attendance.js?v=4"></script>
-<script src="js/grades.js?v=5"></script>
-<script src="js/settings.js?v=29"></script>
-<script src="js/courses.js?v=27"></script>
-<script src="js/activity.js?v=8"></script>
-<script src="js/remind.js?v=5"></script>
-<script src="js/search.js?v=5"></script>
-<script src="js/init.js?v=31"></script>
+<script src="js/dayview.js?v=32"></script>
+<script src="js/absence.js?v=20"></script>
+<script src="js/makeup.js?v=29"></script>
+<script src="js/enrollment.js?v=16"></script>
+<script src="js/students.js?v=28"></script>
+<script src="js/attendance.js?v=5"></script>
+<script src="js/grades.js?v=6"></script>
+<script src="js/settings.js?v=32"></script>
+<script src="js/newterm.js?v=3"></script>
+<script src="js/courses.js?v=31"></script>
+<script src="js/activity.js?v=9"></script>
+<script src="js/remind.js?v=7"></script>
+<script src="js/search.js?v=6"></script>
+<script src="js/init.js?v=32"></script>
 
 <div class="stu-modal-wrap" id="stu-modal-wrap">
   <div class="stu-modal-overlay" onclick="closeStudentModal()"></div>
@@ -758,6 +795,18 @@ if ('serviceWorker' in navigator) {
       <button class="stu-modal-close" onclick="closeCourseModal()">✕</button>
     </div>
     <div class="stu-modal-body" id="course-modal-body"></div>
+  </div>
+</div>
+
+<!-- 開學準備：點一門課開這個（js/newterm.js）。跟課程視窗同一個外殼，手感一致 -->
+<div class="stu-modal-wrap" id="nt-modal-wrap">
+  <div class="stu-modal-overlay" onclick="ntCloseModal()"></div>
+  <div class="stu-modal" style="max-width:480px">
+    <div class="stu-modal-hd">
+      <div class="stu-modal-title"><span id="nt-modal-title" style="font-size:16px;font-weight:700"></span></div>
+      <button class="stu-modal-close" onclick="ntCloseModal()">✕</button>
+    </div>
+    <div class="stu-modal-body" id="nt-modal-body"></div>
   </div>
 </div>
 

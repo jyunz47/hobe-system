@@ -145,11 +145,24 @@ suite('日期列空檔統計：滿的一天與併班', () => {
 // 日期列本體（buildSpDateSection）：14 顆 chip 每顆都要帶標記，上面那行摘要要講得出最早哪天
 suite('日期列畫出來的樣子', () => {
 
+  // ⚠️ 一律排除 .sp-date-custom（最後面那顆「自選」）：2026-08-27 起它也吃 .sp-date 的長相，
+  //    但它不是建議日期、沒有空檔標記，數 14 顆的時候要把它扣掉。
+  const daDateChips = sec => [...sec.querySelectorAll('.sp-date:not(.sp-date-custom)')];
+
   test('14 顆日期每顆都帶一個空檔標記', () => {
     resetDayAvail();
     const sec = buildSpDateSection();
-    assertEq(sec.querySelectorAll('.sp-date').length, 14);
-    assertEq(sec.querySelectorAll('.sp-date .sp-date-av').length, 14);
+    assertEq(daDateChips(sec).length, 14);
+    assertEq(sec.querySelectorAll('.sp-date:not(.sp-date-custom) .sp-date-av').length, 14);
+  });
+
+  test('最後面那顆是「自選」，長相跟建議日期一樣但不帶空檔標記', () => {
+    resetDayAvail();
+    const sec = buildSpDateSection();
+    const custom = sec.querySelector('.sp-date-custom');
+    assertTrue(!!custom, '自選那顆要在');
+    assertTrue(custom.classList.contains('sp-date'), '要吃 .sp-date 的長相（跟旁邊 14 顆一致）');
+    assertEq(custom.querySelectorAll('.sp-date-av').length, 0, '它沒有空檔標記');
   });
 
   test('排不進去的那天標「滿」並變淡', () => {

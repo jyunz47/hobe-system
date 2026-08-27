@@ -323,7 +323,6 @@ async function gsGoOcc(r){
   const d=new Date(r.occTs);d.setHours(0,0,0,0);
   currentDate=d;
   setDateDisplay(currentDate);
-  const dp=document.getElementById('date-picker');if(dp)dp.value=toDateStr(d);
   weekOffset=gsWeekOffsetOf(d);
   selectedWeekDayIdx=null;
   showPanel('courses');
@@ -452,7 +451,6 @@ async function gsDvPick(i){
   const d=new Date(r.occTs);
   currentDate=d;
   if(typeof setDateDisplay==='function')setDateDisplay(currentDate);
-  const dp=document.getElementById('date-picker');if(dp)dp.value=toDateStr(d);
   weekOffset=gsWeekOffsetOf(d);
   if(typeof isSignedIn==='function'&&isSignedIn())await Promise.all([loadToday(),loadWeek()]);
   if(typeof renderDayView==='function')renderDayView();

@@ -103,12 +103,28 @@ function addGrade(eventId,date,studentId,label,score){
   return rec;
 }
 
-// 刪除一筆成績（以紀錄 id）
+// ── 復原用的資料位置（js/undo.js）──
+// 成績跟點名一樣不在 driveData 裡，資料在 gradesCache[ypid].records。
+// ⚠️ 寫回去要順便重建索引，否則畫面讀 idx 會看到舊的。
+function gradesUndoSlot(){
+  const ypid=gradesCurrentYpid;
+  return{
+    name:'成績',
+    read:()=>{const b=gradesCache[ypid];return b?b.records:[];},
+    write:list=>{const b=gradesCache[ypid];if(!b)return;b.records=list;gradesRebuildIdx(b);},
+    keyOf:recIdKeyOf,
+    save:()=>scheduleGradesSave(),
+  };
+}
+
+// 刪除一筆成績（以紀錄 id）。回傳被刪掉的那筆給呼叫端做復原的說明文字
 function removeGrade(gradeId){
   const b=gradesBucket();
+  const gone=b.records.find(r=>r.id===gradeId)||null;
   b.records=b.records.filter(r=>r.id!==gradeId);
   gradesRebuildIdx(b);
   scheduleGradesSave();
+  return gone;
 }
 
 function scheduleGradesSave(){gradesPendingSave=true;clearTimeout(gradesSaveTimer);gradesSaveTimer=setTimeout(saveGrades,1500);}
