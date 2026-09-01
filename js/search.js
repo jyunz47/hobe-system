@@ -102,7 +102,8 @@ function gsCourseHits(toks){
   const hits=[];
   getCourses().forEach(co=>{
     const name=courseNameOn(co,today);
-    const tNames=courseTeacherNames(co);
+    // 搜尋要找得到「之後才接手」的老師，所以含所有分段（不是只看今天）
+    const tNames=courseAllTeacherIds(co).map(teacherNameById).filter(Boolean);
     const roster=byCourse.get(co.id)||[];
     const sNames=roster.map(en=>stuName.get(en.studentId)).filter(Boolean);
     if(!gsHitAll([name,co.subject,co.room,...tNames,...sNames],toks))return;
@@ -195,7 +196,7 @@ function gsBuild(q){
 
   // ── 老師 ──
   getTeachers().forEach(t=>{
-    const mine=courses.filter(c=>courseTeacherIds(c).includes(t.id));
+    const mine=courses.filter(c=>courseAllTeacherIds(c).includes(t.id));
     const coNames=mine.map(c=>courseNameOn(c,today)).filter(Boolean);
     if(!gsHitAll([t.name,...coNames],toks))return;
     const score=gsScore(t.name,toks);

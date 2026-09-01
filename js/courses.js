@@ -15,6 +15,35 @@ function courseTeacherIds(co){return Array.isArray(co.teacherIds)?co.teacherIds:
 function courseTeacherNames(co){return courseTeacherIds(co).map(teacherNameById).filter(Boolean);}
 function findCourseById(id){return getCourses().find(c=>c.id===id);}
 
+// ── 換老師分段（teacherPhases，2026-08-27 起）──
+// 跟換時段（schedule.phases）／換課名（namePhases）同一套 effective-date 規矩：
+// `[{from:'YYYY-MM-DD', teacherIds:[…]}]`，from<=該天的最後一段贏；一段都沒有 → course.teacherIds。
+// ⚠ 為什麼一定要分段：課堂是「現算」出來的，老師欄位直接改掉的話，**連七月已經上完、
+//   已經點過名的課堂也會一起變成新老師**——薪資表之後要吃這份資料，那就是錢會算錯。
+function courseTeacherPhases(co){
+  return (co&&Array.isArray(co.teacherPhases)?co.teacherPhases:[])
+    .filter(p=>p&&p.from&&Array.isArray(p.teacherIds)&&p.teacherIds.length)
+    .slice().sort((a,b)=>a.from<b.from?-1:a.from>b.from?1:0);
+}
+// 某天由誰上（day 給 null＝不看日期，回課程本體的老師）
+function courseTeacherIdsOn(co,day){
+  if(!co)return[];
+  const d=day==null?null:(typeof day==='string'?day:toDateStr(day));
+  if(d){
+    const ph=courseTeacherPhases(co).filter(p=>p.from<=d);
+    if(ph.length)return ph[ph.length-1].teacherIds.slice();
+  }
+  return courseTeacherIds(co);
+}
+function courseTeacherNamesOn(co,day){return courseTeacherIdsOn(co,day).map(teacherNameById).filter(Boolean);}
+// 這門課「從頭到尾出現過」的老師（本體＋所有分段）。
+// 給「這位老師教哪些課」「能不能刪這位老師」「搜尋」用——只看今天會漏掉之後才接手的那位。
+function courseAllTeacherIds(co){
+  const s=new Set(courseTeacherIds(co));
+  courseTeacherPhases(co).forEach(p=>p.teacherIds.forEach(id=>s.add(id)));
+  return [...s];
+}
+
 // ── 課名分段（namePhases，2026-07-29 起）＋ 滾動命名（2026-08-03 起）──
 // 名單期中變動時課名也要跟著變。兩層機制，由上往下：
 //   1. 課名分段 `[{from:'YYYY-MM-DD', name}]`——手動壓過的名字，from<=該天的最後一段贏
@@ -123,7 +152,10 @@ function cfBlank(){
     teacherRate:'',
     mode:'weekly',
     slots:[cfBlankSlot()],  // 兩種 mode 共用欄位，存檔時只取需要的
-    phases:[],              // 換時段段落（每週重複才有）：[{from:'YYYY-MM-DD', slots:[{weekday,start,end}]}]，依日期自動切換上課時間
+    // 「從某天起改」分段：一張卡管一個生效日，時間與老師各一區、留空＝那一項不變。
+    // [{from:'YYYY-MM-DD', slots:[{weekday,start,end}], teachers:[姓名…], input:''}]
+    // 存檔時依 from 拆回兩份資料：slots → schedule.phases、teachers → teacherPhases
+    phases:[],
     room:'',
     defaultPrice:'',
     needsGrade:false,needsGradeTouched:false,
@@ -144,7 +176,7 @@ function openCourseForm(courseId){
       teachers:courseTeacherNames(co),teacherInput:'',teacherRate:co.teacherRate??'',
       mode:co.schedule?.mode||'weekly',
       slots:(co.schedule?.slots||[]).map(s=>({weekday:s.weekday??1,start:s.start||'',end:s.end||'',date:s.date||''})),
-      phases:(co.schedule?.phases||[]).map(p=>({from:p.from||'',slots:(p.slots||[]).map(s=>({weekday:s.weekday??1,start:s.start||'',end:s.end||''}))})),
+      phases:cfMergePhases(co),
       room:co.room||'',defaultPrice:co.defaultPrice??'',
       needsGrade:!!co.needsGrade,needsGradeTouched:true,
       sourceChannel:co.sourceChannel||''};
@@ -380,13 +412,38 @@ function cfNamePhaseSuggest(ni){
   if(!nm)return toast('那天的名單湊不出課名（沒人或缺年級/科目），請直接輸入','inf');
   p.name=nm;renderCourseForm();
 }
-function cfAddPhase(){cfState.phases.push({from:'',slots:[{weekday:1,start:'',end:''}]});renderCourseForm();}
+// 存好的兩份分段（schedule.phases 換時段／teacherPhases 換老師）→ 表單用的一份合併清單。
+// 以生效日 from 當鑰匙：同一天的時段與老師收進同一張卡，只有其中一種的那天，另一區留空。
+// 老師在表單裡一律用「姓名」表示（跟主老師欄同一套：查無此名存檔時現場建檔）
+function cfMergePhases(co){
+  const sp=(co.schedule?.phases||[]).filter(p=>p&&p.from);
+  const tp=courseTeacherPhases(co);
+  const froms=[...new Set([...sp.map(p=>p.from),...tp.map(p=>p.from)])].sort();
+  return froms.map(f=>({
+    from:f,
+    slots:((sp.find(p=>p.from===f)||{}).slots||[]).map(s=>({weekday:s.weekday??1,start:s.start||'',end:s.end||''})),
+    teachers:((tp.find(p=>p.from===f)||{}).teacherIds||[]).map(teacherNameById).filter(Boolean),
+    input:'',
+  }));
+}
+// 新的一張卡：時段給一列空的（開學多半兩件一起改，少一次點擊），老師留空＝不換人
+function cfAddPhase(){cfState.phases.push({from:'',slots:[{weekday:1,start:'',end:''}],teachers:[],input:''});renderCourseForm();}
+// 卡片裡的老師區（與主老師欄同一套 chips 操作）
+function cfPhaseTeacherInput(pi,v){cfState.phases[pi].input=v;}
+function cfPhaseTeacherAdd(pi){
+  const p=cfState.phases[pi],n=(p.input||'').trim();
+  if(!n)return;
+  if(!p.teachers.includes(n))p.teachers.push(n);
+  p.input='';renderCourseForm();
+}
+function cfPhaseTeacherDel(pi,i){cfState.phases[pi].teachers.splice(i,1);renderCourseForm();}
 function cfDelPhase(pi){cfState.phases.splice(pi,1);renderCourseForm();}
 function cfPhaseFromSet(pi,v){cfState.phases[pi].from=v;}
 function cfPhaseFromPreset(pi,mo,dd){cfState.phases[pi].from=cfNextTermDate(mo,dd);renderCourseForm();}
 function cfPhaseSlotSet(pi,si,f,v){cfState.phases[pi].slots[si][f]=v;}
 function cfPhaseAddSlot(pi){cfState.phases[pi].slots.push({weekday:1,start:'',end:''});renderCourseForm();}
-function cfPhaseDelSlot(pi,si){const s=cfState.phases[pi].slots;s.splice(si,1);if(!s.length)s.push({weekday:1,start:'',end:''});renderCourseForm();}
+// 可以刪到零列：一列都沒有＝這張卡不改時間（只換老師），不要硬塞一列空的回去
+function cfPhaseDelSlot(pi,si){cfState.phases[pi].slots.splice(si,1);renderCourseForm();}
 function cfDelSlot(i){
   cfState.slots.splice(i,1);
   if(!cfState.slots.length)cfState.slots.push(cfBlankSlot());
@@ -497,9 +554,33 @@ function renderCourseForm(){
     </div>
   </div>`;
 
+  // 老師清單提前算：換時段／換老師兩個分段並排在「排課」區塊，這裡就得先有 datalist 的來源
+  const teachers=getTeachers().filter(x=>(x.status||'在職')==='在職');
+  const tDl=teachers.map(x=>`<option value="${esc(x.name)}">`).join('');
+
   const wdSel=(sl,onCh)=>`<select onchange="${onCh}">${CF_WEEKDAYS.map(([v,l])=>`<option value="${v}" ${sl.weekday===v?'selected':''}>${l}</option>`).join('')}</select>`;
-  // 換時段段落（僅每週重複）：各段從某日期起、依日期自動切換上課時間
-  const phaseBlocks=st.mode==='weekly'?st.phases.map((ph,pi)=>`
+  // 「從某天起改」分段：一張卡管一個生效日，上課時間與老師各一區（老闆 2026-08-27 要求合併——
+  // 開學那天多半是「改時間」＋「換老師」一起發生，拆成兩張卡等於同一件事要填兩次日期）。
+  // 每一區留空＝那一項不變。時段區僅每週重複有意義（指定日期的課本來就一天一場）。
+  const phaseBlocks=st.phases.map((ph,pi)=>{
+    const chips=ph.teachers.map((nm,i)=>{
+      const unknown=!teachers.some(x=>x.name===nm);
+      return`<span class="cf-chip">${esc(nm)}${unknown?'<span class="cf-chip-new">新</span>':''}<button class="co-stu-x" title="移除" onclick="cfPhaseTeacherDel(${pi},${i})">✕</button></span>`;
+    }).join('');
+    const timePart=st.mode!=='weekly'?'':`
+      <div class="cf-phase-part">
+        <div class="cf-phase-part-lbl">上課時間${ph.slots.length?'':'<span class="cf-phase-keep">留空＝不變</span>'}</div>
+        ${ph.slots.map((sl,si)=>`
+        <div class="cf-slot">
+          ${wdSel(sl,`cfPhaseSlotSet(${pi},${si},'weekday',parseInt(this.value,10))`)}
+          <input type="text" readonly class="tp-input" placeholder="開始" value="${esc(sl.start)}" onclick="tpForInput(this)" onchange="cfPhaseSlotSet(${pi},${si},'start',this.value)">
+          <span class="cf-slot-dash">–</span>
+          <input type="text" readonly class="tp-input" placeholder="結束" value="${esc(sl.end)}" onclick="tpForInput(this)" onchange="cfPhaseSlotSet(${pi},${si},'end',this.value)">
+          <button class="co-stu-x" title="移除時段" onclick="cfPhaseDelSlot(${pi},${si})">✕</button>
+        </div>`).join('')}
+        <button class="cf-add-slot" onclick="cfPhaseAddSlot(${pi})">＋ 加時段</button>
+      </div>`;
+    return`
     <div class="cf-phase">
       <div class="cf-phase-hd">
         <span class="cf-phase-lbl">從</span>
@@ -508,16 +589,16 @@ function renderCourseForm(){
         <span class="cf-phase-presets">${CF_TERM_STARTS.map(([lbl,mo,dd])=>`<button type="button" class="cf-term-btn" onclick="cfPhaseFromPreset(${pi},${mo},${dd})">${lbl}</button>`).join('')}</span>
         <button class="co-stu-x cf-phase-x" title="移除此段" onclick="cfDelPhase(${pi})">✕</button>
       </div>
-      ${ph.slots.map((sl,si)=>`
-      <div class="cf-slot">
-        ${wdSel(sl,`cfPhaseSlotSet(${pi},${si},'weekday',parseInt(this.value,10))`)}
-        <input type="text" readonly class="tp-input" placeholder="開始" value="${esc(sl.start)}" onclick="tpForInput(this)" onchange="cfPhaseSlotSet(${pi},${si},'start',this.value)">
-        <span class="cf-slot-dash">–</span>
-        <input type="text" readonly class="tp-input" placeholder="結束" value="${esc(sl.end)}" onclick="tpForInput(this)" onchange="cfPhaseSlotSet(${pi},${si},'end',this.value)">
-        <button class="co-stu-x" title="移除時段" onclick="cfPhaseDelSlot(${pi},${si})">✕</button>
-      </div>`).join('')}
-      <button class="cf-add-slot" onclick="cfPhaseAddSlot(${pi})">＋ 加時段</button>
-    </div>`).join(''):'';
+      ${timePart}
+      <div class="cf-phase-part">
+        <div class="cf-phase-part-lbl">老師${chips?'':'<span class="cf-phase-keep">留空＝不換人</span>'}</div>
+        ${chips?`<div class="cf-chips">${chips}</div>`:''}
+        <div class="co-add">
+          <input class="co-add-sel" name="search-phaseteacher" autocomplete="off" list="cf-teachers-dl" placeholder="輸入老師姓名…" value="${esc(ph.input)}" oninput="cfPhaseTeacherInput(${pi},this.value)" onkeydown="if(enterSubmit(event)){cfPhaseTeacherAdd(${pi})}">
+          <button class="co-add-btn" onclick="cfPhaseTeacherAdd(${pi})">＋ 加入</button>
+        </div>
+      </div>
+    </div>`;}).join('');
   const modeSec=`<div class="cm-sec"><div class="cm-lbl">排課</div>
     <div class="cf-mode">
       <label><input type="radio" name="cf-mode" value="weekly" ${st.mode==='weekly'?'checked':''} onchange="cfSetMode('weekly')"> 每週重複</label>
@@ -536,13 +617,12 @@ function renderCourseForm(){
       <button class="cf-add-slot" onclick="cfAddSlot()">＋ 加時段</button>
     </div>
     ${phaseBlocks}
-    ${st.mode==='weekly'?`<button class="cf-add-phase" onclick="cfAddPhase()">＋ 換時段（開學／假期後改時間）</button>`:''}
-    ${st.mode==='weekly'&&st.phases.length?`<div class="cm-hint" style="margin-top:6px">同一門課不同期別時間不同時用「換時段」；系統依日期自動套用當天生效的時段。</div>`:''}
+    <button class="cf-add-phase" onclick="cfAddPhase()">＋ 從某天起改（換時段／換老師）</button>
+    ${st.phases.length?`<div class="cm-hint" style="margin-top:6px">開學／假期後改時間或換人時用，系統依日期自動套用當天生效的設定。<b>那天之前的課堂完全不動</b>——已上完的課、已點的名、老師都不會被改到。<br>⚠️ 直接改上面的「時段」與「老師」欄，是整門課從開課那天起全部都變；中途要改請一律用這裡。</div>`:''}
   </div>`;
 
   // 老師（可多位）：chips 加入；查無此名 → 建立課程時一併建檔（與老師管理同一份 teachers）
-  const teachers=getTeachers().filter(x=>(x.status||'在職')==='在職');
-  const tDl=teachers.map(x=>`<option value="${esc(x.name)}">`).join('');
+  // teachers / tDl 在上面「排課」區塊就先算好了（換老師分段也要用同一份）
   const tChips=st.teachers.map((nm,i)=>{
     const unknown=!teachers.some(x=>x.name===nm);
     return`<span class="cf-chip">${esc(nm)}${unknown?'<span class="cf-chip-new">新</span>':''}<button class="co-stu-x" title="移除" onclick="cfDelTeacher(${i})">✕</button></span>`;
@@ -644,6 +724,8 @@ function logCourseEditAct(old,rec){
   if(old.name!==rec.name)others.push(`課名 ${old.name} → ${rec.name}`);
   if((old.room||'')!==(rec.room||''))others.push(`教室 ${old.room||'未指定'} → ${rec.room||'未指定'}`);
   if(tn(old.teacherIds)!==tn(rec.teacherIds))others.push(`老師 ${tn(old.teacherIds)||'無'} → ${tn(rec.teacherIds)||'無'}`);
+  const tph=c=>courseTeacherPhases(c).map(p=>`${p.from}:${tn(p.teacherIds)}`).join('｜');
+  if(tph(old)!==tph(rec))others.push(`換老師 ${tph(rec)?courseTeacherPhases(rec).map(p=>`${p.from} 起 ${tn(p.teacherIds)}`).join('、'):'取消'}`);
   if((old.defaultPrice??null)!==(rec.defaultPrice??null))others.push(`單價 ${old.defaultPrice??'未設'} → ${rec.defaultPrice??'未設'}`);
   if((old.type||'')!==(rec.type||''))others.push(`類型 ${old.type} → ${rec.type}`);
   if(!timeChanged&&!others.length)return;
@@ -670,9 +752,10 @@ function cfSubmit(){
     .filter(s=>s.start&&s.end&&(st.mode==='weekly'?!isNaN(s.weekday):!!s.date));
   if(!slots.length)return toast(`至少要一個完整時段（${st.mode==='weekly'?'星期':'日期'}＋開始＋結束）`,'err');
   for(const s of slots)if(s.end<=s.start)return toast('結束時間要晚於開始時間','err');
-  // 換時段段落（僅每週重複）：各段收完整 weekly 時段、需有 from 日期，依日期排序
+  // 「從某天起改」分段 → 拆回兩份資料（同一個 from 可能只填了其中一邊，各自過濾）
+  // 時段：僅每週重複、收完整的（星期＋起＋訖）；老師：至少一位，空的那一區代表「不變」
   const phases=st.mode==='weekly'?st.phases
-    .map(p=>({from:p.from||'',slots:p.slots
+    .map(p=>({from:p.from||'',slots:(p.slots||[])
       .map(s=>({weekday:Number(s.weekday),start:s.start,end:s.end}))
       .filter(s=>s.start&&s.end&&!isNaN(s.weekday))}))
     .filter(p=>p.from&&p.slots.length)
@@ -685,13 +768,30 @@ function cfSubmit(){
     .filter(p=>p.from&&p.name)
     .sort((a,b)=>a.from<b.from?-1:a.from>b.from?1:0);
 
+  // 同一批卡片的老師那一半（指定日期模式也照收——換人跟怎麼排課無關）。
+  // 每張卡也吃還沒按「加入」的輸入框文字，跟主老師欄同一個寬容度
+  const tPhaseDraft=st.phases.map(p=>{
+    const names=(p.teachers||[]).map(s=>s.trim()).filter(Boolean);
+    const pend=(p.input||'').trim();
+    if(pend&&!names.includes(pend))names.push(pend);
+    return{from:p.from||'',names};
+  }).filter(p=>p.from&&p.names.length)
+    .sort((a,b)=>a.from<b.from?-1:a.from>b.from?1:0);
+
   // 逐一解析成 id；查無此名就建檔（一次可建多位，id 用 Date.now()+序避免同毫秒撞號）
+  // 主老師欄與各換老師分段共用同一份解析，同一個名字只會建一次檔
   const tlist=getTeachers().slice();
-  const teacherIds=[];let tCreated=false,created=0;
-  tnames.forEach(nm=>{
+  let tCreated=false,created=0;
+  const resolveT=nm=>{
     let tt=tlist.find(x=>x.name===nm);
     if(!tt){tt={id:Date.now()+created,name:nm,status:'在職'};tlist.push(tt);created++;tCreated=true;}
-    if(!teacherIds.includes(tt.id))teacherIds.push(tt.id);
+    return tt.id;
+  };
+  const teacherIds=[];
+  tnames.forEach(nm=>{const id=resolveT(nm);if(!teacherIds.includes(id))teacherIds.push(id);});
+  const teacherPhases=tPhaseDraft.map(p=>{
+    const ids=[];p.names.forEach(nm=>{const id=resolveT(nm);if(!ids.includes(id))ids.push(id);});
+    return{from:p.from,teacherIds:ids};
   });
   if(tCreated)saveTeachers(tlist);
   const noFee=(t==='練習課'||t==='試聽');
@@ -699,7 +799,7 @@ function cfSubmit(){
     id:st.editId??Date.now(),
     // nameAuto：課名欄留空＝交給自動命名（＝之後課名跟著名單滾）；有手打＝這個名字固定不動
     // 看的是「有沒有手打過」而不是 st.name 有沒有值——name 存的是當下算出來的快照，永遠有值
-    name,nameAuto:!st.nameTouched,namePhases,type:t,typePinned:!!st.pinnedType,teacherIds,
+    name,nameAuto:!st.nameTouched,namePhases,type:t,typePinned:!!st.pinnedType,teacherIds,teacherPhases,
     teacherRate:t==='練習課'?null:(String(st.teacherRate).trim()===''?null:Math.max(0,parseInt(st.teacherRate,10)||0)),
     schedule:{mode:st.mode,slots,phases},
     room:st.room||'',
@@ -803,7 +903,7 @@ function renderTeacherAdmin(){
   const box=document.getElementById('teacher-admin');
   if(!box)return;
   const rows=getTeachers().map(t=>{
-    const used=getCourses().filter(c=>courseTeacherIds(c).includes(t.id));
+    const used=getCourses().filter(c=>courseAllTeacherIds(c).includes(t.id));   // 含「某日起才接手」的課
     const retired=(t.status||'在職')==='離職';
     const courseList=used.length?used.map(c=>c.name).join('、'):'（尚未指派課程）';
     const schOpen=!!tschState&&tschState.tid===t.id;
@@ -861,7 +961,9 @@ function taToggleStatus(id){
 async function taDelete(id){
   const t=getTeachers().find(x=>x.id===id);
   if(!t)return;
-  const used=getCourses().filter(c=>courseTeacherIds(c).includes(id));
+  // 擋門員要含分段：只看課程本體的話，「9/1 起才接手」的老師會被當成沒課而准刪，
+  // 刪完那門課 9 月起的老師欄就變空白（靜默）
+  const used=getCourses().filter(c=>courseAllTeacherIds(c).includes(id));
   if(used.length)return toast(`不能刪：${t.name} 還有 ${used.length} 門課掛著（${used.map(c=>c.name).join('、')}）。先在那些課的編輯裡改指老師、或刪除課程。`,'err');
   const ok=await uiConfirm({title:'刪除這位老師？',ok:'刪除',danger:true,
     html:`<p>把 <b>${esc(t.name)}</b> 從老師名單移除。</p>
@@ -1158,7 +1260,7 @@ function sysCourseSessions(co){
     }
     const[h,mi]=(sl.start||'0:0').split(':').map(Number);
     d.setHours(h||0,mi||0,0,0);
-    return{date:d,students:[],groups:[],classroom:co.room,teacher:courseTeacherNames(co).join('、')};
+    return{date:d,students:[],groups:[],classroom:co.room,teacher:courseTeacherNamesOn(co,d).join('、')};
   });
 }
 
@@ -1370,10 +1472,13 @@ function renderSysCourseModal(ctx){
   // 事實表：一行一件事、標籤對齊，掃一眼就看完（沒填的整行不出現）
   const fact=(k,v)=>v?`<div class="cm-fact"><span class="cm-fact-k">${k}</span><span class="cm-fact-v">${v}</span></div>`:'';
   const nameSched=courseNamePhases(co).map(p=>`${esc(coDateMD(p.from))} 起改叫「${esc(p.name)}」`).join('<br>');
+  // 換老師分段：事實表上的「老師」是今天生效的那位，之後要換的另外列一行（同課名變更的寫法）
+  const teacherSched=courseTeacherPhases(co)
+    .map(p=>`${esc(coDateMD(p.from))} 起改由 ${esc(p.teacherIds.map(teacherNameById).filter(Boolean).join('、')||'未指定')} 上`).join('<br>');
   const facts=`<div class="cm-facts">
     ${fact('類型',`<span class="cm-tag">${esc(typeNow||'未分類')}</span>${co.needsGrade?'<span class="cm-tag">需登記成績</span>':'<span class="cm-tag cm-tag-off">只點名</span>'}${typeSub}`)}
     ${fact('時段',esc(sysSlotLabel(co))||'<span class="co-undef">未排時段</span>')}
-    ${fact('老師',esc(courseTeacherNames(co).join('、'))||'<span class="co-undef">未指定</span>')}
+    ${fact('老師',esc(courseTeacherNamesOn(co,today).join('、'))||'<span class="co-undef">未指定</span>')}
     ${fact('教室',esc(co.room)||'不指定')}
     ${fact('科目',esc(co.subject))}
     ${fact('每堂收費',noFee
@@ -1383,6 +1488,7 @@ function renderSysCourseModal(ctx){
       :(co.teacherRate!=null?`${co.teacherRate} ${esc(cfRateUnit(co.type))}${typeNow!==co.type?`<span class="cm-fact-sub">單位固定跟開課時的${esc(co.type)}走，不隨人數變</span>`:''}`:'<span class="co-undef">未定</span>'))}
     ${fact('來源管道',co.type==='試聽'?esc(co.sourceChannel):'')}
     ${fact('課名變更',nameSched)}
+    ${fact('老師變更',teacherSched)}
   </div>`;
 
   // 練習課：先按年級、再按科目分組的唯讀總覽（#7）

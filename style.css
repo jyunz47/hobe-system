@@ -1014,6 +1014,13 @@ body.hide-todo-chip .stu-info-chip{display:none}
 .cf-term-btn{padding:var(--sp-2) var(--sp-4);border:1px solid var(--br);background:var(--sf);color:var(--tx2);border-radius:99px;font-size:var(--fs-sm);font-family:inherit;cursor:pointer}
 .cf-term-btn:hover{border-color:var(--ac);color:var(--ac)}
 .cf-phase-x{margin-left:auto}
+/* 一張分段卡裡的兩區（上課時間／老師）：靠留白分區，不加框線 */
+.cf-phase-part{display:flex;flex-direction:column;gap:var(--sp-3);margin-top:var(--sp-3)}
+.cf-phase-part-lbl{font-size:var(--fs-sm);font-weight:600;color:var(--tx2)}
+.cf-phase-keep{margin-left:var(--sp-3);font-size:var(--fs-xs);font-weight:400;color:var(--tx3)}
+/* 老師 chips 與加入列借用課程視窗那兩個件，它們自帶的外距在這裡會跟 flex gap 疊起來 */
+.cf-phase .cf-chips{margin-bottom:0}
+.cf-phase .co-add{margin-top:0}
 .cf-add-phase{align-self:flex-start;margin-top:var(--sp-4);padding:var(--sp-3) var(--sp-5);border:1px dashed var(--brd);background:none;color:var(--tx2);border-radius:var(--rs);font-size:var(--fs-sm);font-family:inherit;cursor:pointer}
 .cf-add-phase:hover{border-color:var(--ac);color:var(--ac)}
 .cf-chip-new{margin-left:var(--sp-3);padding:0 var(--sp-3);border-radius:99px;background:var(--al);color:var(--am);font-size:var(--fs-2xs)}

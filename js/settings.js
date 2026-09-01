@@ -41,7 +41,7 @@ function buildCourseOverview(){
     // 卡片標題＝今天生效的課名（namePhases 分段時，8/1 到了自己會換）
     // 分區＝今天生效的課型（滾動判型：兩人的課退到剩一人，卡片自己搬到「一對一家教」區）
     title:courseNameOn(co,new Date()),type:sysBucket[courseTypeOn(co,todayStr)]||'group',sys:co,
-    teachers:new Set(courseTeacherNames(co)),
+    teachers:new Set(courseTeacherNamesOn(co,todayStr)),   // 今天由誰上（teacherPhases 分段時，換老師那天自己會換）
     sessions:sysCourseSessions(co),
     enrolled:getEnrollments({periodId:pid}).filter(en=>en.courseId===co.id),
   }));
@@ -67,7 +67,7 @@ function _slotsOnDay(co,day){
     .map(x=>({key:'w'+x.weekday,start:x.start,end:x.end,lbl:WEEK_LABEL[Number(x.weekday)]||''}));
 }
 function _clashLabel(co){
-  const t=courseTeacherNames(co).join('、');
+  const t=courseTeacherNamesOn(co,new Date()).join('、');
   return `${courseNameOn(co,new Date())||'(未命名)'}${t?'／'+t:''}${co.room?'／'+co.room:''}`;
 }
 function courseClashes(){

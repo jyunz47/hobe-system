@@ -192,7 +192,9 @@ function _makeOccurrence(course,day,slotIdx,startDt,endDt,rosterNames,studentGro
     id:occId,
     title:occName,origTitle:occName,
     desc:'',notes:'',
-    teacher:courseTeacherNames(course).join('、'),
+    // 老師依課堂日期取（teacherPhases：某日起改由誰上）——跟課名同一套 effective-date 規矩，
+    // 換老師才不會把已經上完的課堂一起改掉
+    teacher:courseTeacherNamesOn(course,day).join('、'),
     classroom:course.room||'',
     subject:course.subject||'',
     type:_occType(course,rosterNames.length),
@@ -279,7 +281,7 @@ function expandMakeupForRange(start,end){
       title:rec.origTitle,origTitle:rec.origTitle,
       desc:'',notes:'',
       // 這場換過老師的話用紀錄裡的快照，沒換就跟著母課程走（母課程換老師，補課也跟著換）
-      teacher:(rec.teacherNames||'')||(co?courseTeacherNames(co).join('、'):''),
+      teacher:(rec.teacherNames||'')||(co?courseTeacherNamesOn(co,sD).join('、'):''),
       ...(Array.isArray(rec.teacherIds)&&rec.teacherIds.length?{teacherIds:rec.teacherIds.slice()}:{}),
       classroom:rec.room||'',
       subject:co?(co.subject||''):'',

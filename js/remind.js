@@ -99,7 +99,8 @@ function rmdRecTeacher(rec){
   try{
     const m=String(rec.originalId||'').match(/^sys:(\d+):/);
     const co=m?findCourseById(Number(m[1])):null;
-    return co?courseTeacherNames(co).join('、'):'';
+    // 依「補課排定在哪一天」取老師：母課程 9/1 換人的話，9 月的補課要顯示新老師
+    return co?courseTeacherNamesOn(co,rec.scheduledDate?new Date(rec.scheduledDate):new Date()).join('、'):'';
   }catch(_){return'';}
 }
 

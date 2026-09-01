@@ -1790,7 +1790,9 @@ function _setsHit(a,b){for(const x of a)if(b.has(x))return true;return false;}
 function mkTeacherIds(occ){
   if(Array.isArray(occ?.teacherIds)&&occ.teacherIds.length)return new Set(occ.teacherIds.map(id=>'t:'+id));
   const co=(occ.courseId!=null&&typeof findCourseById==='function')?findCourseById(occ.courseId):null;
-  return new Set(co?courseTeacherIds(co).map(id=>'t:'+id):[]);
+  // 反查母課程時要看「這一堂是哪天」（teacherPhases 換老師分段），不然 9 月的課會拿到 8 月的老師
+  const ids=co?(typeof courseTeacherIdsOn==='function'?courseTeacherIdsOn(co,occ.startDt||null):courseTeacherIds(co)):[];
+  return new Set(ids.map(id=>'t:'+id));
 }
 function mkTeacherNames(occ){return new Set(String(occ.teacher||'').split('、').filter(Boolean));}
 function mkSameTeacher(a,b){
