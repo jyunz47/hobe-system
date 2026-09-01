@@ -962,6 +962,26 @@ async function dvMoveApply(how){
 }
 
 // ① 只改這一天：標記調課 ＋ 寫新時段（＝手動「調課 → 排時段」的結果）
+// 併進 oldOccId 的那幾筆改掛到 newRecId 那場（調課用），順便更新時間快照。
+// newRecId 給 null＝只更新快照、不改掛（時間變了但主課還是原來那一堂）。
+function _dvRehostJoins(oldOccId,newRecId,p){
+  const list=getMakeupScheduledLS().map(normalizeMakeupRec);
+  let n=0;
+  list.forEach(r=>{
+    if(!isJoinRec(r)||r.hostOccId!==oldOccId)return;
+    if(newRecId!=null)r.hostOccId='mk:'+newRecId;
+    r.scheduledDate=p.s.toISOString();
+    r.scheduledEnd=p.en.toISOString();
+    r.room=p.room||'';
+    n++;
+  });
+  if(!n)return 0;
+  driveData.makeupScheduled=list;
+  rebuildMakeupMatchMap();
+  scheduleDriveSave('makeupScheduled');
+  return n;
+}
+
 function _dvMoveOnce(p){
   const ev=p.ev;
   const list=getAbsences().slice();
@@ -976,8 +996,12 @@ function _dvMoveOnce(p){
   rec.updatedAt=new Date().toISOString();
   saveAbsences(list);
   // 調課場次的名單＝這堂的名冊（saveMakeupScheduled 讀 absentStudents）
-  saveMakeupScheduled({...ev,absentStudents:(ev.students||[]).slice()},p.s,p.en,p.room,null,'調課');
-  return`已登記調課：${_dvWhen(p.s)} ${_dvHM(p.s)}–${_dvHM(p.en)}${p.room?'・'+p.room:''}`;
+  const newRecId=saveMakeupScheduled({...ev,absentStudents:(ev.students||[]).slice()},p.s,p.en,p.room,null,'調課');
+  // 有人併進這堂補課的話，整堂搬走他們也要跟著搬：改掛到新的調課場次上。
+  // 只更新快照不改 hostOccId 的話，他們會留在那堂「已調走」的原課堂上，等於從課表消失。
+  const moved=_dvRehostJoins(ev.id,newRecId,p);
+  return`已登記調課：${_dvWhen(p.s)} ${_dvHM(p.s)}–${_dvHM(p.en)}${p.room?'・'+p.room:''}`
+    +(moved?`（${moved} 筆併班補課跟著搬）`:'');
 }
 
 // ② 從這天起都改：course.schedule.phases 加／改一段，不動更早的課堂
@@ -999,7 +1023,9 @@ function _dvMoveSeries(p){
   saveCourses(getCourses());
   logAct('course','改了上課時間（從某天起都改）',courseNameOn(co,p.from),
     `${was} → ${WD[p.s.getDay()]} ${_dvHM(p.s)}–${_dvHM(p.en)}${p.room?'・'+p.room:''}，${p.from.getMonth()+1}/${p.from.getDate()} 起生效`);
-  return`${p.from.getMonth()+1}/${p.from.getDate()} 起改成 ${WD[p.s.getDay()]} ${_dvHM(p.s)}–${_dvHM(p.en)}${p.room?'・'+p.room:''}`;
+  const moved=_dvRehostJoins(p.ev.id,null,p);   // 被拖的那一天若有人併進來，時間快照跟著改
+  return`${p.from.getMonth()+1}/${p.from.getDate()} 起改成 ${WD[p.s.getDay()]} ${_dvHM(p.s)}–${_dvHM(p.en)}${p.room?'・'+p.room:''}`
+    +(moved?`（${moved} 筆併班補課的時間跟著改）`:'');
 }
 
 // ③ 指定日期課：直接改那個時段本身
@@ -1014,7 +1040,9 @@ function _dvMoveDates(p){
   saveCourses(getCourses());
   logAct('course','改了上課時間',courseNameOn(co,p.s),
     `${was} → ${toDateStr(p.s)} ${_dvHM(p.s)}–${_dvHM(p.en)}${p.room?'・'+p.room:''}`);
-  return`已改成 ${_dvWhen(p.s)} ${_dvHM(p.s)}–${_dvHM(p.en)}${p.room?'・'+p.room:''}`;
+  const moved=_dvRehostJoins(p.ev.id,null,p);
+  return`已改成 ${_dvWhen(p.s)} ${_dvHM(p.s)}–${_dvHM(p.en)}${p.room?'・'+p.room:''}`
+    +(moved?`（${moved} 筆併班補課的時間跟著改）`:'');
 }
 
 // ④ 補課／調課場次：改 makeupScheduled 那筆的時段
@@ -1026,13 +1054,16 @@ function _dvMoveMakeup(p){
   if(!rec)throw new Error('找不到這筆補課安排');
   const wasS=new Date(rec.scheduledDate),wasRoom=rec.room||'';
   rec.scheduledDate=p.s.toISOString();rec.scheduledEnd=p.en.toISOString();rec.room=p.room;
+  // 這場如果被別人併進來過（2026-09-01 起補課場次可以當併班主課），那幾筆要跟著搬
+  const moved=syncJoinSnapshots(list,p.ev.id,p.s,p.en,p.room);
   driveData.makeupScheduled=list;
   rebuildMakeupMatchMap();
   scheduleDriveSave('makeupScheduled');
   logAct('makeup',`改了${(rec.absentStudents||[]).length?` ${rec.absentStudents.join('、')} 的`:''}${rec.calName||'補課'}時段`,
     `${fmtD(p.s)} ${_dvHM(p.s)}–${_dvHM(p.en)} ${p.room||''} ${rec.origTitle||''}`.trim(),
-    `原本排在 ${fmtD(wasS)} ${fmtT(wasS)} ${wasRoom}`.trim());
-  return`已改期：${_dvWhen(p.s)} ${_dvHM(p.s)}–${_dvHM(p.en)}${p.room?'・'+p.room:''}`;
+    `原本排在 ${fmtD(wasS)} ${fmtT(wasS)} ${wasRoom}`.trim()+(moved?`・${moved} 筆併班補課跟著改`:''));
+  return`已改期：${_dvWhen(p.s)} ${_dvHM(p.s)}–${_dvHM(p.en)}${p.room?'・'+p.room:''}`
+    +(moved?`（${moved} 筆併班補課跟著改）`:'');
 }
 
 // ── 主渲染 ──

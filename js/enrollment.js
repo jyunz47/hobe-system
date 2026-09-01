@@ -80,13 +80,20 @@ function eventDayStr(e){return e&&e.startDt?toDateStr(new Date(e.startDt)):null;
 // 從登記簿重算、不看課堂物件的 students；疊在這裡才會一路長到點名、成績、日曆側欄。
 // ⚠ 請假面板的學生 chips 走的是 e.students（展開器的在籍名冊），刻意不含補課生——
 //   他們要是在這堂被標請假，會變成「主課的請假紀錄」而長出一筆不存在的欠課。
+// 2026-09-01 起補課／調課場次也能當併班主課（它們的 courseId 是 null，所以要另外放行）
 function _joinRows(e){
-  return (e&&e.courseId!=null&&typeof joinRosterOn==='function')?joinRosterOn(e.id):[];
+  return (e&&(e.courseId!=null||e.isMakeupOcc)&&typeof joinRosterOn==='function')?joinRosterOn(e.id):[];
 }
 
 function eventRoster(e){
   const descNames=e.students||[];
   const day=eventDayStr(e);
+  // 補課／調課場次：名冊＝這場本來要補的人（absentStudents）＋ 後來併進來的人。
+  // 不能走下面那條行事曆課的路——那條會拿 origTitle 去查登記簿，把整班撈進來。
+  if(e.isMakeupOcc){
+    const joins=_joinRows(e).map(r=>r.name).filter(n=>!descNames.includes(n));
+    return joins.length?[...descNames,...joins]:descNames;
+  }
   // 系統自有課堂：直接以 courseId 反查本期登記簿（同名不混、與展開器一致）
   if(e.courseId!=null){
     const byId=new Map(getStudentList().map(s=>[s.id,s]));
@@ -114,6 +121,13 @@ function eventRoster(e){
 function eventRosterWithId(e){
   const byId=new Map(getStudentList().map(s=>[s.id,s]));
   const day=eventDayStr(e);
+  // 補課／調課場次（可當併班主課）：本來要補的人 ＋ 併進來的人。
+  // 併進來那幾列的 studentId 由 joinRosterOn 查來源請假紀錄的雙存欄位給（同名終結）
+  if(e.isMakeupOcc){
+    const base=_mkNameRows(e.students||[],byId);
+    const joins=_joinRows(e).filter(j=>!base.some(r=>r.name===j.name));
+    return joins.length?[...base,...joins]:base;
+  }
   // 系統自有課堂：以 courseId 反查本期登記簿，studentId 直接來自登記（同名終結）
   if(e.courseId!=null){
     const rows=getEnrollments({periodId:yearPeriodId()})
@@ -126,12 +140,18 @@ function eventRosterWithId(e){
   const ens=e.origTitle?getEnrollments({courseTitle:e.origTitle,periodId:yearPeriodId()}).filter(en=>en.courseId==null):[];
   if(ens.length)return ens.filter(en=>enrollmentActiveOn(en,day))
     .map(en=>({studentId:en.studentId,name:byId.get(en.studentId)?.name||'(未知)'}));
+  return _mkNameRows(e.students||[],byId);
+}
+
+// 一串名字 → [{studentId,name}]：只有「唯一同名在學生」才給得到 studentId，
+// 兩個同名就給 null（寧可不給也不要點錯人）。補課場次與 fallback 備註共用這一支。
+function _mkNameRows(names,byId){
   const byName=new Map();
   getStudentList().filter(s=>(s.status||'在學')==='在學').forEach(s=>{
     if(!byName.has(s.name))byName.set(s.name,[]);
     byName.get(s.name).push(s);
   });
-  return (e.students||[]).map(nm=>{
+  return (names||[]).map(nm=>{
     const m=byName.get(nm)||[];
     return{studentId:m.length===1?m[0].id:null,name:nm};
   });

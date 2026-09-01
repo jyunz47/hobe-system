@@ -780,6 +780,8 @@ function setSpTeacher(v){
 function spCanJoin(){
   return slotPicker.mode==='makeup'&&mkSplittable(slotPicker.ev)&&spStudents().length>0;
 }
+// 改期既有那場時，那一場自己不能出現在併班候選裡（併進自己沒有意義）
+function spSkipOccIds(){return slotPicker.recId?['mk:'+slotPicker.recId]:[];}
 
 function renderSpBody(){
   const body=document.getElementById('sp-body');
@@ -896,14 +898,14 @@ function selectSpJoin(occId){
 function buildSpJoinSection(){
   const sec=document.createElement('div');
   const ev=slotPicker.ev,who=spStudents();
-  const list=mkJoinCandidates(ev,slotPicker.avail,who).filter(c=>c.exact);
+  const list=mkJoinCandidates(ev,slotPicker.avail,who,spSkipOccIds()).filter(c=>c.exact);
   const crit=mkJoinCriteriaTxt(ev,who);
   if(!list.length){
     sec.innerHTML=`<div class="sp-join-empty">當天沒有可以併班的課${crit?`（找的是${esc(crit)}）`:''}——往下選時段另開一場</div>`;
     return sec;
   }
   sec.innerHTML=`<div class="sp-lbl">⭐ 併進當天的課${crit?`（${esc(crit)}）`:''}</div>
-    <div class="sp-join-note">${esc(who.join('、'))} 直接進那堂一起上，<b>不另開場次</b>。只列<b>同科目、同年級、同老師</b>的課；進度合不合請自己看。</div>
+    <div class="sp-join-note">${esc(who.join('、'))} 直接進那堂一起上，<b>不另開場次</b>。只列<b>同科目、同年級、同老師</b>的課；進度合不合請自己看。<br><b>已經排好的補課場次也列在這裡</b>——別人的補課如果時間合適，兩個人可以併成同一場。</div>
     <div class="sp-join-list"></div>
     <div class="sp-join-or">或　另開一場補課 ↓</div>`;
   const box=sec.querySelector('.sp-join-list');
@@ -917,8 +919,14 @@ function buildSpJoinSection(){
     const stuBusy=mkStudentBusyAt(who,slotPicker.avail,occ.startDt,occ.endDt,[occ.id,ev.id]);
     const el=document.createElement('div');
     el.className='sp-join'+(slotPicker.join===occ.id?' sp-sel':'');
-    el.innerHTML=`<div class="sp-join-t">${esc(occ.origTitle)}</div>
+    // 已排好的補課／調課場次也能當主課（2026-09-01）——要標出來，否則跟正常課混在一起分不出
+    const mkTag=occ.isMakeupOcc
+      ?`<span class="sp-join-k${occ.calName==='調課'?' k-resched':''}">${esc(occ.calName||'補課')}</span>`:'';
+    const mkFrom=occ.isMakeupOcc&&occ.students&&occ.students.length
+      ?`<div class="sp-join-m">原本是 ${esc(occ.students.join('、'))} 的${esc(occ.calName||'補課')}</div>`:'';
+    el.innerHTML=`<div class="sp-join-t">${mkTag}${esc(occ.origTitle)}</div>
       <div class="sp-join-m">${fmtT(occ.startDt)}–${fmtT(occ.endDt)}${occ.classroom?'・'+esc(occ.classroom):''}${occ.teacher?'・'+esc(occ.teacher):''}</div>
+      ${mkFrom}
       <div class="sp-join-m">名單 ${roster.length} 人 → <b>${roster.length+addN} 人</b>${over?`<span class="sp-join-w">⚠ 超過 ${esc(occ.classroom)} 上限 ${cap}</span>`:''}${already.length?`<span class="sp-join-w">${esc(already.join('、'))} 已在名單</span>`:''}</div>
       ${stuBusy.length?`<div class="sp-join-m"><span class="sp-join-w">⚠ ${esc(mkStudentBusyTxt(who,stuBusy))}</span></div>`:''}`;
     el.onclick=()=>selectSpJoin(occ.id);
@@ -1009,7 +1017,7 @@ function spDaySummary(ds){
   const who=spStudents();
   const [y,m,d]=ds.split('-').map(Number);
   const {start:startMin,end:endMin}=bizHoursOn(new Date(y,m-1,d));
-  if(spCanJoin())out.join=mkJoinCandidates(ev,avail,who).filter(c=>c.exact).length;
+  if(spCanJoin())out.join=mkJoinCandidates(ev,avail,who,spSkipOccIds()).filter(c=>c.exact).length;
   const isPracticeMakeup=getEffectiveType()==='practice'&&slotPicker.mode==='makeup';
   const newStu=who.length||1;
   const tRef=spTeacherRef();
@@ -1808,12 +1816,18 @@ function mkSameTeacher(a,b){
 // 剩下的每一堂標記三個條件對不對得上（科目／年級／老師）。
 // **預設只顯示三者全中的**（exact）；差一項就要人自己按「顯示當天全部」才看得到，
 // 每張卡上會寫清楚差在哪。進度合不合仍然是人看的，系統不猜。
-function mkJoinCandidates(ev,avail,students){
+// skipIds＝不要列進來的課堂 id（改期時要排掉「正在改的那一場」自己）
+function mkJoinCandidates(ev,avail,students,skipIds){
   const subj=mkSubjectOf(ev);
   const grades=mkGradeSet(ev,students&&students.length?students:null);
   const who=students||[];
+  const skip=new Set([ev.id,...(skipIds||[])].filter(Boolean));
   return (avail||[]).filter(o=>{
-    if(o.id===ev.id||o.courseId==null)return false;
+    if(skip.has(o.id))return false;
+    // 2026-09-01「補課一起補」：以前只認系統課（courseId），所以**已經排好的補課場次併不進去**
+    // （補課場次的 courseId 就是 null）——兩個不同日期請假的人約同一場，會長出兩張卡。
+    // 現在補課／調課場次也能當主課；同科目／同年級／同老師三個條件照樣把關。
+    if(o.courseId==null&&!o.isMakeupOcc)return false;
     if(o.isFullAbsent||o.isRescheduled)return false;
     if(o.calName==='試聽'||o.type==='practice')return false;
     const roster=new Set(eventRoster(o));
@@ -1832,6 +1846,24 @@ function mkJoinCriteriaTxt(ev,students){
   const grade=[...mkGradeSet(ev,students&&students.length?students:null)].join('／');
   const head=grade+(mkSubjectOf(ev)||'');
   return[head,[...mkTeacherNames(ev)].join('、')].filter(Boolean).join('・');
+}
+
+// 主課被拖去改時間／換教室時，併進它的那幾筆要跟著搬（2026-09-01 補）。
+// 併班紀錄自己存了一份時間快照（scheduledDate/End/room，抄主課的），不同步的話
+// 待補課清單會講一個過期的時間，而課表上人已經跟著主課走了——兩邊對不起來。
+// ⚠️ 補課場次能當主課之後更容易踩到（拖補課塊是很順手的動作），所以跟這一刀一起補。
+// 回傳跟著搬的筆數；呼叫端已經在寫 makeupScheduled，這裡只改陣列不另外存檔。
+function syncJoinSnapshots(list,hostOccId,sD,eD,room){
+  if(!hostOccId)return 0;
+  let n=0;
+  list.forEach(r=>{
+    if(!isJoinRec(r)||r.hostOccId!==hostOccId)return;
+    r.scheduledDate=sD.toISOString();
+    r.scheduledEnd=eD.toISOString();
+    r.room=room||'';
+    n++;
+  });
+  return n;
 }
 
 // 存一筆併班補課。recId＝改掛到另一堂（沿用同一筆），省略＝新排一場
@@ -1881,6 +1913,7 @@ function saveMakeupScheduled(ev,sS,sE,room,calEventId,calName='補課',students,
     `${fmtD(sS)} ${fmtT(sS)}–${fmtT(sE)} ${room||''} ${ev.origTitle||''}${rec.teacherNames?` 👤${rec.teacherNames}`:''}`.trim(),
     prev?`原本排在 ${fmtD(new Date(prev.scheduledDate))} ${fmtT(new Date(prev.scheduledDate))} ${prev.room||''}`
         :`原課堂 ${fmtD(ev.startDt)} ${fmtT(ev.startDt)}`);
+  return rec.id;   // 調課時要拿它把併進原課堂的人改掛過來（_dvMoveOnce）
 }
 
 // makeupScheduled → makeupMatchMap（occId → 場次陣列）。存檔與載入共用同一支，

@@ -443,6 +443,12 @@ input[type=date]:focus{border-color:var(--ac)}
 .sp-join:hover{border-color:var(--ac);background:var(--al)}
 .sp-join.sp-sel{border-color:var(--ac);background:var(--al);box-shadow:inset 3px 0 0 var(--ac)}
 .sp-join-t{font-size:var(--fs-base);font-weight:600;color:var(--tx)}
+/* 候選是「已經排好的補課／調課場次」時的標籤——跟正常課混在一起要分得出來。
+   用色跟日曆圖例同一組（ink 版才有足夠對比當文字） */
+.sp-join-k{display:inline-block;margin-right:var(--sp-3);padding:1px var(--sp-3);border-radius:999px;
+  background:var(--sf2);color:var(--cal-makeup-ink);
+  font-size:var(--fs-2xs);font-weight:600;vertical-align:middle}
+.sp-join-k.k-resched{color:var(--cal-resched-ink)}
 .sp-join-m{font-size:var(--fs-sm);color:var(--tx2);margin-top:var(--sp-1)}
 .sp-join-m b{color:var(--ac);font-weight:600}
 .sp-join-w{color:var(--wn);font-weight:500;margin-left:var(--sp-4)}
