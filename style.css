@@ -144,6 +144,7 @@ input[type=date]:focus{border-color:var(--ac)}
 .nt-chip{font-size:var(--fs-2xs);padding:2px var(--sp-3);border-radius:999px;flex-shrink:0;
   background:var(--wl);color:var(--wn);white-space:nowrap}
 .nt-chip.on{background:var(--al);color:var(--ac-dk)}
+.nt-chip.na{background:var(--sf2);color:var(--tx3)}   /* 不適用：不是待辦，也不是完成 */
 /* 視窗內容（.stu-modal-body 已經有 padding，這裡只管內部節奏） */
 .nt-modal-in .nt-sec:first-child{margin-top:0}
 .nt-sec{display:flex;align-items:center;gap:var(--sp-3);flex-wrap:wrap;
@@ -171,10 +172,11 @@ input[type=date]:focus{border-color:var(--ac)}
 .nt-stu-warn{font-size:var(--fs-2xs);opacity:.8}
 .nt-acts{display:flex;justify-content:flex-end;margin-top:var(--sp-5)}
 /* 標題行的批次鈕：一次把「誰還續」辦完（⏰ 刻意不含在內） */
-.nt-bulk{margin-left:auto;flex-shrink:0;border:1px solid var(--in-br);background:var(--sf);
+.nt-bulk{flex-shrink:0;border:1px solid var(--in-br);background:var(--sf);
   color:var(--in);border-radius:999px;padding:var(--sp-3) var(--sp-5);
   font-size:var(--fs-sm);font-family:inherit;font-weight:600;cursor:pointer}
 .nt-bulk:hover{background:var(--il)}
+.nt-title+.nt-bulk{margin-left:auto}
 .nt-bulk+.nt-count{margin-left:var(--sp-4)}
 /* 列上的「時間不變」：開學後照舊上的課不用開視窗 */
 .nt-keep{flex-shrink:0;border:1px solid var(--br);background:var(--sf);color:var(--tx2);

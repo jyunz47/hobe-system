@@ -417,3 +417,90 @@ suite('開學準備 — 全部帶入名單', () => {
     assertEq(JSON.stringify(driveData.courses), before, '課程本體一個位元都不能動');
   });
 });
+
+// ────────────────────────────────────────────────────────
+// 【2026-09-01 第二輪】老闆有 76 門課，帶完名單後 ⏰ 全部還是「未定」。
+// 兩個問題：① 一門一門按 76 次不叫辦完 → 加「全部時間不變」
+//          ② 指定日期的課（單場加課、試聽）根本沒有每週時段，原本會永遠掛著未定、
+//             整區收不起來，批次也永遠清不完
+suite('開學準備 — 沒有每週固定時段的課不該卡住整區', () => {
+
+  const ntT3 = { dst: '2026-sem1', src: '2025-summer', start: '2026-09-01' };
+
+  test('指定日期的單場課：⏰ 直接算不適用（不是待辦）', () => {
+    ntResetTerm();
+    const oneOff = { id: 20, name: '宇威數學試聽', type: '試聽', status: '開課中', teacherIds: [1],
+      schedule: { mode: 'dates', slots: [{ date: '2026-08-20', start: '15:00', end: '16:00' }], phases: [] } };
+    assertFalse(ntHasWeekly(oneOff));
+    assertTrue(ntTimeDone(oneOff, '2026-09-01'), '沒有每週時段＝沒有「開學後改幾點」這回事');
+    assertTrue(ntDone(oneOff, ntT3).timeNA, '列上要標「不適用」而不是「時間未定」');
+  });
+
+  test('每週重複但一個時段都沒有的課，也算不適用', () => {
+    ntResetTerm();
+    const empty = { id: 21, name: '空課', type: '團班', status: '開課中', teacherIds: [1],
+      schedule: { mode: 'weekly', slots: [], phases: [] } };
+    assertFalse(ntHasWeekly(empty));
+    assertTrue(ntTimeDone(empty, '2026-09-01'));
+  });
+
+  test('🔑 只剩「不適用」的課時，整區算辦完（不會永遠收不起來）', () => {
+    ntResetTerm();
+    ntSetPeriod('sem1');
+    driveData.courses = [{ id: 20, name: '試聽', type: '試聽', status: '開課中', teacherIds: [1],
+      schedule: { mode: 'dates', slots: [{ date: '2025-08-20', start: '15:00', end: '16:00' }], phases: [] } }];
+    driveData.enrollments = [
+      { id: 201, studentId: 1, courseId: 20, courseTitle: '試聽', periodId: '2024-summer' },
+      { id: 301, studentId: 1, courseId: 20, courseTitle: '試聽', periodId: '2025-sem1' },
+    ];
+    assertEq(ntPendingCount('2025-sem1'), 0, '名單帶了就辦完了，⏰ 不該擋著');
+  });
+
+  test('一般每週課仍然要辦（不適用的判斷不可以放太寬）', () => {
+    ntResetTerm();
+    assertTrue(ntHasWeekly(driveData.courses[0]));
+    assertFalse(ntTimeDone(driveData.courses[0], '2026-09-01'));
+    assertFalse(ntDone(driveData.courses[0], ntT3).timeNA);
+  });
+});
+
+suite('開學準備 — 全部時間不變', () => {
+
+  const ntT4 = { dst: '2026-sem1', src: '2025-summer', start: '2026-09-01' };
+  // ntKeepAllTimes 會開確認視窗與重畫（測不到），這裡跑它對每一門寫進去的那一段
+  function ntKeepAll(courses, t) {
+    return courses.map(co => ntSlotsOn(co, t.start).length ? ntApplyPhase(co, t.start, ntSlotsOn(co, t.start)) : co);
+  }
+
+  test('🔑 全部標完之後課表結果完全不變', () => {
+    ntResetTerm();
+    driveData.courses.push({ id: 8, name: '國三理化班', type: '團班', room: '108', status: '開課中',
+      teacherIds: [1], schedule: { mode: 'weekly', slots: [{ weekday: 4, start: '13:00', end: '14:30' }], phases: [] } });
+    const before = driveData.courses.map(co => [ntSlotOn(co, '2026-08-25'), ntSlotOn(co, '2026-09-08')]);
+    const after = ntKeepAll(driveData.courses, ntT4);
+    after.forEach((co, i) => {
+      assertEq(ntSlotOn(co, '2026-08-25'), before[i][0], co.name + ' 開學前不能變');
+      assertEq(ntSlotOn(co, '2026-09-08'), before[i][1], co.name + ' 開學後也不能變');
+    });
+  });
+
+  test('全部標完之後每一門的 ⏰ 都算已定', () => {
+    ntResetTerm();
+    ntKeepAll(driveData.courses, ntT4).forEach(co => assertTrue(ntTimeDone(co, '2026-09-01'), co.name));
+  });
+
+  test('已經設過新時段的課不會被打回原時段', () => {
+    ntResetTerm();
+    driveData.courses[0] = ntApplyPhase(driveData.courses[0], '2026-09-01', [{ weekday: 2, start: '19:00', end: '21:00' }]);
+    const after = ntKeepAll(driveData.courses, ntT4);
+    assertEq(ntSlotOn(after[0], '2026-09-08'), '19:00–21:00', '新排的時段要留著');
+  });
+
+  test('沒有每週時段的課被跳過，不會長出空的分段', () => {
+    ntResetTerm();
+    driveData.courses.push({ id: 20, name: '試聽', type: '試聽', status: '開課中', teacherIds: [1],
+      schedule: { mode: 'dates', slots: [{ date: '2026-08-20', start: '15:00', end: '16:00' }], phases: [] } });
+    const after = ntKeepAll(driveData.courses, ntT4);
+    assertEq((after[1].schedule.phases || []).length, 0, '指定日期的課不該被塞分段');
+  });
+});
