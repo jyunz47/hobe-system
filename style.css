@@ -139,7 +139,7 @@ input[type=date]:focus{border-color:var(--ac)}
 .nt-row.done{opacity:.62}
 .nt-row.done:hover{opacity:1}
 .nt-name{font-weight:600;color:var(--tx);font-size:var(--fs-base);flex-shrink:0}
-.nt-cur{font-size:var(--fs-sm);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nt-cur{font-size:var(--fs-sm);color:var(--tx3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .nt-arrow{margin-left:auto;color:var(--tx3);font-size:var(--fs-lg);flex-shrink:0}
 .nt-chip{font-size:var(--fs-2xs);padding:2px var(--sp-3);border-radius:999px;flex-shrink:0;
   background:var(--wl);color:var(--wn);white-space:nowrap}
@@ -170,6 +170,17 @@ input[type=date]:focus{border-color:var(--ac)}
 .nt-stu.warn{background:var(--wl);color:var(--wn)}
 .nt-stu-warn{font-size:var(--fs-2xs);opacity:.8}
 .nt-acts{display:flex;justify-content:flex-end;margin-top:var(--sp-5)}
+/* 標題行的批次鈕：一次把「誰還續」辦完（⏰ 刻意不含在內） */
+.nt-bulk{margin-left:auto;flex-shrink:0;border:1px solid var(--in-br);background:var(--sf);
+  color:var(--in);border-radius:999px;padding:var(--sp-3) var(--sp-5);
+  font-size:var(--fs-sm);font-family:inherit;font-weight:600;cursor:pointer}
+.nt-bulk:hover{background:var(--il)}
+.nt-bulk+.nt-count{margin-left:var(--sp-4)}
+/* 列上的「時間不變」：開學後照舊上的課不用開視窗 */
+.nt-keep{flex-shrink:0;border:1px solid var(--br);background:var(--sf);color:var(--tx2);
+  border-radius:999px;padding:var(--sp-2) var(--sp-4);
+  font-size:var(--fs-xs);font-family:inherit;cursor:pointer;white-space:nowrap}
+.nt-keep:hover{background:var(--al);color:var(--ac-dk);border-color:var(--ac)}
 
 /* ── 期別交接卡（2026-08-27，js/settings.js coCarryHtml）──
    每年 9/1、3/1、7/1 期別翻頁時，課程管理頁最上面長出這張；平常整段不存在。

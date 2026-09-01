@@ -322,3 +322,98 @@ suite('開學準備 — 辦完一門課，其他門不可以跟著消失', () =>
     assertTrue(t !== null && !!t.dst, 'ntTarget() 應該回得出目標');
   });
 });
+
+// ────────────────────────────────────────────────────────
+// 「時間不變」與「全部帶入名單」（2026-09-01 老闆要求批次化）
+//
+// 最要緊的安全性質：「時間不變」寫進去的是一段**內容跟現在一模一樣**的分段，
+// 所以它只改變「系統知不知道這門處理過了」，**課表算出來的結果一分一秒都不能變**。
+suite('開學準備 — 時間不變（照舊上的課一秒辦掉）', () => {
+
+  // ntKeepTime 會 toast／重畫（測不到），這裡跑它真正寫進去的那一段
+  function ntKeepPhase(co, t) {
+    return ntApplyPhase(co, t.start, ntSlotsOn(co, t.start));
+  }
+  const ntT2 = { dst: '2026-sem1', src: '2025-summer', start: '2026-09-01' };
+
+  test('🔑 寫完之後課表結果完全不變（開學前後都照原時段）', () => {
+    ntResetTerm();
+    const before = driveData.courses[0];
+    const b1 = ntSlotOn(before, '2026-08-25'), b2 = ntSlotOn(before, '2026-09-08');
+    const after = ntKeepPhase(before, ntT2);
+    assertEq(ntSlotOn(after, '2026-08-25'), b1, '開學前那堂不能變');
+    assertEq(ntSlotOn(after, '2026-09-08'), b2, '開學後那堂也不能變（這才叫時間不變）');
+    assertEq(b2, '12:30–14:00');
+  });
+
+  test('寫完之後 ⏰ 才算已定（原本會永遠掛著未定）', () => {
+    ntResetTerm();
+    const co = driveData.courses[0];
+    assertFalse(ntDone(co, ntT2).timeDone, '沒蓋章之前是未定');
+    assertTrue(ntDone(ntKeepPhase(co, ntT2), ntT2).timeDone, '蓋完章才算已定');
+  });
+
+  test('同一天重複按只留一段，不會愈按愈多', () => {
+    ntResetTerm();
+    let co = driveData.courses[0];
+    co = ntKeepPhase(co, ntT2);
+    co = ntKeepPhase(co, ntT2);
+    assertEq(co.schedule.phases.filter(p => p.from === '2026-09-01').length, 1);
+  });
+
+  test('已經有 9/1 起新時段的課，內容照新的來（不會被打回舊時段）', () => {
+    ntResetTerm();
+    let co = ntApplyPhase(driveData.courses[0], '2026-09-01', [{ weekday: 2, start: '19:00', end: '21:00' }]);
+    co = ntKeepPhase(co, ntT2);   // 就算再按一次「時間不變」，維持的也是 19:00 那組
+    assertEq(ntSlotOn(co, '2026-09-08'), '19:00–21:00');
+    assertEq(ntSlotOn(co, '2026-08-25'), '12:30–14:00', '開學前仍然不受影響');
+  });
+});
+
+suite('開學準備 — 全部帶入名單', () => {
+
+  function ntBulkTerm() {
+    ntResetTerm();
+    ntSetPeriod('sem1');
+    driveData.courses.push({ id: 8, name: '國三理化班', type: '團班', room: '108', status: '開課中',
+      teacherIds: [1], schedule: { mode: 'weekly', slots: [{ weekday: 4, start: '13:00', end: '14:30' }], phases: [] } });
+    driveData.enrollments = [
+      { id: 201, studentId: 1, courseId: 7, courseTitle: '國二數學班', periodId: '2024-summer', price: 500 },
+      { id: 202, studentId: 2, courseId: 7, courseTitle: '國二數學班', periodId: '2024-summer', price: 450 },
+      { id: 203, studentId: 3, courseId: 8, courseTitle: '國三理化班', periodId: '2024-summer', price: 600 },
+    ];
+    return ntTarget(NT_SEM1_DAY1);
+  }
+
+  test('預設全續：每一門的預選人數＝上一期的人數', () => {
+    const t = ntBulkTerm();
+    const items = ntCourses(t);
+    assertEq(items.length, 2);
+    items.forEach(({ co, ens }) => assertEq(ntPicked(co, ens).size, ens.length, co.name + ' 預設全續'));
+  });
+
+  test('已經帶過名單的課不會再被算進批次（不會重複帶）', () => {
+    const t = ntBulkTerm();
+    driveData.enrollments.push({ id: 907, studentId: 1, courseId: 7, courseTitle: 'x', periodId: '2025-sem1' });
+    const todo = ntCourses(t).filter(({ co }) => !ntDone(co, t).rosterDone);
+    assertEq(todo.length, 1);
+    assertEq(todo[0].co.id, 8);
+  });
+
+  test('取消勾選的人不會被帶過去', () => {
+    const t = ntBulkTerm();
+    const item = ntCourses(t).find(x => x.co.id === 7);
+    ntPicked(item.co, item.ens);             // 開視窗時會初始化成「全續」，先跑一次
+    ntToggleStu(7, 2);                       // 小華不續
+    assertEq(ntPicked(item.co, item.ens).size, 1);
+    assertFalse(ntPicked(item.co, item.ens).has(2));
+  });
+
+  test('🔑 批次只碰名單，一門課的時段都不會被動到', () => {
+    const t = ntBulkTerm();
+    const before = JSON.stringify(driveData.courses);
+    // 批次帶名單寫的只有 enrollments（ntCarryAllRosters 的 undoBegin 也只宣告 enrollments）
+    ntCourses(t).forEach(({ co }) => assertFalse(ntDone(co, t).timeDone, co.name + ' 的 ⏰ 不該被批次辦掉'));
+    assertEq(JSON.stringify(driveData.courses), before, '課程本體一個位元都不能動');
+  });
+});

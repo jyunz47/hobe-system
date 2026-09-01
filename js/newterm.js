@@ -199,6 +199,77 @@ function ntFutureMakeups(co,t){
   });
 }
 
+// ── 全部帶入名單（2026-09-01 老闆要求）──
+// 只做 👥 那一半：誰還續是機械式的（預設全續），一次辦得完。
+// ⏰ 開學後幾點上**刻意不一起做**——暑假 12:30、開學改 19:00 這件事系統沒有任何依據可推，
+// 一起自動掉等於把「該改時間的課」靜靜標成辦完，那正是這一區存在的理由。
+async function ntCarryAllRosters(){
+  const t=ntTarget();if(!t)return;
+  const todo=ntCourses(t).filter(({co,ens})=>!ntDone(co,t).rosterDone&&ens.length);
+  if(!todo.length)return toast('每一門的名單都已經帶過了','inf');
+  const rows=todo.map(({co,ens})=>({co,ens,pick:[...ntPicked(co,ens)]})).filter(r=>r.pick.length);
+  if(!rows.length)return toast('每一門都被取消勾選了，沒有人要帶','inf');
+  const total=rows.reduce((n,r)=>n+r.pick.length,0);
+  const ok=await uiConfirm({title:'把名單全部帶到新學期？',ok:`帶入 ${rows.length} 門`,
+    html:`<p>這 <b>${rows.length}</b> 門課的名單帶到 <b>${esc(yearPeriodLabel(t.dst))}</b>，共 <b>${total}</b> 筆修課登記。</p>
+      <div class="ask-list">${rows.slice(0,8).map(r=>`・${esc(courseNameOn(r.co,new Date()))}（${r.pick.length} 人）`).join('<br>')}${rows.length>8?`<br>…還有 ${rows.length-8} 門`:''}</div>
+      <p class="ask-sub">上一期一筆都不動，純新增。<b>開學後的上課時間不會一起處理</b>——那個系統猜不出來，還是要一門一門定（不用改的按「時間不變」就好）。</p>
+      <div class="ask-note ask-warn">帶完有 12 秒可以按「復原」。</div>`});
+  if(!ok)return;
+
+  const undoTok=typeof undoBegin==='function'?undoBegin(['enrollments']):null;
+  const add=[];
+  rows.forEach(r=>{
+    r.ens.filter(en=>r.pick.includes(en.studentId)).forEach(en=>add.push(makeEnrollment({
+      studentId:en.studentId,courseTitle:en.courseTitle,periodId:t.dst,
+      price:en.price,courseId:en.courseId,practiceSubject:en.practiceSubject||'',note:en.note||'',
+      // startDate/endDate 不帶：那是上一期的期中加退，新的一期從頭開始
+    })));
+  });
+  saveEnrollments([...getEnrollments(),...add]);
+  const act=logAct('roster','全部帶入名單（開學準備）',yearPeriodLabel(t.dst),
+    `${rows.length} 門課・${add.length} 筆登記`);
+  toast(`已帶入 ${rows.length} 門課的名單（${add.length} 筆）`,'ok');
+  if(isSignedIn())await Promise.all([loadToday(),loadWeek()]);
+  renderSettings();
+  if(typeof undoOffer==='function')undoOffer(undoTok,{
+    label:`帶入了 ${rows.length} 門課的名單`,act,
+    redraw:async()=>{if(isSignedIn())await Promise.all([loadToday(),loadWeek()]);renderSettings();}});
+}
+
+// ── 時間不變（2026-09-01）──
+// 開學後照舊上的課，按這顆就算辦完。寫的是一段「內容跟現在一模一樣」的分段。
+// ⚠️ 為什麼寫進資料而不是另外記一個旗標：這一區的進度是**從結果推出來的**
+//    （有沒有一段 t.start 起生效的分段），多存一份狀態就多一份要同步、多裝置還會對不起來。
+//    寫一段等價的分段，課表算出來的結果完全不變，卻讓系統看得出「這門被處理過了」。
+async function ntKeepTime(cid){
+  const t=ntTarget();if(!t)return;
+  const item=ntCourses(t).find(x=>x.co.id===cid);if(!item)return;
+  const co=item.co;
+  if(ntDone(co,t).timeDone)return toast('這門課的開學時間已經定過了','inf');
+  const cur=ntSlotsOn(co,t.start);
+  if(!cur.length)return toast('這門課沒有每週固定時段，要到課程編輯裡排','inf');
+  const name=courseNameOn(co,new Date());
+  const undoTok=typeof undoBegin==='function'?undoBegin(['courses']):null;
+  const list=getCourses().slice();
+  const i=list.findIndex(c=>c.id===cid);
+  if(i<0)return;
+  const c=JSON.parse(JSON.stringify(list[i]));
+  c.schedule=c.schedule||{mode:'weekly',slots:[],phases:[]};
+  c.schedule.phases=(c.schedule.phases||[]).filter(p=>!(p&&p.from===t.start));   // 同一天只留一段
+  c.schedule.phases.push({from:t.start,slots:cur.map(s=>({weekday:Number(s.weekday),start:s.start,end:s.end}))});
+  c.schedule.phases.sort((a,b)=>String(a.from).localeCompare(String(b.from)));
+  list[i]=c;
+  saveCourses(list);
+  const act=logAct('course','開學後時間不變（開學準備）',name,`${coDateMD(t.start)} 起維持 ${ntSlotTxt(cur)}`);
+  toast(`「${name}」開學後維持 ${ntSlotTxt(cur)}`,'ok');
+  if(isSignedIn())await Promise.all([loadToday(),loadWeek()]);
+  renderSettings();
+  if(typeof undoOffer==='function')undoOffer(undoTok,{
+    label:`標了「${name}」開學後時間不變`,act,
+    redraw:async()=>{if(isSignedIn())await Promise.all([loadToday(),loadWeek()]);renderSettings();}});
+}
+
 // ── 確認一門課 ──
 async function ntConfirm(cid){
   const t=ntTarget();if(!t)return;
@@ -216,14 +287,17 @@ async function ntConfirm(cid){
   const changed=JSON.stringify(clean.map(s=>[Number(s.weekday),s.start,s.end]))
               !==JSON.stringify(nowSlots.map(s=>[Number(s.weekday),s.start,s.end]));
 
-  if(!changed&&done.rosterDone)return toast('這門課已經準備好了','inf');
+  if(!changed&&done.rosterDone&&done.timeDone)return toast('這門課已經準備好了','inf');
   if(changed&&!clean.length)return toast('至少要留一個完整時段（星期＋開始＋結束）','err');
+  // 沒改時段也要蓋章（2026-09-01）：時間本來就不用改的課，不蓋章的話 ⏰ 永遠掛著未定，
+  // 逼人去建一段跟現在一模一樣的分段才算辦完。寫進去的內容等於現行時段，課表結果不變。
+  const stampTime=(changed||!done.timeDone)&&clean.length>0;
 
   const mk=ntFutureMakeups(co,t);
   const ok=await uiConfirm({title:'確認這門課的開學安排',ok:'確認',
     html:`<p class="ask-big">${esc(name)}</p>
-      ${changed?`<div class="ask-list">
-        <div>上課時間　<b>${esc(coDateMD(t.start))} 起</b>改為</div>
+      ${stampTime?`<div class="ask-list">
+        <div>上課時間　<b>${esc(coDateMD(t.start))} 起</b>${changed?'改為':'維持'}</div>
         <div>${esc(ntSlotTxt(clean))}</div>
         <div class="ask-sub">${esc(coDateMD(t.start))} 之前的課堂完全不受影響。</div>
       </div>`:''}
@@ -234,7 +308,7 @@ async function ntConfirm(cid){
   const undoTok=typeof undoBegin==='function'?undoBegin(['courses','enrollments']):null;
   const acts=[];
 
-  if(changed){
+  if(stampTime){
     const list=getCourses().slice();
     const idx=list.findIndex(c=>c.id===co.id);
     if(idx>=0){
@@ -245,8 +319,9 @@ async function ntConfirm(cid){
       c.schedule.phases.sort((a,b)=>String(a.from).localeCompare(String(b.from)));
       list[idx]=c;
       saveCourses(list);
-      acts.push(logAct('course','改了上課時間（開學準備）',name,
-        `${coDateMD(t.start)} 起：${ntSlotTxt(nowSlots)} → ${ntSlotTxt(clean)}`));
+      acts.push(changed
+        ?logAct('course','改了上課時間（開學準備）',name,`${coDateMD(t.start)} 起：${ntSlotTxt(nowSlots)} → ${ntSlotTxt(clean)}`)
+        :logAct('course','開學後時間不變（開學準備）',name,`${coDateMD(t.start)} 起維持 ${ntSlotTxt(clean)}`));
     }
   }
 
@@ -299,22 +374,28 @@ function ntHtml(){
     const d=ntDone(co,t);
     const allDone=d.timeDone&&d.rosterDone;
     const cur=ntSlotsOn(co,t.start);
+    // 「時間不變」直接放在列上：開學後照舊上的課不用開視窗，一秒點掉
+    const keep=(!d.timeDone&&cur.length)
+      ?`<button class="nt-keep" title="開學後照舊上，維持 ${esc(ntSlotTxt(cur))}" onclick="event.stopPropagation();ntKeepTime(${co.id})">時間不變</button>`:'';
     return`<div class="nt-row${allDone?' done':''}" onclick="ntOpenModal(${co.id})">
       <span class="nt-name">${esc(courseNameOn(co,new Date()))}</span>
       <span class="nt-chip${d.timeDone?' on':''}" title="開學後的上課時間">⏰ ${d.timeDone?'時間已定':'時間未定'}</span>
       <span class="nt-chip${d.rosterDone?' on':''}" title="新學期的名單">👥 ${d.rosterDone?'名單已定':'名單未定'}</span>
-      <span class="nt-cur">${esc(ntSlotTxt(cur))}</span><span class="nt-arrow">›</span>
+      <span class="nt-cur">${esc(ntSlotTxt(cur))}</span>${keep}<span class="nt-arrow">›</span>
     </div>`;
   }).join('');
+  const rosterLeft=items.filter(x=>!ntDone(x.co,t).rosterDone&&x.ens.length).length;
 
   return`<div class="nt-wrap">
     <div class="nt-top" onclick="ntToggleCollapse()">
       <div class="nt-title">🎒 開學準備 — ${esc(yearPeriodLabel(t.dst))}</div>
+      ${rosterLeft?`<button class="nt-bulk" onclick="event.stopPropagation();ntCarryAllRosters()">👥 全部帶入名單（${rosterLeft} 門）</button>`:''}
       <div class="nt-count">${ready} / ${items.length} 門已就緒</div>
       <span class="nt-arrow">⌄</span>
     </div>
     <div class="nt-note">${esc(coDateMD(t.start))} 開始（${when}）。暑假白天上的課，開學後多半要改晚上——一門一門把新的上課時間與名單定好，<b>可以分很多次做</b>。
-      改時間走「從 ${esc(coDateMD(t.start))} 起」的分段，<b>不會動到之前的任何課堂</b>（過去的課表、名冊、點名、堂數都不變）。</div>
+      改時間走「從 ${esc(coDateMD(t.start))} 起」的分段，<b>不會動到之前的任何課堂</b>（過去的課表、名冊、點名、堂數都不變）。<br>
+      趕時間的話：<b>👥 全部帶入名單</b>一次辦完誰還續，剩下只要逐門決定時間——<b>不用改的按「時間不變」</b>就好。開學後幾點上系統猜不出來，所以刻意不一起自動掉。</div>
     <div class="nt-list">${rows}</div>
   </div>`;
 }
