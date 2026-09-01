@@ -23,23 +23,54 @@
 var ntState={pick:{},collapsed:null};   // courseId → Set(要續的 studentId)；整區收合（null＝自動判斷）
 var ntSlotDraft={};                            // courseId → [{weekday,start,end}]（還沒按確認的編輯中時段）
 
+// 距離目標期別開始 28 天內（或已經開始）才顯示——平常不要佔版面。
+// 這個提前量是猜的（2026-08-27），老闆實際用一輪之後再調。
+var NT_LEAD_DAYS=28;
+
+// 這一期還有幾門課沒辦完（＝上一期有登記、但這一期還沒排好時間或還沒帶名單的）。
+// 判斷跟 ntDone 同一套規則，只是不需要先有 target 就算得出來——ntTarget 要靠它決定要辦哪一期。
+function ntPendingCount(pid){
+  const src=prevYearPeriodId(pid),start=yearPeriodStart(pid);
+  if(!src||!start)return 0;
+  const srcCids=new Set();
+  getEnrollments({periodId:src}).forEach(en=>{if(en.courseId!=null)srcCids.add(en.courseId);});
+  if(!srcCids.size)return 0;
+  const dstCids=new Set();
+  getEnrollments({periodId:pid}).forEach(en=>{if(en.courseId!=null)dstCids.add(en.courseId);});
+  let n=0;
+  srcCids.forEach(cid=>{
+    const co=findCourseById(cid);
+    if(!co)return;                              // 課已刪掉，這一區本來就處理不了
+    const phases=(co.schedule&&co.schedule.phases)||[];
+    const timeDone=phases.some(p=>p&&p.from&&p.from>=start&&Array.isArray(p.slots)&&p.slots.length);
+    if(!timeDone||!dstCids.has(cid))n++;
+  });
+  return n;
+}
+
 // ── 要準備哪一期 ──
-// 這一期已經有名單 → 準備下一期（開學前一兩週的正常情況）
-// 這一期還沒有名單 → 要補的就是這一期（9/1 之後才會遇到，等於補課式的交接）
-function ntTarget(){
+// 這一期還有沒辦完的、而且下一期還沒逼近 → 繼續辦這一期（9/1 之後的補課式交接）
+// 否則 → 準備下一期（開學前一兩週的正常情況）
+//
+// ⚠️ **不可以用「這一期有沒有登記」當開關**（2026-09-01 老闆踩到）：第一門課一確認，
+//    這一期就「有登記」了，目標當場跳到下一期；下一期還很遠、被 28 天門檻擋掉，
+//    整區直接消失——剩下的課再也沒有地方可辦。要看的是「還剩幾門沒辦完」。
+//
+// now＝自帶時鐘（測試用；不傳就是現在）。時間相關的判斷不要讀真實時鐘，否則測試會自己過期。
+function ntTarget(now){
   const cur=typeof yearPeriodId==='function'?yearPeriodId():null;
   if(!cur)return null;
-  const hasCur=getEnrollments({periodId:cur}).length>0;
-  const dst=hasCur?nextYearPeriodId(cur):cur;
+  const today=(now?new Date(now):new Date()).setHours(0,0,0,0);
+  const days=p=>{const s=p?yearPeriodStart(p):null;return s?Math.round((new Date(s)-today)/864e5):null;};
+  const nxt=nextYearPeriodId(cur),dNext=days(nxt);
+  const dst=(ntPendingCount(cur)>0&&(dNext==null||dNext>NT_LEAD_DAYS))?cur:nxt;
   const src=prevYearPeriodId(dst);
   if(!dst||!src)return null;
   const start=yearPeriodStart(dst);
   if(!start)return null;
-  return{dst,src,start,daysLeft:Math.round((new Date(start)-new Date().setHours(0,0,0,0))/864e5)};
+  return{dst,src,start,daysLeft:Math.round((new Date(start)-today)/864e5)};
 }
 
-// 距離下一期開始 28 天內（或已經開始）才顯示——平常不要佔版面
-var NT_LEAD_DAYS=28;
 function ntShouldShow(){
   const t=ntTarget();
   if(!t||t.daysLeft>NT_LEAD_DAYS)return false;
